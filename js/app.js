@@ -1,0 +1,570 @@
+/**
+ * app.js - Main orchestrator for Anansi Forge.
+ */
+
+(() => {
+  // Global Toast System
+  function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('toast-exit');
+      toast.addEventListener('animationend', () => toast.remove(), { once: true });
+      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 600);
+    }, 3000);
+  }
+  window.showToast = showToast;
+
+  // Active state
+  let editingComponentId = null;
+  let activeSidebarTab = 'vault'; // 'vault' or 'projects'
+
+  // DOM References
+  const mainCanvas = document.getElementById('main-canvas');
+  const sidebarList = document.getElementById('vault-list');
+  const searchInput = document.getElementById('vault-search');
+  
+  // Vault filters / actions rows
+  const filterCat = document.getElementById('vault-category-filter');
+  const filterCluster = document.getElementById('vault-cluster-filter');
+  const sidebarFiltersRow = document.querySelector('.sidebar-filter-row');
+  const sidebarActionsRow = document.querySelector('.sidebar-actions');
+
+  // Sidebar Tab Buttons
+  const tabVault = document.getElementById('tab-sidebar-vault');
+  const tabProjects = document.getElementById('tab-sidebar-projects');
+
+  // API Modal DOM
+  const btnApiConfig = document.getElementById('btn-api-config');
+  const modalOverlay = document.getElementById('modal-overlay');
+  const btnCloseModal = document.getElementById('btn-close-modal');
+  const btnSaveApi = document.getElementById('btn-save-api');
+  const apiProvider = document.getElementById('api-provider');
+  const apiModel = document.getElementById('api-model');
+  const apiKey = document.getElementById('api-key');
+  const apiUrl = document.getElementById('api-url');
+  const apiUrlGroup = document.getElementById('api-url-group');
+
+  // File Import Inputs
+  const btnImportCard = document.getElementById('btn-import-card');
+  const fileImportInput = document.getElementById('file-import-input');
+  const dropZone = document.getElementById('drop-zone');
+
+  // Editor Form DOM
+  const editorView = document.getElementById('editor-view');
+  const compNameInput = document.getElementById('comp-name');
+  const compContentInput = document.getElementById('comp-content');
+  const compCategorySelect = document.getElementById('comp-category');
+  const compClusterInput = document.getElementById('comp-cluster');
+  const compTagsInput = document.getElementById('comp-tags');
+  const editorTokenCount = document.getElementById('editor-token-count');
+  const btnSaveComponent = document.getElementById('btn-save-component');
+  const btnDeleteComponent = document.getElementById('btn-delete-component');
+
+  // Navigation Back Buttons
+  const btnEditorBack = document.getElementById('btn-editor-back');
+  const btnBreakoutBack = document.getElementById('btn-breakout-back');
+  const btnAssemblerBack = document.getElementById('btn-assembler-back');
+  const btnSandboxBack = document.getElementById('btn-sandbox-back');
+  const btnParlorBack = document.getElementById('btn-parlor-back');
+
+  // --- View Routing ---
+
+  function showView(viewId) {
+    document.querySelectorAll('.view').forEach(v => {
+      v.classList.toggle('active', v.id === viewId);
+    });
+  }
+
+  // --- Sidebar Tab Routing ---
+
+  function switchSidebarTab(tabName) {
+    activeSidebarTab = tabName;
+    
+    // Toggle active classes on tab buttons
+    tabVault.classList.toggle('active', tabName === 'vault');
+    tabProjects.classList.toggle('active', tabName === 'projects');
+
+    if (tabName === 'vault') {
+      // Show filters and actions
+      sidebarFiltersRow.style.display = 'flex';
+      sidebarActionsRow.style.display = 'grid';
+      searchInput.placeholder = 'Search Vault components...';
+      refreshVaultList();
+    } else {
+      // Hide filters and actions (search box remains visible)
+      sidebarFiltersRow.style.display = 'none';
+      sidebarActionsRow.style.display = 'none';
+      searchInput.placeholder = 'Search compiled projects...';
+      refreshProjectsList();
+    }
+  }
+
+  // --- Render Vault Components List ---
+
+  async function refreshVaultList() {
+    if (activeSidebarTab !== 'vault') return;
+    try {
+      const components = await window.ForgeDB.getAllComponents();
+      
+      // Update Cluster Filter dropdown options
+      const activeClusterFilter = filterCluster.value;
+      const clusters = [...new Set(components.map(c => c.cluster).filter(Boolean))];
+      
+      filterCluster.innerHTML = '<option value="all">All Clusters</option>';
+      clusters.forEach(cls => {
+        const option = document.createElement('option');
+        option.value = cls;
+        option.textContent = cls;
+        if (cls === activeClusterFilter) option.selected = true;
+        filterCluster.appendChild(option);
+      });
+
+      // Update Cluster Datalist Suggestions in Editor
+      const suggestions = document.getElementById('cluster-suggestions');
+      if (suggestions) {
+        suggestions.innerHTML = '';
+        clusters.forEach(cls => {
+          const opt = document.createElement('option');
+          opt.value = cls;
+          suggestions.appendChild(opt);
+        });
+      }
+
+      // Filter
+      const search = searchInput.value.toLowerCase().trim();
+      const cat = filterCat.value;
+      const cluster = filterCluster.value;
+
+      const filtered = components.filter(comp => {
+        const matchesSearch = comp.name.toLowerCase().includes(search) || 
+                              (comp.content || '').toLowerCase().includes(search) ||
+                              comp.tags.some(t => t.toLowerCase().includes(search));
+        const matchesCat = cat === 'all' || comp.category === cat;
+        const matchesCluster = cluster === 'all' || comp.cluster === cluster;
+
+        return matchesSearch && matchesCat && matchesCluster;
+      });
+
+      // Render
+      sidebarList.innerHTML = '';
+      
+      if (filtered.length === 0) {
+        sidebarList.innerHTML = `
+          <div style="text-align:center; padding:30px 10px; color:var(--text-muted); font-size:0.85rem;">
+            No components found.
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(comp => {
+        const item = document.createElement('div');
+        item.className = 'vault-item';
+        
+        const clusterLabel = comp.cluster 
+          ? `<span class="vault-item-cluster">📁 ${escapeHTML(comp.cluster)}</span>` 
+          : '<span></span>';
+
+        item.innerHTML = `
+          <div class="vault-item-header">
+            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${escapeHTML(comp.name)}</span>
+            <span class="vault-item-category ${comp.category}">${comp.category}</span>
+          </div>
+          <div class="vault-item-footer">
+            ${clusterLabel}
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
+              <button class="btn btn-primary btn-icon btn-sm btn-stage" title="Stage for Assembly" style="padding:2px 6px;">＋</button>
+            </div>
+          </div>
+        `;
+
+        item.querySelector('.btn-edit').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openComponentEditor(comp.id);
+        });
+
+        item.querySelector('.btn-stage').addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.ProjectAssembler.stage(comp.id);
+        });
+
+        item.addEventListener('click', () => {
+          openComponentEditor(comp.id);
+        });
+
+        sidebarList.appendChild(item);
+      });
+
+    } catch (err) {
+      console.error('Failed to load components list:', err);
+    }
+  }
+  window.refreshVaultList = refreshVaultList;
+
+  // --- Render Compiled Projects List ---
+
+  async function refreshProjectsList() {
+    if (activeSidebarTab !== 'projects') return;
+    try {
+      const projects = await window.ForgeDB.getAllProjects();
+      const search = searchInput.value.toLowerCase().trim();
+
+      const filtered = projects.filter(proj => {
+        return proj.name.toLowerCase().includes(search) ||
+               proj.componentIds.some(id => id.toLowerCase().includes(search));
+      });
+
+      sidebarList.innerHTML = '';
+
+      if (filtered.length === 0) {
+        sidebarList.innerHTML = `
+          <div style="text-align:center; padding:30px 10px; color:var(--text-muted); font-size:0.85rem;">
+            No compiled projects found.
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(proj => {
+        const item = document.createElement('div');
+        item.className = 'vault-item';
+        
+        const count = proj.componentIds ? proj.componentIds.length : 0;
+        const relCount = proj.relationships ? proj.relationships.length : 0;
+
+        item.innerHTML = `
+          <div class="vault-item-header">
+            <span class="vault-item-name" style="max-width: 220px;" title="${escapeHTML(proj.name)}">🤖 ${escapeHTML(proj.name)}</span>
+            <span class="vault-item-category" style="background:linear-gradient(135deg, #a855f7 0%, #6366f1 100%); color:#fff;">compiled</span>
+          </div>
+          <div class="vault-item-footer">
+            <span style="font-size:0.75rem; color:var(--text-muted);">${count} staged, ${relCount} rels</span>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost btn-icon btn-sm btn-sandbox-play" title="Playtest Sandbox" style="padding:2px 6px;">💬</button>
+              <button class="btn btn-ghost btn-icon btn-sm btn-edit-proj" title="Edit Assembler" style="padding:2px 6px;">📝</button>
+              <button class="btn btn-danger btn-icon btn-sm btn-del-proj" title="Delete Project" style="padding:2px 6px;">&times;</button>
+            </div>
+          </div>
+        `;
+
+        item.querySelector('.btn-sandbox-play').addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.SandboxPlaytest.start(proj.id);
+        });
+
+        item.querySelector('.btn-edit-proj').addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.ProjectAssembler.open(proj.id);
+        });
+
+        item.querySelector('.btn-del-proj').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const confirmed = confirm(`Delete compiled project "${proj.name}"? This cannot be undone.`);
+          if (confirmed) {
+            await window.ForgeDB.deleteProject(proj.id);
+            await window.ForgeDB.clearChatHistory(proj.id);
+            showToast('Project deleted', 'success');
+            refreshProjectsList();
+          }
+        });
+
+        item.addEventListener('click', () => {
+          window.ProjectAssembler.open(proj.id);
+        });
+
+        sidebarList.appendChild(item);
+      });
+    } catch (err) {
+      console.error('Failed to load projects list:', err);
+    }
+  }
+  window.refreshProjectsList = refreshProjectsList;
+
+  // --- Component Editor ---
+
+  async function openComponentEditor(id = null) {
+    editingComponentId = id;
+    
+    compNameInput.value = '';
+    compContentInput.value = '';
+    compCategorySelect.value = 'character';
+    compClusterInput.value = '';
+    compTagsInput.value = '';
+    editorTokenCount.textContent = '0';
+    btnDeleteComponent.style.display = id ? 'inline-flex' : 'none';
+    document.getElementById('editor-title').textContent = id ? 'Edit Vault Component' : 'Create Vault Component';
+
+    if (id) {
+      const comp = await window.ForgeDB.getComponent(id);
+      if (comp) {
+        compNameInput.value = comp.name;
+        compContentInput.value = comp.content;
+        compCategorySelect.value = comp.category;
+        compClusterInput.value = comp.cluster || '';
+        compTagsInput.value = comp.tags.join(', ');
+        updateTokenCount();
+      }
+    }
+
+    showView('editor-view');
+  }
+
+  async function saveComponentForm() {
+    const name = compNameInput.value.trim();
+    const content = compContentInput.value.trim();
+    if (!name || !content) {
+      showToast('Name and Content are required fields.', 'error');
+      return;
+    }
+
+    const tags = compTagsInput.value.split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    const record = {
+      id: editingComponentId,
+      name,
+      content,
+      category: compCategorySelect.value,
+      cluster: compClusterInput.value.trim(),
+      tags
+    };
+
+    try {
+      await window.ForgeDB.saveComponent(record);
+      showToast(`Component "${name}" saved!`, 'success');
+      showView('welcome-view');
+      refreshVaultList();
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to save component', 'error');
+    }
+  }
+
+  async function deleteComponentForm() {
+    if (!editingComponentId) return;
+    const confirmed = confirm('Are you sure you want to delete this component from the Vault?');
+    if (!confirmed) return;
+
+    try {
+      await window.ForgeDB.deleteComponent(editingComponentId);
+      showToast('Component deleted', 'success');
+      showView('welcome-view');
+      refreshVaultList();
+    } catch (err) {
+      console.error(err);
+      showToast('Deletion failed', 'error');
+    }
+  }
+
+  function updateTokenCount() {
+    const text = compContentInput.value;
+    const tokens = Math.round(text.length / 4);
+    editorTokenCount.textContent = tokens;
+  }
+
+  // --- Drag & Drop Card Imports ---
+
+  function initDragAndDrop() {
+    const preventDefaults = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+      mainCanvas.addEventListener(evt, preventDefaults, false);
+      dropZone.addEventListener(evt, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      mainCanvas.addEventListener(evt, () => dropZone.classList.add('drag-over'), false);
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      mainCanvas.addEventListener(evt, () => dropZone.classList.remove('drag-over'), false);
+    });
+
+    mainCanvas.addEventListener('drop', handleFileDrop, false);
+  }
+
+  function handleFileDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    handleImportFiles(files);
+  }
+
+  async function handleImportFiles(files) {
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    const extension = file.name.split('.').pop().toLowerCase();
+
+    if (!['json', 'png'].includes(extension)) {
+      showToast('Unsupported file type. Please upload a .json or .png card.', 'error');
+      return;
+    }
+
+    showToast(`Parsing card: ${file.name}...`, 'info');
+
+    try {
+      let cardJSON = null;
+
+      if (extension === 'json') {
+        const text = await file.text();
+        cardJSON = JSON.parse(text);
+      } else {
+        cardJSON = await window.PNGHandler.extract(file);
+      }
+
+      if (!cardJSON) {
+        showToast('Failed to find character metadata in file. Is this a valid SillyTavern PNG Card?', 'error');
+        return;
+      }
+
+      const data = cardJSON.data || cardJSON;
+      if (!data.name && !data.description) {
+        showToast('Card lacks standard character fields (name or description).', 'error');
+        return;
+      }
+
+      // Start breakout wizard!
+      window.BreakoutWizard.start(cardJSON, file.name, file);
+
+    } catch (err) {
+      console.error(err);
+      showToast(`Parse failed: ${err.message}`, 'error');
+    }
+  }
+
+  // --- API Configuration ---
+
+  function openApiModal() {
+    const config = window.ForgeLLM.getConfig();
+    apiProvider.value = config.provider;
+    apiModel.value = config.model;
+    apiKey.value = config.apiKey || '';
+    apiUrl.value = config.baseUrl || '';
+
+    toggleApiUrlGroup();
+    modalOverlay.classList.remove('hidden');
+  }
+
+  function toggleApiUrlGroup() {
+    const provider = apiProvider.value;
+    if (['chutes', 'lmstudio', 'custom'].includes(provider)) {
+      apiUrlGroup.style.display = 'block';
+      if (provider === 'chutes' && !apiUrl.value.trim()) {
+        apiUrl.value = 'https://llm.chutes.ai/v1';
+      }
+    } else {
+      apiUrlGroup.style.display = 'none';
+    }
+  }
+
+  function saveApiConfig() {
+    const config = {
+      provider: apiProvider.value,
+      model: apiModel.value.trim(),
+      apiKey: apiKey.value.trim(),
+      baseUrl: apiUrl.value.trim(),
+      maxTokens: 2048
+    };
+
+    window.ForgeLLM.saveConfig(config);
+    showToast('API Configuration saved!', 'success');
+    modalOverlay.classList.add('hidden');
+  }
+
+  function escapeHTML(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // --- Boot ---
+
+  async function init() {
+    await window.ForgeDB.initDB();
+
+    window.BreakoutWizard.init();
+    window.ProjectAssembler.init();
+    window.ParlorWizard.init();
+    window.SandboxPlaytest.init();
+
+    // Main UI Events
+    document.getElementById('btn-new-component').addEventListener('click', () => openComponentEditor(null));
+    document.getElementById('btn-welcome-new').addEventListener('click', () => openComponentEditor(null));
+    btnSaveComponent.addEventListener('click', saveComponentForm);
+    btnDeleteComponent.addEventListener('click', deleteComponentForm);
+    compContentInput.addEventListener('input', updateTokenCount);
+
+    // Sidebar tabs triggers
+    tabVault.addEventListener('click', () => switchSidebarTab('vault'));
+    tabProjects.addEventListener('click', () => switchSidebarTab('projects'));
+
+    // Sidebar search and filters
+    searchInput.addEventListener('input', () => {
+      if (activeSidebarTab === 'vault') refreshVaultList();
+      else refreshProjectsList();
+    });
+    filterCat.addEventListener('change', refreshVaultList);
+    filterCluster.addEventListener('change', refreshVaultList);
+
+    // API Config events
+    btnApiConfig.addEventListener('click', openApiModal);
+    btnCloseModal.addEventListener('click', () => modalOverlay.classList.add('hidden'));
+    apiProvider.addEventListener('change', toggleApiUrlGroup);
+    btnSaveApi.addEventListener('click', saveApiConfig);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) modalOverlay.classList.add('hidden');
+    });
+
+    // Import click browse
+    btnImportCard.addEventListener('click', () => {
+      fileImportInput.value = '';
+      fileImportInput.click();
+    });
+    fileImportInput.addEventListener('change', (e) => {
+      handleImportFiles(e.target.files);
+    });
+
+    // Drag-and-drop
+    initDragAndDrop();
+
+    // Welcome Parlor
+    document.getElementById('btn-welcome-parlor').addEventListener('click', () => window.ParlorWizard.start());
+    document.getElementById('btn-parlor-start').addEventListener('click', () => window.ParlorWizard.start());
+
+    // Navigation Back buttons
+    btnEditorBack.addEventListener('click', () => showView('welcome-view'));
+    btnBreakoutBack.addEventListener('click', () => showView('welcome-view'));
+    btnAssemblerBack.addEventListener('click', () => showView('welcome-view'));
+    btnSandboxBack.addEventListener('click', () => {
+      if (activeSidebarTab === 'projects') {
+        showView('welcome-view');
+        switchSidebarTab('projects');
+      } else {
+        showView('assembler-view');
+      }
+    });
+    btnParlorBack.addEventListener('click', () => showView('welcome-view'));
+
+    // Initial List Load
+    await refreshVaultList();
+
+    console.log('Anansi Forge fully initialized.');
+  }
+
+  window.addEventListener('DOMContentLoaded', init);
+})();

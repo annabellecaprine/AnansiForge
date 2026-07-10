@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Anansi Forge — A modular prompt-engineering studio & character card maker.">
+  <title>Anansi Forge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- LEFT SIDEBAR: THE VAULT -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="app-title">
+          <span class="title-icon">🕸️</span>
+          Anansi Forge
+        </h1>
+        <button id="btn-api-config" class="btn btn-ghost btn-icon" title="API Configuration">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+
+      <!-- Sidebar Tabs -->
+      <div class="sidebar-tabs">
+        <button id="tab-sidebar-vault" class="sidebar-tab active">The Vault</button>
+        <button id="tab-sidebar-projects" class="sidebar-tab">Projects</button>
+      </div>
+
+      <!-- Search & Filters -->
+      <div class="sidebar-search-row">
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+          </svg>
+          <input type="text" id="vault-search" placeholder="Search Vault components..." autocomplete="off">
+        </div>
+      </div>
+
+      <div class="sidebar-filter-row">
+        <select id="vault-category-filter">
+          <option value="all">All Categories</option>
+          <option value="character">Characters</option>
+          <option value="bio">Character Bios</option>
+          <option value="initial_message">Initial Messages</option>
+          <option value="organization">Organizations</option>
+          <option value="setting">Settings</option>
+          <option value="rules">Scenario Rules</option>
+        </select>
+        <select id="vault-cluster-filter">
+          <option value="all">All Clusters</option>
+          <!-- Hydrated dynamically -->
+        </select>
+      </div>
+
+      <!-- Actions -->
+      <div class="sidebar-actions">
+        <button id="btn-new-component" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Item
+        </button>
+        <button id="btn-import-card" class="btn btn-secondary" title="Import JSON / PNG Card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Import
+        </button>
+        <button id="btn-parlor-start" class="btn btn-accent" title="Interactive AI Wizard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.886H3.894l4.948 3.596L6.93 18.368 12 14.772l5.07 3.596-1.912-5.886 4.948-3.596h-6.194L12 3z"/></svg>
+          Parlor
+        </button>
+      </div>
+
+      <!-- Component List -->
+      <div id="vault-list" class="vault-list">
+        <!-- Rendered by library.js equivalent / app.js -->
+      </div>
+
+      <!-- PROJECT ASSEMBLER DRAWER -->
+      <div id="project-drawer" class="project-drawer collapsed">
+        <div class="drawer-header" id="project-drawer-header">
+          <span class="drawer-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px; vertical-align:middle; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>
+            Staged Components (<span id="drawer-count">0</span>)
+          </span>
+          <button class="btn-toggle-drawer" id="btn-toggle-drawer">
+            <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+        </div>
+        <div class="drawer-content">
+          <div id="drawer-items" class="drawer-items"></div>
+          <div class="drawer-actions">
+            <button id="btn-clear-drawer" class="btn btn-secondary btn-sm">Clear</button>
+            <button id="btn-stage-assemble" class="btn btn-primary btn-sm" disabled>Assemble</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CANVAS -->
+    <main id="main-canvas">
+      
+      <!-- VIEW 1: WELCOME & DROP ZONE -->
+      <div id="welcome-view" class="view active">
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-zone-content">
+            <div class="drop-illustration">🕸️</div>
+            <h2>Anansi Forge</h2>
+            <p>Drag and drop a <strong>SillyTavern PNG Card</strong> or <strong>JSON spec</strong> here</p>
+            <p class="drop-hint">We'll help you break it out into reusable components.</p>
+            <div class="welcome-actions">
+              <button id="btn-welcome-new" class="btn btn-primary btn-lg">Create New Component</button>
+              <button id="btn-welcome-parlor" class="btn btn-accent btn-lg">Consult the Interactive AI Forge</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 6: THE INTERACTIVE AI FORGE -->
+      <div id="parlor-view" class="view">
+        <div class="view-header">
+          <button id="btn-parlor-back" class="btn btn-ghost btn-icon" title="Leave Forge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2>Interactive AI Forge</h2>
+          <span class="header-subtitle">Collaborative Asset Architect & Editor</span>
+        </div>
+        <div class="view-content parlor-grid">
+          <!-- Forge Chat interface -->
+          <div class="parlor-chat-panel">
+            <div id="parlor-chat-log" class="parlor-chat-log">
+              <!-- Setup form or chat bubbles -->
+            </div>
+            <div id="parlor-controls" class="parlor-controls">
+              <div id="parlor-options-container" class="parlor-options"></div>
+              <div id="parlor-input-container" class="parlor-input-row" style="display:none;">
+                <textarea id="parlor-input" placeholder="Discuss the design with the Forge..."></textarea>
+                <button id="btn-parlor-send" class="btn btn-accent">Send</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Forge Output Preview -->
+          <div class="parlor-preview-panel">
+            <h3>Asset Draft Preview</h3>
+            <p class="card-desc">The Forge compiles and critiques your design in real-time:</p>
+            <div class="parlor-preview-card">
+              <div class="form-row" style="display:flex; gap:10px; margin-bottom:12px;">
+                <div class="form-group" style="flex:2;">
+                  <label for="forge-output-name">Asset Name</label>
+                  <input type="text" id="forge-output-name" placeholder="Name of your creation..." autocomplete="off">
+                </div>
+                <div class="form-group" style="flex:1; min-width:120px;">
+                  <label for="forge-output-category">Category</label>
+                  <select id="forge-output-category">
+                    <option value="character">Character</option>
+                    <option value="bio">Character Bio</option>
+                    <option value="initial_message">Initial Message</option>
+                    <option value="organization">Organization</option>
+                    <option value="setting">Setting</option>
+                    <option value="rules">Scenario Rules</option>
+                    <option value="lore">Lore Entry</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom:12px;">
+                <label for="forge-output-cluster">Cluster (Universe / Group)</label>
+                <input type="text" id="forge-output-cluster" placeholder="e.g., Gotham City, Cromwell Legacy" autocomplete="off">
+              </div>
+              <div class="form-group" style="flex-grow:1; display:flex; flex-direction:column; margin-bottom:12px;">
+                <label for="forge-output-content" style="display:flex; justify-content:space-between;">
+                  <span>Draft Content</span>
+                  <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">Directly editable</span>
+                </label>
+                <textarea id="forge-output-content" placeholder="Asset details will appear here as the interview progresses..." style="flex-grow:1; min-height:220px; font-family:var(--font-mono); font-size:0.8rem;"></textarea>
+              </div>
+              
+              <!-- Forge Audit Panel -->
+              <div id="forge-audit-panel" class="forge-audit-panel" style="display:none;">
+                <div id="forge-audit-inconsistencies" class="forge-audit-alert" style="display:none;">
+                  <strong>⚠️ Contradiction Alert:</strong>
+                  <p id="forge-audit-inconsistencies-text"></p>
+                </div>
+                <div id="forge-audit-suggestions" class="forge-audit-tips">
+                  <strong>💡 Forge Suggestions:</strong>
+                  <ul id="forge-audit-suggestions-list"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="parlor-preview-actions">
+              <button id="btn-parlor-save-all" class="btn btn-primary btn-block" disabled>Save Asset to Vault</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 2: COMPONENT EDITOR -->
+      <div id="editor-view" class="view">
+        <div class="view-header">
+          <button id="btn-editor-back" class="btn btn-ghost btn-icon" title="Back to welcome">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2 id="editor-title">Create Vault Component</h2>
+          <div class="view-header-actions">
+            <button id="btn-save-component" class="btn btn-primary">Save to Vault</button>
+            <button id="btn-delete-component" class="btn btn-danger" style="display:none;">Delete</button>
+          </div>
+        </div>
+        <div class="view-content editor-grid">
+          <div class="editor-main">
+            <div class="form-group">
+              <label for="comp-name">Component Name</label>
+              <input type="text" id="comp-name" placeholder="e.g., Gotham City, Joker Persona..." required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="comp-content">Content Details (Text description, personality rules, prompt instructions)</label>
+              <textarea id="comp-content" placeholder="Type or paste the contents of this component here..." required></textarea>
+            </div>
+          </div>
+          <div class="editor-sidebar">
+            <div class="form-group">
+              <label for="comp-category">Category</label>
+              <select id="comp-category">
+                <option value="character">Character</option>
+                <option value="bio">Character Bio</option>
+                <option value="initial_message">Initial Message</option>
+                <option value="organization">Organization</option>
+                <option value="setting">Setting</option>
+                <option value="rules">Scenario Rules</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="comp-cluster">Cluster (Universe / Group)</label>
+              <input type="text" id="comp-cluster" placeholder="e.g., Batman, Cyberpunk" list="cluster-suggestions" autocomplete="off">
+              <datalist id="cluster-suggestions"></datalist>
+            </div>
+            <div class="form-group">
+              <label for="comp-tags">Tags (comma separated)</label>
+              <input type="text" id="comp-tags" placeholder="e.g., hero, dark, sci-fi">
+            </div>
+            <div id="editor-token-counter" class="editor-info-card">
+              <h4>Metrics</h4>
+              <div class="metric-row">
+                <span>Estimated Tokens:</span>
+                <strong id="editor-token-count">0</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 3: BREAKOUT WIZARD -->
+      <div id="breakout-view" class="view">
+        <div class="view-header">
+          <button id="btn-breakout-back" class="btn btn-ghost btn-icon" title="Cancel import">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2>Legacy Card Breakout</h2>
+          <span class="header-subtitle" id="breakout-filename">card.png</span>
+        </div>
+        <div class="view-content breakout-container">
+          <p class="breakout-intro">We parsed this legacy card. Select which fields you want to carve out as reusable components in your Vault.</p>
+          <div class="breakout-grid">
+            <div class="breakout-original-fields" id="breakout-fields-list">
+              <!-- Dynamically rendered list of original card fields -->
+            </div>
+            <div class="breakout-target-preview">
+              <h3>Component Preview</h3>
+              <div class="preview-card">
+                <div class="form-group">
+                  <label for="breakout-comp-name">Target Name</label>
+                  <input type="text" id="breakout-comp-name">
+                </div>
+                <div class="form-group">
+                  <label for="breakout-comp-category">Target Category</label>
+                  <select id="breakout-comp-category">
+                    <option value="character">Character</option>
+                    <option value="bio">Character Bio</option>
+                    <option value="initial_message">Initial Message</option>
+                    <option value="organization">Organization</option>
+                    <option value="setting">Setting</option>
+                    <option value="rules">Scenario Rules</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="breakout-comp-cluster">Target Cluster</label>
+                  <input type="text" id="breakout-comp-cluster" placeholder="e.g., Imported Cards">
+                </div>
+                <div class="form-group">
+                  <label>Content Snippet</label>
+                  <pre id="breakout-comp-content-preview"></pre>
+                </div>
+                <button id="btn-breakout-save-current" class="btn btn-primary">Save Component to Vault</button>
+              </div>
+              <div class="breakout-summary-card">
+                <h4>Breakout Status</h4>
+                <p id="breakout-status-text">0/0 components saved.</p>
+                <button id="btn-breakout-finish" class="btn btn-accent btn-block" disabled>Done Breaking Out</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 4: PROJECT ASSEMBLER -->
+      <div id="assembler-view" class="view">
+        <div class="view-header">
+          <button id="btn-assembler-back" class="btn btn-ghost btn-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2>Assemble Project</h2>
+          <div class="view-header-actions">
+            <button id="btn-assembler-playtest" class="btn btn-accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px; margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Playtest Card
+            </button>
+            <button id="btn-assembler-export-json" class="btn btn-secondary">Export JSON</button>
+            <button id="btn-assembler-export-png" class="btn btn-primary">Export PNG Card</button>
+          </div>
+        </div>
+        <div class="view-content assembler-grid">
+          <div class="assembler-main">
+            <div class="form-group">
+              <label for="proj-name">Project / Bot Name</label>
+              <input type="text" id="proj-name" placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off">
+            </div>
+
+            <!-- Staged components settings mapping -->
+            <div class="assembler-card">
+              <h3>Field Compilation Mapping</h3>
+              <p class="card-desc">Assign how each staged component maps to the final compiled card fields:</p>
+              <div id="assembler-mappings-list">
+                <!-- Dynamically listed components with mapping dropdowns -->
+              </div>
+            </div>
+
+            <!-- Relationships Matrix -->
+            <div class="assembler-card">
+              <h3>Directed Relationships</h3>
+              <p class="card-desc">Define interpersonal dynamics between character/organization components in this project:</p>
+              <div id="assembler-relations-list">
+                <!-- Dynamic relationships list -->
+              </div>
+              <button id="btn-assembler-add-relation" class="btn btn-secondary btn-sm" style="margin-top:10px;">+ Add Relationship</button>
+            </div>
+          </div>
+
+          <div class="assembler-sidebar">
+            <div class="assembler-card">
+              <h3>Staged Components</h3>
+              <div id="assembler-staged-list" class="assembler-staged-list">
+                <!-- List of staged components with remove buttons -->
+              </div>
+            </div>
+            <div class="assembler-card">
+              <h3>Card Cover Artwork</h3>
+              <div id="assembler-cover-preview-container" class="assembler-cover-preview-container">
+                <div id="assembler-cover-empty" class="assembler-cover-empty">
+                  <span>🖼️ Default Grid Cover</span>
+                </div>
+                <img id="assembler-cover-image" class="assembler-cover-image" style="display:none; width:100%; height:150px; object-fit:cover; border-radius:var(--radius-sm); margin-bottom:8px; border:1px solid var(--border-color);">
+              </div>
+              <button id="btn-assembler-change-cover" class="btn btn-secondary btn-block btn-sm">📁 Change Image</button>
+              <input type="file" id="assembler-cover-file-input" accept="image/*" style="display:none;">
+            </div>
+
+            <div id="assembler-compilation-info" class="assembler-card">
+              <h3>Compilation Metrics</h3>
+              <div class="metric-row">
+                <span>Total Staged:</span>
+                <strong id="assembler-staged-count">0</strong>
+              </div>
+              <div class="metric-row">
+                <span>Est. Compiled Size:</span>
+                <strong id="assembler-total-tokens">0 tokens</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 5: SPINDLE CHAT PLAYTEST SANDBOX -->
+      <div id="sandbox-view" class="view">
+        <div class="view-header">
+          <button id="btn-sandbox-back" class="btn btn-ghost btn-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2 id="sandbox-bot-name">Playtest: Bot Name</h2>
+          <div class="view-header-actions">
+            <!-- Persona Selector -->
+            <div class="persona-selector-container" style="display:flex; align-items:center; gap:8px; margin-right:12px;">
+              <span style="font-size:0.8rem; color:var(--text-muted);">Chatting as:</span>
+              <select id="sandbox-persona-select" class="btn btn-secondary btn-sm" style="max-width:160px; font-size:0.82rem; padding:4px 8px; height:auto; text-transform:none; border:1px solid var(--border-color);">
+                <!-- Populated dynamically -->
+              </select>
+              <button id="btn-sandbox-manage-personas" class="btn btn-ghost btn-icon btn-sm" title="Manage User Personas" style="padding:4px;">👤</button>
+            </div>
+            <button id="btn-sandbox-reset" class="btn btn-secondary">Reset Chat</button>
+            <button id="btn-sandbox-inspect" class="btn btn-ghost btn-icon" title="Inspect Prompt Context">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="sandbox-container">
+          <!-- Chat Log Area -->
+          <div class="chat-area">
+            <div id="chat-log" class="chat-log">
+              <!-- Chat bubbles rendered dynamically -->
+            </div>
+            <div class="chat-input-row">
+              <textarea id="chat-input" placeholder="Type a message to playtest... (Shift+Enter for newline)"></textarea>
+              <button id="btn-chat-send" class="btn btn-primary">Send</button>
+            </div>
+          </div>
+
+          <!-- Collapsible Reasoning & Context Panel -->
+          <div id="sandbox-inspector" class="sandbox-inspector">
+            <div class="inspector-header">
+              <h3>Reasoning & Context</h3>
+            </div>
+            <div class="inspector-tabs">
+              <button class="tab-btn active" data-tab="reasoning">Model Reasoning</button>
+              <button class="tab-btn" data-tab="prompt">Compiled Prompt</button>
+            </div>
+            <div class="inspector-content">
+              <div id="tab-reasoning" class="tab-panel active">
+                <p class="tab-info">Reasoning/Thinking blocks output by models (e.g. DeepSeek's &lt;think&gt; tags) appear here.</p>
+                <div id="reasoning-output" class="reasoning-output"></div>
+              </div>
+              <div id="tab-prompt" class="tab-panel">
+                <p class="tab-info">The exact prompt context compiled from active components, relationships, and history:</p>
+                <pre id="prompt-output" class="prompt-output"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- API CONFIGURATION MODAL -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>API Configuration</h3>
+        <button id="btn-close-modal" class="btn btn-ghost btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="api-provider">Provider</label>
+          <select id="api-provider">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="chutes">Chutes.ai</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="lmstudio">LM Studio (Local)</option>
+            <option value="kobold">Kobold AI (Local)</option>
+            <option value="custom">Custom Endpoint</option>
+          </select>
+        </div>
+        <div id="api-url-group" class="form-group" style="display:none;">
+          <label for="api-url">Base URL</label>
+          <input type="text" id="api-url" placeholder="e.g., http://localhost:1234/v1">
+        </div>
+        <div class="form-group">
+          <label for="api-model">Model Name</label>
+          <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o">
+        </div>
+        <div id="api-key-group" class="form-group">
+          <label for="api-key">API Key</label>
+          <input type="password" id="api-key" placeholder="Enter API Key">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-api" class="btn btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER PERSONA CONFIGURATION MODAL -->
+  <div id="persona-modal-overlay" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>User Personas</h3>
+        <button id="btn-close-persona-modal" class="btn btn-ghost btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="persona-list-select">Select / Edit Persona</label>
+          <select id="persona-list-select">
+            <option value="new">+ Create New Persona</option>
+          </select>
+        </div>
+        <hr style="border:0; border-top:1px solid var(--border-color); margin: 15px 0;">
+        <div class="form-group">
+          <label for="persona-name">Persona Name</label>
+          <input type="text" id="persona-name" placeholder="e.g., Alex Cromwell, The Protagonist" required>
+        </div>
+        <div class="form-group">
+          <label for="persona-description">Persona Description (Details, traits, powers, relations)</label>
+          <textarea id="persona-description" placeholder="Describe your persona... (The AI will know these details during playtest)" style="min-height: 120px;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; gap:10px;">
+        <button id="btn-delete-persona" class="btn btn-danger" style="display:none;">Delete Persona</button>
+        <button id="btn-save-persona" class="btn btn-primary" style="margin-left:auto;">Save Persona</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- HIDDEN FILE INPUT -->
+  <input type="file" id="file-import-input" accept=".json,.png" multiple hidden>
+
+  <!-- SCRIPTS -->
+  <script src="js/db.js?v=1.1"></script>
+  <script src="js/png-handler.js?v=1.1"></script>
+  <script src="js/breakout.js?v=1.1"></script>
+  <script src="js/llm.js?v=1.1"></script>
+  <script src="js/parlor.js?v=1.1"></script>
+  <script src="js/assembler.js?v=1.1"></script>
+  <script src="js/sandbox.js?v=1.1"></script>
+  <script src="js/app.js?v=1.1"></script>
+</body>
+</html>

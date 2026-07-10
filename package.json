@@ -1,0 +1,13 @@
+{
+  "name": "anansi-forge",
+  "version": "1.0.0",
+  "description": "Anansi Forge - Modular Prompt Studio & Character Card Maker",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server ./ -p 5000"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
