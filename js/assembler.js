@@ -28,6 +28,7 @@
   let btnCloseTweakModal;
   let btnRevertTweak;
   let btnSaveTweak;
+  let btnPromoteTweak;
   let currentTweakId = null;
 
   // DOM Elements
@@ -85,6 +86,7 @@
     btnCloseTweakModal = document.getElementById('btn-close-tweak-modal');
     btnRevertTweak = document.getElementById('btn-revert-tweak');
     btnSaveTweak = document.getElementById('btn-save-tweak');
+    btnPromoteTweak = document.getElementById('btn-promote-tweak');
 
     // Tweak Modal events
     btnCloseTweakModal.addEventListener('click', closeTweakModal);
@@ -115,6 +117,61 @@
       if (window.showToast) window.showToast('Reverted to default component content.', 'info');
       
       await autoSaveProjectRecord();
+    });
+
+    btnPromoteTweak.addEventListener('click', async () => {
+      if (!currentTweakId) return;
+      const text = tweakContentArea.value.trim();
+      if (!text) return;
+
+      try {
+        const comp = await window.ForgeDB.getComponent(currentTweakId);
+        const defaultName = comp ? `${comp.name.split(' - ')[0]} (Scenario Tweak)` : 'Tweaked Component';
+        
+        const newName = prompt('Enter a name to save this tweaked version to your Vault:', defaultName);
+        if (!newName || !newName.trim()) return;
+
+        const newComp = {
+          name: newName.trim(),
+          content: text,
+          category: comp ? comp.category : 'character',
+          cluster: comp ? comp.cluster : '',
+          tags: comp ? [...comp.tags] : []
+        };
+
+        const savedComp = await window.ForgeDB.saveComponent(newComp);
+        if (window.refreshVaultList) window.refreshVaultList();
+        if (window.showToast) window.showToast(`Saved "${newComp.name}" to Vault!`, 'success');
+
+        const swap = confirm(`Would you like to stage the new Vault component "${newComp.name}" in this project, replacing the tweaked version?`);
+        if (swap) {
+          // Store old mapping value
+          const oldMapValue = mappings[currentTweakId];
+          
+          // Unstage old
+          unstageComponent(currentTweakId);
+          
+          // Stage new
+          stageComponent(savedComp.id);
+          
+          // Apply mapping to new
+          mappings[savedComp.id] = oldMapValue || 'personality';
+          
+          // Clean up the override
+          delete contentOverrides[currentTweakId];
+          
+          closeTweakModal();
+          renderAssemblerScreen();
+          updateTokensEstimate();
+          await autoSaveProjectRecord();
+          if (window.showToast) window.showToast(`Staged "${newComp.name}" in place of the tweak!`, 'success');
+        } else {
+          closeTweakModal();
+        }
+      } catch (err) {
+        console.error(err);
+        if (window.showToast) window.showToast('Failed to save component to Vault: ' + err.message, 'error');
+      }
     });
 
     // Auto-save project name when field loses focus
