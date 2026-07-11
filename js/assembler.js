@@ -66,6 +66,25 @@
     document.getElementById('btn-assembler-change-cover').addEventListener('click', () => coverFileInput.click());
     coverFileInput.addEventListener('change', handleCoverFileSelect);
 
+    // Auto-save project name when field loses focus
+    projNameInput.addEventListener('blur', async () => {
+      const newName = projNameInput.value.trim();
+      if (!newName || !activeProjectId) return;
+      try {
+        const proj = await window.ForgeDB.getProject(activeProjectId);
+        if (proj && proj.name !== newName) {
+          proj.name = newName;
+          // Also update the compiled card name if present
+          if (proj.compiledCard?.data) proj.compiledCard.data.name = newName;
+          await window.ForgeDB.saveProject(proj);
+          if (window.refreshProjectsList) window.refreshProjectsList();
+          if (window.showToast) window.showToast(`Project renamed to "${newName}"`, 'success');
+        }
+      } catch (err) {
+        console.error('Failed to save project name:', err);
+      }
+    });
+
     renderDrawer();
   }
 
