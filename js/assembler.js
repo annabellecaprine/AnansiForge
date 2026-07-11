@@ -372,6 +372,7 @@
             <label class="relation-label">Whom</label>
             <select class="relation-select tgt-select">
               <option value="">-- character --</option>
+              <option value="{{User}}" ${rel.targetId === '{{User}}' ? 'selected' : ''}>{{User}}</option>
             </select>
           </div>
           <div class="relation-dynamic-group">
@@ -432,6 +433,27 @@
 
   // --- Stitched Card Compilation ---
 
+  function injectComponentRelationships(comp, rels) {
+    if (!rels || rels.length === 0) return comp.content.trim();
+    let rawText = comp.content.trim();
+    const hasW22 = /\[character\(/i.test(rawText);
+    const isW22 = hasW22 || rawText.startsWith('[') || rawText.includes('(');
+
+    if (isW22) {
+      const relationsLines = rels.map(r => `Relationship("${r.target}"="${r.description}")`).join('\n');
+      if (rawText.endsWith('}]')) {
+        return rawText.slice(0, -2).trim() + '\n' + relationsLines + '\n}]';
+      } else if (rawText.endsWith(']')) {
+        return rawText.slice(0, -1).trim() + '\n' + relationsLines + '\n]';
+      } else {
+        return rawText + '\n' + relationsLines;
+      }
+    } else {
+      const relationsText = '\n\nRelationships:\n' + rels.map(r => `- Toward ${r.target}: ${r.description}`).join('\n');
+      return rawText + relationsText;
+    }
+  }
+
   async function compileCardData() {
     const projName = projNameInput.value.trim() || 'Compiled Bot';
     
@@ -461,18 +483,42 @@
       }
     }
 
+    // Process relationships
+    const relsBySource = {};
+    for (const rel of relationships) {
+      if (rel.sourceId && rel.targetId && rel.dynamic.trim()) {
+        let tgtName = '';
+        if (rel.targetId === '{{User}}') {
+          tgtName = '{{User}}';
+        } else {
+          const tgtComp = await window.ForgeDB.getComponent(rel.targetId);
+          if (tgtComp) {
+            tgtName = tgtComp.name.split(' - ')[0];
+          }
+        }
+
+        if (tgtName) {
+          if (!relsBySource[rel.sourceId]) {
+            relsBySource[rel.sourceId] = [];
+          }
+          relsBySource[rel.sourceId].push({ target: tgtName, description: rel.dynamic.trim() });
+        }
+      }
+    }
+
     const descriptionText = fields.description.map(c => {
-      return `### ${c.name.split(' - ')[0]}\n${c.content.trim()}`;
+      const cleanContent = injectComponentRelationships(c, relsBySource[c.id]);
+      return `### ${c.name.split(' - ')[0]}\n${cleanContent}`;
     }).join('\n\n');
 
     const personalityText = fields.personality.map(c => {
-      const rawText = c.content.trim();
-      const hasW22 = /\[character\(/i.test(rawText);
+      const cleanContent = injectComponentRelationships(c, relsBySource[c.id]);
+      const hasW22 = /\[character\(/i.test(cleanContent);
       const cleanName = c.name.split(' - ')[0];
       if (hasW22) {
-        return rawText;
+        return cleanContent;
       } else {
-        return `[character("${cleanName}")\n{\n${rawText}\n}]`;
+        return `[character("${cleanName}")\n{\n${cleanContent}\n}]`;
       }
     }).join('\n\n');
 
@@ -480,24 +526,6 @@
     const firstMesText = fields.first_mes.map(c => c.content.trim()).join('\n\n');
 
     let systemPromptText = fields.system_prompt.map(c => c.content.trim()).join('\n\n');
-
-    const compiledRelations = [];
-    for (const rel of relationships) {
-      if (rel.sourceId && rel.targetId && rel.dynamic.trim()) {
-        const srcComp = await window.ForgeDB.getComponent(rel.sourceId);
-        const tgtComp = await window.ForgeDB.getComponent(rel.targetId);
-        if (srcComp && tgtComp) {
-          const srcName = srcComp.name.split(' - ')[0];
-          const tgtName = tgtComp.name.split(' - ')[0];
-          compiledRelations.push(`- ${srcName} -> ${tgtName}: ${rel.dynamic.trim()}`);
-        }
-      }
-    }
-
-    if (compiledRelations.length > 0) {
-      const relationsBlock = `\n\n### Interpersonal Cast Relationships\nYou must adhere to these character dynamics and feelings during chat:\n${compiledRelations.join('\n')}`;
-      systemPromptText += relationsBlock;
-    }
 
     const postHistoryText = fields.post_history_instructions.map(c => c.content.trim()).join('\n\n');
     const examplesText = fields.mes_example.map(c => c.content.trim()).join('\n\n');
