@@ -5,9 +5,41 @@
 (() => {
   // System Prompts per Category based on Design Philosophy
   const CATEGORY_GUIDANCE = {
-    character: `When developing characters, move beyond list of adjectives or physical descriptions.
+    character: `When developing characters, move beyond lists of adjectives or physical descriptions.
 Discover their core motivations, fears, emotional wounds, defense mechanisms, contradictions, growth potential, and behavioral patterns.
-Encourage the creator to think about: Why does this character behave this way? What emotional need drives them? What makes them interesting in scenes?`,
+Encourage the creator to think about: Why does this character behave this way? What emotional need drives them? What makes them interesting in scenes?
+
+FORMAT REQUIREMENT:
+You MUST compile the "draft.content" string using the following exact markdown headers (empty sections can be omitted):
+## Overview
+(A summary or introductory paragraph)
+
+## Personality
+(Details of core motivations, traits, behavior)
+
+## Background
+(Backstory and history)
+
+## Appearance
+(Physical description)
+
+## Abilities
+(Powers, equipment, and special skills)
+
+## Strengths
+(Bullet list of strengths)
+
+## Weaknesses
+(Bullet list of weaknesses)
+
+## Likes
+(Bullet list of likes)
+
+## Dislikes
+(Bullet list of dislikes)
+
+## Notes
+(Any relationships, special rules, or scenario instructions)`,
     
     bio: `Focus on the character's physical appearance, history, and background details. 
 Keep details narrative-focused and sensory. Help structure their past events so they explain their current state without becoming an exhaustive encyclopedia.`,
