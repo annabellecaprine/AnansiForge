@@ -25,6 +25,7 @@
   let editingComponentId = null;
   let activeSidebarTab = 'vault'; // 'vault' or 'projects'
   let editorIsDirty = false;  // tracks unsaved editor changes
+  let activeEditorTab = 'raw'; // 'raw' or 'form'
 
   // DOM References
   const mainCanvas = document.getElementById('main-canvas');
@@ -68,6 +69,25 @@
   const editorTokenCount = document.getElementById('editor-token-count');
   const btnSaveComponent = document.getElementById('btn-save-component');
   const btnDeleteComponent = document.getElementById('btn-delete-component');
+
+  // Editor Tabs & Panes DOM
+  const editorTabsContainer = document.getElementById('editor-tabs-container');
+  const tabEditorForm = document.getElementById('tab-editor-form');
+  const tabEditorRaw = document.getElementById('tab-editor-raw');
+  const editorRawPane = document.getElementById('editor-raw-pane');
+  const editorFormPane = document.getElementById('editor-form-pane');
+
+  // Character Profile Fields
+  const charOverview = document.getElementById('char-overview');
+  const charPersonality = document.getElementById('char-personality');
+  const charBackground = document.getElementById('char-background');
+  const charAppearance = document.getElementById('char-appearance');
+  const charAbilities = document.getElementById('char-abilities');
+  const charStrengths = document.getElementById('char-strengths');
+  const charWeaknesses = document.getElementById('char-weaknesses');
+  const charLikes = document.getElementById('char-likes');
+  const charDislikes = document.getElementById('char-dislikes');
+  const charNotes = document.getElementById('char-notes');
 
   // Navigation Back Buttons
   const btnEditorBack = document.getElementById('btn-editor-back');
@@ -312,6 +332,59 @@
 
   // --- Component Editor ---
 
+  // Helper to switch editor panes
+  function switchEditorTab(tabName) {
+    if (tabName === 'form') {
+      // Sync raw -> structured fields
+      const content = compContentInput.value;
+      const parsed = parseCharacterMarkdown(content);
+      
+      charOverview.value = parsed.overview || '';
+      charPersonality.value = parsed.personality || '';
+      charBackground.value = parsed.background || '';
+      charAppearance.value = parsed.appearance || '';
+      charAbilities.value = parsed.abilities || '';
+      charStrengths.value = parsed.strengths || '';
+      charWeaknesses.value = parsed.weaknesses || '';
+      charLikes.value = parsed.likes || '';
+      charDislikes.value = parsed.dislikes || '';
+      charNotes.value = parsed.notes || '';
+      
+      tabEditorRaw.classList.remove('active');
+      tabEditorForm.classList.add('active');
+      editorRawPane.style.display = 'none';
+      editorFormPane.style.display = 'block';
+      activeEditorTab = 'form';
+    } else {
+      // Sync structured fields -> raw content textarea
+      const sections = {
+        overview: charOverview.value,
+        personality: charPersonality.value,
+        background: charBackground.value,
+        appearance: charAppearance.value,
+        abilities: charAbilities.value,
+        strengths: charStrengths.value,
+        weaknesses: charWeaknesses.value,
+        likes: charLikes.value,
+        dislikes: charDislikes.value,
+        notes: charNotes.value
+      };
+      
+      // Prevent blanking out if there is no form content at all
+      const hasFormContent = Object.values(sections).some(v => v.trim());
+      if (hasFormContent) {
+        compContentInput.value = stitchCharacterMarkdown(sections);
+        updateTokenCount();
+      }
+      
+      tabEditorForm.classList.remove('active');
+      tabEditorRaw.classList.add('active');
+      editorFormPane.style.display = 'none';
+      editorRawPane.style.display = 'block';
+      activeEditorTab = 'raw';
+    }
+  }
+
   async function openComponentEditor(id = null) {
     editingComponentId = id;
     
@@ -323,6 +396,18 @@
     editorTokenCount.textContent = '0';
     btnDeleteComponent.style.display = id ? 'inline-flex' : 'none';
     document.getElementById('editor-title').textContent = id ? 'Edit Vault Component' : 'Create Vault Component';
+
+    // Reset pane visibility
+    activeEditorTab = 'raw';
+    tabEditorForm.classList.remove('active');
+    tabEditorRaw.classList.add('active');
+    editorFormPane.style.display = 'none';
+    editorRawPane.style.display = 'block';
+    editorTabsContainer.style.display = 'none';
+
+    // Clear form inputs
+    const formFields = [charOverview, charPersonality, charBackground, charAppearance, charAbilities, charStrengths, charWeaknesses, charLikes, charDislikes, charNotes];
+    formFields.forEach(field => { if (field) field.value = ''; });
 
     if (id) {
       const comp = await window.ForgeDB.getComponent(id);
@@ -336,11 +421,36 @@
       }
     }
 
+    if (compCategorySelect.value === 'character') {
+      editorTabsContainer.style.display = 'flex';
+      switchEditorTab('form');
+    }
+
     showView('editor-view');
     editorIsDirty = false;  // fresh open — nothing changed yet
   }
 
   async function saveComponentForm() {
+    // Sync structured tab fields to compContentInput if form is active
+    if (compCategorySelect.value === 'character' && activeEditorTab === 'form') {
+      const sections = {
+        overview: charOverview.value,
+        personality: charPersonality.value,
+        background: charBackground.value,
+        appearance: charAppearance.value,
+        abilities: charAbilities.value,
+        strengths: charStrengths.value,
+        weaknesses: charWeaknesses.value,
+        likes: charLikes.value,
+        dislikes: charDislikes.value,
+        notes: charNotes.value
+      };
+      const stitched = stitchCharacterMarkdown(sections);
+      if (stitched.trim()) {
+        compContentInput.value = stitched;
+      }
+    }
+
     const name = compNameInput.value.trim();
     const content = compContentInput.value.trim();
     if (!name || !content) {
@@ -580,6 +690,130 @@
     }
   }
 
+  // --- Character Profile Parse / Stitch Helpers ---
+
+  function parseCharacterMarkdown(markdown) {
+    const sections = {
+      overview: '',
+      personality: '',
+      background: '',
+      appearance: '',
+      abilities: '',
+      strengths: '',
+      weaknesses: '',
+      likes: '',
+      dislikes: '',
+      notes: ''
+    };
+
+    if (!markdown) return sections;
+
+    const lines = markdown.split('\n');
+    let currentKey = 'overview';
+    let buffer = [];
+
+    const headerMap = {
+      'overview': 'overview',
+      'personality': 'personality',
+      'core personality': 'personality',
+      'interaction style': 'personality',
+      'emotional core': 'personality',
+      'normal behavior': 'personality',
+      'background': 'background',
+      'biography': 'background',
+      'history': 'background',
+      'appearance': 'appearance',
+      'abilities': 'abilities',
+      'abilities / equipment': 'abilities',
+      'equipment': 'abilities',
+      'fighting style': 'abilities',
+      'strengths': 'strengths',
+      'weaknesses': 'weaknesses',
+      'likes': 'likes',
+      'dislikes': 'dislikes',
+      'notes': 'notes',
+      'notes / system instructions': 'notes',
+      'scenario notes': 'notes',
+      'relationships': 'notes'
+    };
+
+    const sectionWords = ['overview', 'personality', 'background', 'appearance', 'abilities', 'strengths', 'weaknesses', 'likes', 'dislikes', 'notes'];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      const headerMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+      const boldMatch = trimmed.match(/^\*\*([^*:]+):?\*\*$/);
+      const isPlainHeader = sectionWords.includes(trimmed.toLowerCase());
+
+      let foundKey = null;
+
+      if (headerMatch) {
+        const title = headerMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (boldMatch) {
+        const title = boldMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (isPlainHeader) {
+        foundKey = trimmed.toLowerCase();
+      }
+
+      if (foundKey) {
+        if (buffer.length > 0) {
+          sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+          buffer = [];
+        }
+        currentKey = headerMap[foundKey];
+      } else {
+        buffer.push(line);
+      }
+    }
+
+    if (buffer.length > 0) {
+      sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+    }
+
+    return sections;
+  }
+
+  function stitchCharacterMarkdown(sections) {
+    const parts = [];
+    
+    if (sections.overview?.trim()) {
+      parts.push(`## Overview\n\n${sections.overview.trim()}`);
+    }
+    if (sections.personality?.trim()) {
+      parts.push(`## Personality\n\n${sections.personality.trim()}`);
+    }
+    if (sections.background?.trim()) {
+      parts.push(`## Background\n\n${sections.background.trim()}`);
+    }
+    if (sections.appearance?.trim()) {
+      parts.push(`## Appearance\n\n${sections.appearance.trim()}`);
+    }
+    if (sections.abilities?.trim()) {
+      parts.push(`## Abilities\n\n${sections.abilities.trim()}`);
+    }
+    
+    const listFields = [
+      { key: 'strengths', label: 'Strengths' },
+      { key: 'weaknesses', label: 'Weaknesses' },
+      { key: 'likes', label: 'Likes' },
+      { key: 'dislikes', label: 'Dislikes' },
+      { key: 'notes', label: 'Notes' }
+    ];
+
+    listFields.forEach(f => {
+      const val = sections[f.key]?.trim();
+      if (val) {
+        parts.push(`## ${f.label}\n\n${val}`);
+      }
+    });
+
+    return parts.join('\n\n');
+  }
+
   function escapeHTML(str) {
     if (!str) return '';
     return str
@@ -607,10 +841,35 @@
     btnDeleteComponent.addEventListener('click', deleteComponentForm);
     compContentInput.addEventListener('input', updateTokenCount);
 
+    // Editor Tab Buttons events
+    tabEditorForm.addEventListener('click', () => switchEditorTab('form'));
+    tabEditorRaw.addEventListener('click', () => switchEditorTab('raw'));
+
+    // Dynamic tabs toggle on Category dropdown change
+    compCategorySelect.addEventListener('change', () => {
+      editorIsDirty = true;
+      if (compCategorySelect.value === 'character') {
+        editorTabsContainer.style.display = 'flex';
+        if (activeEditorTab !== 'form') {
+          switchEditorTab('form');
+        }
+      } else {
+        editorTabsContainer.style.display = 'none';
+        switchEditorTab('raw');
+      }
+    });
+
     // Mark editor dirty on any field change
-    [compNameInput, compContentInput, compCategorySelect, compClusterInput, compTagsInput].forEach(el => {
-      el.addEventListener('input', () => { editorIsDirty = true; });
-      el.addEventListener('change', () => { editorIsDirty = true; });
+    const editorInputs = [
+      compNameInput, compContentInput, compCategorySelect, compClusterInput, compTagsInput,
+      charOverview, charPersonality, charBackground, charAppearance, charAbilities,
+      charStrengths, charWeaknesses, charLikes, charDislikes, charNotes
+    ];
+    editorInputs.forEach(el => {
+      if (el) {
+        el.addEventListener('input', () => { editorIsDirty = true; });
+        el.addEventListener('change', () => { editorIsDirty = true; });
+      }
     });
 
     // Sidebar tabs triggers

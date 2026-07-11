@@ -221,13 +221,73 @@
         </div>
         <div class="view-content editor-grid">
           <div class="editor-main">
-            <div class="form-group">
+            <div class="form-group" style="margin-bottom: 12px;">
               <label for="comp-name">Component Name</label>
               <input type="text" id="comp-name" placeholder="e.g., Gotham City, Joker Persona..." required autocomplete="off">
             </div>
-            <div class="form-group">
-              <label for="comp-content">Content Details (Text description, personality rules, prompt instructions)</label>
-              <textarea id="comp-content" placeholder="Type or paste the contents of this component here..." required></textarea>
+
+            <!-- Editor Tabs (Form vs Raw Code) -->
+            <div id="editor-tabs-container" class="editor-tabs-container" style="display:none; margin-bottom: 12px;">
+              <button type="button" id="tab-editor-form" class="editor-tab-btn active">Structured Form</button>
+              <button type="button" id="tab-editor-raw" class="editor-tab-btn">Raw Markdown / W++</button>
+            </div>
+
+            <!-- TAB 1: RAW CODE -->
+            <div id="editor-raw-pane" class="editor-pane" style="display:block;">
+              <div class="form-group">
+                <label for="comp-content">Content Details (Text description, personality rules, prompt instructions)</label>
+                <textarea id="comp-content" placeholder="Type or paste the contents of this component here..." required style="min-height: 380px;"></textarea>
+              </div>
+            </div>
+
+            <!-- TAB 2: STRUCTURED FORM -->
+            <div id="editor-form-pane" class="editor-pane" style="display:none;">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="char-overview">Overview / Introduction</label>
+                  <textarea id="char-overview" placeholder="Summary, role, core introduction..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-personality">Personality & Behavior</label>
+                  <textarea id="char-personality" placeholder="Core traits, interaction style, behavior..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-background">Background / History</label>
+                  <textarea id="char-background" placeholder="Backstory, origin..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-appearance">Appearance</label>
+                  <textarea id="char-appearance" placeholder="Height, build, clothing, features..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-abilities">Abilities & Equipment</label>
+                  <textarea id="char-abilities" placeholder="Powers, skills, combat training, weapons..."></textarea>
+                </div>
+                <div class="form-grid-row">
+                  <div class="form-group">
+                    <label for="char-strengths">Strengths</label>
+                    <textarea id="char-strengths" placeholder="List strengths (one per line)..." style="min-height: 120px;"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label for="char-weaknesses">Weaknesses</label>
+                    <textarea id="char-weaknesses" placeholder="List weaknesses (one per line)..." style="min-height: 120px;"></textarea>
+                  </div>
+                </div>
+                <div class="form-grid-row">
+                  <div class="form-group">
+                    <label for="char-likes">Likes</label>
+                    <textarea id="char-likes" placeholder="List likes (one per line)..." style="min-height: 120px;"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label for="char-dislikes">Dislikes</label>
+                    <textarea id="char-dislikes" placeholder="List dislikes (one per line)..." style="min-height: 120px;"></textarea>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="char-notes">Notes / Special Instructions</label>
+                  <textarea id="char-notes" placeholder="Scenario notes, relationships, telepathy notes, trivia..." style="min-height: 120px;"></textarea>
+                </div>
+              </div>
             </div>
           </div>
           <div class="editor-sidebar">
