@@ -24,6 +24,7 @@
   // Active state
   let editingComponentId = null;
   let activeSidebarTab = 'vault'; // 'vault' or 'projects'
+  let editorIsDirty = false;  // tracks unsaved editor changes
 
   // DOM References
   const mainCanvas = document.getElementById('main-canvas');
@@ -315,6 +316,7 @@
     }
 
     showView('editor-view');
+    editorIsDirty = false;  // fresh open — nothing changed yet
   }
 
   async function saveComponentForm() {
@@ -340,6 +342,7 @@
 
     try {
       await window.ForgeDB.saveComponent(record);
+      editorIsDirty = false;  // saved — clear dirty flag
       showToast(`Component "${name}" saved!`, 'success');
       showView('welcome-view');
       refreshVaultList();
@@ -509,6 +512,12 @@
     btnDeleteComponent.addEventListener('click', deleteComponentForm);
     compContentInput.addEventListener('input', updateTokenCount);
 
+    // Mark editor dirty on any field change
+    [compNameInput, compContentInput, compCategorySelect, compClusterInput, compTagsInput].forEach(el => {
+      el.addEventListener('input', () => { editorIsDirty = true; });
+      el.addEventListener('change', () => { editorIsDirty = true; });
+    });
+
     // Sidebar tabs triggers
     tabVault.addEventListener('click', () => switchSidebarTab('vault'));
     tabProjects.addEventListener('click', () => switchSidebarTab('projects'));
@@ -547,7 +556,14 @@
     document.getElementById('btn-parlor-start').addEventListener('click', () => window.ParlorWizard.start());
 
     // Navigation Back buttons
-    btnEditorBack.addEventListener('click', () => showView('welcome-view'));
+    btnEditorBack.addEventListener('click', () => {
+      if (editorIsDirty) {
+        const leave = confirm('You have unsaved changes. Leave without saving?');
+        if (!leave) return;
+      }
+      editorIsDirty = false;
+      showView('welcome-view');
+    });
     btnBreakoutBack.addEventListener('click', () => showView('welcome-view'));
     btnAssemblerBack.addEventListener('click', () => showView('welcome-view'));
     btnSandboxBack.addEventListener('click', () => {

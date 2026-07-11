@@ -450,14 +450,15 @@
     inspectorPanel.classList.toggle('collapsed');
   }
 
-  // Helper to replace standard User placeholders with the active persona name
+  // Helper to replace standard User and Char placeholders
   function replaceUserPlaceholders(text, personaName) {
     if (!text) return '';
+    const charName = (activeProject && (activeProject.name || activeProject.compiledCard?.data?.name)) || 'Character';
     return text
-      .replace(/\{\{user\}\}/g, personaName)
-      .replace(/\{\{User\}\}/g, personaName)
-      .replace(/\{user\}/g, personaName)
-      .replace(/\{User\}/g, personaName);
+      .replace(/\{\{user\}\}/gi, personaName)
+      .replace(/\{user\}/gi, personaName)
+      .replace(/\{\{char\}\}/gi, charName)
+      .replace(/\{char\}/gi, charName);
   }
 
   function formatMarkdown(str) {

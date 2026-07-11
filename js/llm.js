@@ -54,8 +54,10 @@
       });
 
       if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error?.message || resp.statusText);
+        let errMsg = resp.statusText;
+        try { const err = await resp.json(); errMsg = err.error?.message || errMsg; }
+        catch (_) { try { errMsg = await resp.text() || errMsg; } catch (__) {} }
+        throw new Error(`Gemini API error ${resp.status}: ${errMsg}`);
       }
 
       const data = await resp.json();
@@ -133,8 +135,10 @@
       });
 
       if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error?.message || resp.statusText);
+        let errMsg = resp.statusText;
+        try { const err = await resp.json(); errMsg = err.error?.message || errMsg; }
+        catch (_) { try { errMsg = await resp.text() || errMsg; } catch (__) {} }
+        throw new Error(`API error ${resp.status}: ${errMsg}`);
       }
 
       const data = await resp.json();
@@ -176,8 +180,10 @@
       });
 
       if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error?.message || resp.statusText);
+        let errMsg = resp.statusText;
+        try { const err = await resp.json(); errMsg = err.error?.message || errMsg; }
+        catch (_) { try { errMsg = await resp.text() || errMsg; } catch (__) {} }
+        throw new Error(`Anthropic API error ${resp.status}: ${errMsg}`);
       }
 
       const data = await resp.json();
