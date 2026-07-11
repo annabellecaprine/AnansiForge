@@ -154,6 +154,16 @@
         return matchesSearch && matchesCat && matchesCluster;
       });
 
+      // Update Stats Banner
+      const statsBanner = document.getElementById('sidebar-stats-banner');
+      if (statsBanner) {
+        if (search || cat !== 'all' || cluster !== 'all') {
+          statsBanner.textContent = `Vault: ${filtered.length} of ${components.length} matched`;
+        } else {
+          statsBanner.textContent = `Vault: ${components.length} items`;
+        }
+      }
+
       // Render
       sidebarList.innerHTML = '';
       
@@ -223,6 +233,16 @@
         return proj.name.toLowerCase().includes(search) ||
                proj.componentIds.some(id => id.toLowerCase().includes(search));
       });
+
+      // Update Stats Banner
+      const statsBanner = document.getElementById('sidebar-stats-banner');
+      if (statsBanner) {
+        if (search) {
+          statsBanner.textContent = `Projects: ${filtered.length} of ${projects.length} matched`;
+        } else {
+          statsBanner.textContent = `Projects: ${projects.length} compiled`;
+        }
+      }
 
       sidebarList.innerHTML = '';
 

@@ -196,6 +196,17 @@ main#main-canvas {
 }
 
 
+.sidebar-stats-banner {
+  padding: 4px 16px 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+
 .search-box {
   position: relative;
   width: 100%;
