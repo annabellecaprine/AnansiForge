@@ -9,6 +9,9 @@
   // Custom mappings: componentId -> cardField Key
   let mappings = {};
 
+  // Custom content overrides: componentId -> customText
+  let contentOverrides = {};
+
   // Relationships: array of { sourceId, targetId, dynamic }
   let relationships = [];
 
@@ -17,6 +20,15 @@
 
   // Active cover image data URL
   let coverDataUrl = null;
+
+  // Tweak Modal elements
+  let tweakModalOverlay;
+  let tweakModalTitle;
+  let tweakContentArea;
+  let btnCloseTweakModal;
+  let btnRevertTweak;
+  let btnSaveTweak;
+  let currentTweakId = null;
 
   // DOM Elements
   const assemblerView = document.getElementById('assembler-view');
@@ -65,6 +77,45 @@
     // Cover Image selector events
     document.getElementById('btn-assembler-change-cover').addEventListener('click', () => coverFileInput.click());
     coverFileInput.addEventListener('change', handleCoverFileSelect);
+
+    // Tweak Modal DOM references
+    tweakModalOverlay = document.getElementById('tweak-modal-overlay');
+    tweakModalTitle = document.getElementById('tweak-modal-title');
+    tweakContentArea = document.getElementById('tweak-content');
+    btnCloseTweakModal = document.getElementById('btn-close-tweak-modal');
+    btnRevertTweak = document.getElementById('btn-revert-tweak');
+    btnSaveTweak = document.getElementById('btn-save-tweak');
+
+    // Tweak Modal events
+    btnCloseTweakModal.addEventListener('click', closeTweakModal);
+    tweakModalOverlay.addEventListener('click', (e) => {
+      if (e.target === tweakModalOverlay) closeTweakModal();
+    });
+
+    btnSaveTweak.addEventListener('click', async () => {
+      if (!currentTweakId) return;
+      const text = tweakContentArea.value.trim();
+      contentOverrides[currentTweakId] = text;
+      
+      closeTweakModal();
+      renderAssemblerScreen();
+      updateTokensEstimate();
+      if (window.showToast) window.showToast('Project tweak saved!', 'success');
+      
+      await autoSaveProjectRecord();
+    });
+
+    btnRevertTweak.addEventListener('click', async () => {
+      if (!currentTweakId) return;
+      delete contentOverrides[currentTweakId];
+      
+      closeTweakModal();
+      renderAssemblerScreen();
+      updateTokensEstimate();
+      if (window.showToast) window.showToast('Reverted to default component content.', 'info');
+      
+      await autoSaveProjectRecord();
+    });
 
     // Auto-save project name when field loses focus
     projNameInput.addEventListener('blur', async () => {
@@ -190,11 +241,11 @@
       coverDataUrl = event.target.result;
       updateCoverPreview();
       
-      // Auto-save Cover to the library using project name as key
-      const projName = projNameInput.value.trim();
-      if (projName) {
-        await window.ForgeDB.saveCover(projName, coverDataUrl);
+      // Auto-save Cover using project ID as key
+      if (!activeProjectId) {
+        activeProjectId = window.ForgeDB.generateId();
       }
+      await window.ForgeDB.saveCover(activeProjectId, coverDataUrl);
     };
     reader.readAsDataURL(file);
   }
@@ -211,10 +262,49 @@
     }
   }
 
+  // --- Staged Component Overrides (Tweaks) ---
+
+  function openTweakModal(id, name, defaultContent) {
+    currentTweakId = id;
+    tweakModalTitle.textContent = `Tweak "${name.split(' - ')[0]}" for Project`;
+    
+    if (contentOverrides[id] !== undefined) {
+      tweakContentArea.value = contentOverrides[id];
+      btnRevertTweak.style.display = 'inline-flex';
+    } else {
+      tweakContentArea.value = defaultContent;
+      btnRevertTweak.style.display = 'none';
+    }
+    
+    tweakModalOverlay.classList.remove('hidden');
+  }
+
+  function closeTweakModal() {
+    tweakModalOverlay.classList.add('hidden');
+    currentTweakId = null;
+  }
+
+  async function autoSaveProjectRecord() {
+    if (!activeProjectId) return;
+    try {
+      const proj = await window.ForgeDB.getProject(activeProjectId);
+      if (proj) {
+        proj.contentOverrides = contentOverrides;
+        // Re-compile project data structure to keep compiledCard up-to-date!
+        const card = await compileCardData();
+        proj.compiledCard = card;
+        await window.ForgeDB.saveProject(proj);
+      }
+    } catch (err) {
+      console.error('Failed to auto-save project overrides:', err);
+    }
+  }
+
   // --- Assembler Workspace View ---
 
   async function openAssemblerScreen(projectId = null) {
     coverDataUrl = null; // Reset state
+    contentOverrides = {}; // Reset overrides
 
     if (projectId && typeof projectId === 'string') {
       const project = await window.ForgeDB.getProject(projectId);
@@ -223,10 +313,11 @@
         stagedIds = [...project.componentIds];
         mappings = { ...project.mappings };
         relationships = [...project.relationships];
+        contentOverrides = { ...(project.contentOverrides || {}) };
         projNameInput.value = project.name;
         
-        // Fetch cover from library under project name
-        const savedCover = await window.ForgeDB.getCover(project.name);
+        // Fetch cover from library under project ID
+        const savedCover = await window.ForgeDB.getCover(project.id);
         if (savedCover) {
           coverDataUrl = savedCover;
         }
@@ -289,7 +380,8 @@
       const comp = await window.ForgeDB.getComponent(id);
       if (!comp) continue;
 
-      totalLength += (comp.content || '').length;
+      const finalContent = contentOverrides[id] !== undefined ? contentOverrides[id] : (comp.content || '');
+      totalLength += finalContent.length;
 
       const sideItem = document.createElement('div');
       sideItem.className = 'assembler-staged-item';
@@ -309,17 +401,30 @@
         optionsHtml += `<option value="${field.key}" ${isSelected ? 'selected' : ''}>${field.label}</option>`;
       });
 
+      const isCustomized = contentOverrides[id] !== undefined;
+      const badgeHtml = isCustomized ? `<span class="badge badge-tweak" style="margin-left: 8px; font-size: 0.65rem; background: var(--accent); color: white; padding: 2px 6px; border-radius: var(--radius-sm);">tweaked</span>` : '';
+
       mapRow.innerHTML = `
         <div class="assembler-mapping-name">
-          ${getCategoryIcon(comp.category)} <strong>${escapeHTML(comp.name)}</strong>
+          <div style="display:flex; align-items:center;">
+            ${getCategoryIcon(comp.category)} <strong style="margin-left:4px;">${escapeHTML(comp.name)}</strong>
+            ${badgeHtml}
+          </div>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
-            Size: ${Math.round((comp.content || '').length / 4)} tokens
+            Size: ${Math.round(finalContent.length / 4)} tokens
           </div>
         </div>
-        <select class="assembler-mapping-select">
-          ${optionsHtml}
-        </select>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-icon btn-sm btn-tweak-comp" title="Tweak text for project">📝</button>
+          <select class="assembler-mapping-select">
+            ${optionsHtml}
+          </select>
+        </div>
       `;
+
+      mapRow.querySelector('.btn-tweak-comp').addEventListener('click', () => {
+        openTweakModal(id, comp.name, comp.content);
+      });
 
       mapRow.querySelector('select').addEventListener('change', (e) => {
         mappings[id] = e.target.value;
@@ -423,7 +528,8 @@
         if (mappings[id] !== 'ignore') {
           const comp = all.find(x => x.id === id);
           if (comp) {
-            totalLength += (comp.content || '').length;
+            const finalContent = contentOverrides[id] !== undefined ? contentOverrides[id] : (comp.content || '');
+            totalLength += finalContent.length;
           }
         }
       });
@@ -473,9 +579,14 @@
       const comp = await window.ForgeDB.getComponent(id);
       if (!comp) continue;
 
+      const finalComp = { ...comp };
+      if (contentOverrides[id] !== undefined) {
+        finalComp.content = contentOverrides[id];
+      }
+
       const targetField = mappings[id];
       if (targetField && targetField !== 'ignore') {
-        fields[targetField].push(comp);
+        fields[targetField].push(finalComp);
       }
 
       if (Array.isArray(comp.tags)) {
@@ -570,6 +681,7 @@
         componentIds: stagedIds,
         mappings: mappings,
         relationships: relationships,
+        contentOverrides: contentOverrides,
         compiledCard: card
       };
       const savedProj = await window.ForgeDB.saveProject(projectRecord);
@@ -577,7 +689,7 @@
 
       // Save cover to library if available
       if (coverDataUrl) {
-        await window.ForgeDB.saveCover(card.data.name, coverDataUrl);
+        await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
       }
 
       if (window.refreshProjectsList) window.refreshProjectsList();
@@ -610,6 +722,7 @@
         componentIds: stagedIds,
         mappings: mappings,
         relationships: relationships,
+        contentOverrides: contentOverrides,
         compiledCard: card
       };
       const savedProj = await window.ForgeDB.saveProject(projectRecord);
@@ -617,7 +730,7 @@
 
       // Save cover to library if available
       if (coverDataUrl) {
-        await window.ForgeDB.saveCover(card.data.name, coverDataUrl);
+        await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
       }
 
       if (window.refreshProjectsList) window.refreshProjectsList();
@@ -723,6 +836,7 @@
         componentIds: stagedIds,
         mappings: mappings,
         relationships: relationships,
+        contentOverrides: contentOverrides,
         compiledCard: card
       };
 
@@ -730,7 +844,7 @@
       activeProjectId = savedProj.id;
       
       if (coverDataUrl) {
-        await window.ForgeDB.saveCover(card.data.name, coverDataUrl);
+        await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
       }
 
       if (window.refreshProjectsList) window.refreshProjectsList();

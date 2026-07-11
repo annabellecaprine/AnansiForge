@@ -524,6 +524,29 @@
     </div>
   </div>
 
+  <!-- COMPONENT TWEAK MODAL -->
+  <div id="tweak-modal-overlay" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 600px; width: 90%;">
+      <div class="modal-header">
+        <h3 id="tweak-modal-title">Tweak Component for Project</h3>
+        <button id="btn-close-tweak-modal" class="btn btn-ghost btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;">
+          This custom text will only be used inside the compiled card for the active project. The original component in your Vault will remain untouched.
+        </p>
+        <div class="form-group">
+          <label for="tweak-content">Custom Content Details</label>
+          <textarea id="tweak-content" style="min-height: 250px; font-family: 'Fira Code', monospace; font-size: 0.85rem;" placeholder="Type or paste customized text..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+        <button id="btn-revert-tweak" class="btn btn-danger" style="display:none;">Revert to Default</button>
+        <button id="btn-save-tweak" class="btn btn-primary">Save Tweak</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATIONS -->
   <div id="toast-container" class="toast-container"></div>
 
