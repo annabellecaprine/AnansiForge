@@ -316,6 +316,21 @@
     }
   }
 
+  // --- Chat History Utilities ---
+
+  // Max messages to keep in the sliding window sent to the LLM.
+  // Pairs of (user + model) count as 2. First message (greeting) is always preserved.
+  const MAX_HISTORY_MESSAGES = 30;
+
+  function trimHistoryToWindow(history) {
+    if (history.length <= MAX_HISTORY_MESSAGES) return history;
+    // Always keep the very first message (the character greeting / first_mes)
+    const first = history[0];
+    const rest  = history.slice(1);
+    const kept  = rest.slice(rest.length - (MAX_HISTORY_MESSAGES - 1));
+    return [first, ...kept];
+  }
+
   async function handleUserSendMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
@@ -359,7 +374,12 @@
     // 3. Replace all user placeholders in systemPrompt and history messages
     systemPrompt = replaceUserPlaceholders(systemPrompt, activePersona.name);
 
-    const mappedHistory = chatHistory.map(m => ({
+    // 4. Trim history to sliding window before sending to LLM
+    const windowedHistory = trimHistoryToWindow(chatHistory);
+    if (windowedHistory.length < chatHistory.length) {
+      showToast(`Context window: keeping last ${windowedHistory.length} messages.`, 'info');
+    }
+    const mappedHistory = windowedHistory.map(m => ({
       role: m.role,
       content: replaceUserPlaceholders(m.content, activePersona.name)
     }));

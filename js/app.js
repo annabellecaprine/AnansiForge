@@ -56,6 +56,7 @@
   const btnImportCard = document.getElementById('btn-import-card');
   const fileImportInput = document.getElementById('file-import-input');
   const dropZone = document.getElementById('drop-zone');
+  const vaultRestoreInput = document.getElementById('vault-restore-input');
 
   // Editor Form DOM
   const editorView = document.getElementById('editor-view');
@@ -485,6 +486,80 @@
     modalOverlay.classList.add('hidden');
   }
 
+  // --- Vault Backup & Restore ---
+
+  async function handleExportVault() {
+    try {
+      const bundle = await window.ForgeDB.exportVault();
+      const json   = JSON.stringify(bundle, null, 2);
+      const blob   = new Blob([json], { type: 'application/json' });
+      const url    = URL.createObjectURL(blob);
+      const date   = new Date().toISOString().slice(0, 10);
+      const a      = document.createElement('a');
+      a.href       = url;
+      a.download   = `anansi-forge-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      const total = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
+      showToast(`Vault exported — ${total} records saved.`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Export failed: ' + err.message, 'error');
+    }
+  }
+
+  async function handleRestoreVault(file) {
+    try {
+      const text   = await file.text();
+      const bundle = JSON.parse(text);
+      const total  = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
+      const ok = confirm(`This will merge ${total} records from "${file.name}" into your Vault. Existing items with the same ID will be overwritten. Continue?`);
+      if (!ok) return;
+      await window.ForgeDB.importVault(bundle);
+      showToast(`Vault restored — ${total} records imported.`, 'success');
+      refreshVaultList();
+      refreshProjectsList();
+    } catch (err) {
+      console.error(err);
+      showToast('Restore failed: ' + err.message, 'error');
+    }
+  }
+
+  // --- API Test Connection ---
+
+  async function testApiConnection() {
+    const btn = document.getElementById('btn-test-api');
+    const origText = btn.textContent;
+    btn.textContent = 'Testing…';
+    btn.disabled = true;
+
+    const config = {
+      provider: apiProvider.value,
+      model:    apiModel.value.trim(),
+      apiKey:   apiKey.value.trim(),
+      baseUrl:  apiUrl.value.trim(),
+      maxTokens: 16
+    };
+
+    // Save temporarily so ForgeLLM can use it
+    window.ForgeLLM.saveConfig(config);
+
+    try {
+      const reply = await window.ForgeLLM.generate(
+        'You are a test assistant.',
+        [{ role: 'user', content: 'Reply with exactly the word "OK".' }]
+      );
+      showToast(`✅ Connection OK — model replied: "${reply.substring(0, 60)}"`, 'success');
+    } catch (err) {
+      showToast(`❌ Connection failed: ${err.message}`, 'error');
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  }
+
   function escapeHTML(str) {
     if (!str) return '';
     return str
@@ -538,6 +613,19 @@
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) modalOverlay.classList.add('hidden');
     });
+
+    // Vault Backup / Restore
+    document.getElementById('btn-export-vault').addEventListener('click', handleExportVault);
+    document.getElementById('btn-import-vault').addEventListener('click', () => {
+      vaultRestoreInput.value = '';
+      vaultRestoreInput.click();
+    });
+    vaultRestoreInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) handleRestoreVault(e.target.files[0]);
+    });
+
+    // API Test Connection
+    document.getElementById('btn-test-api').addEventListener('click', testApiConnection);
 
     // Import click browse
     btnImportCard.addEventListener('click', () => {

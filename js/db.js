@@ -289,6 +289,43 @@
     return promisify(store.delete(id));
   }
 
+  // --- Vault Backup / Restore ---
+
+  async function exportVault() {
+    const components = await getAllComponents();
+    const projects   = await getAllProjects();
+    const personas   = await getAllPersonas();
+    return {
+      _version: 1,
+      _exportedAt: new Date().toISOString(),
+      components,
+      projects,
+      personas
+    };
+  }
+
+  async function importVault(bundle) {
+    if (!bundle || bundle._version !== 1) throw new Error('Unrecognised backup format.');
+    const db = dbInstance || await initDB();
+
+    const stores = ['vault_components', 'projects', 'personas'];
+    const keys   = ['components',       'projects',  'personas'];
+
+    for (let i = 0; i < stores.length; i++) {
+      const storeName = stores[i];
+      const records   = bundle[keys[i]] || [];
+      if (!records.length) continue;
+
+      await new Promise((resolve, reject) => {
+        const tx    = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        records.forEach(rec => store.put(rec));
+        tx.oncomplete = resolve;
+        tx.onerror    = () => reject(tx.error);
+      });
+    }
+  }
+
   // Expose APIs globally
   window.ForgeDB = {
     generateId,
@@ -310,6 +347,8 @@
     getAllPersonas,
     getPersona,
     savePersona,
-    deletePersona
+    deletePersona,
+    exportVault,
+    importVault
   };
 })();

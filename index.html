@@ -71,6 +71,14 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.886H3.894l4.948 3.596L6.93 18.368 12 14.772l5.07 3.596-1.912-5.886 4.948-3.596h-6.194L12 3z"/></svg>
           Parlor
         </button>
+        <button id="btn-export-vault" class="btn btn-ghost" title="Export Vault Backup" style="grid-column:1;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Export
+        </button>
+        <button id="btn-import-vault" class="btn btn-ghost" title="Restore Vault Backup" style="grid-column:2;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Restore
+        </button>
       </div>
 
       <!-- Component List -->
@@ -475,7 +483,8 @@
           <input type="password" id="api-key" placeholder="Enter API Key">
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="display:flex; gap:8px; justify-content:space-between; align-items:center;">
+        <button id="btn-test-api" class="btn btn-secondary">Test Connection</button>
         <button id="btn-save-api" class="btn btn-primary">Save Settings</button>
       </div>
     </div>
@@ -515,8 +524,9 @@
   <!-- TOAST NOTIFICATIONS -->
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- HIDDEN FILE INPUT -->
+  <!-- HIDDEN FILE INPUTS -->
   <input type="file" id="file-import-input" accept=".json,.png" multiple hidden>
+  <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
   <script src="js/db.js?v=1.1"></script>
