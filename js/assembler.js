@@ -360,15 +360,26 @@
       });
 
       row.innerHTML = `
-        <select class="relation-select src-select" title="Source Component">
-          <option value="">-- Source --</option>
-        </select>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">➡</span>
-        <select class="relation-select tgt-select" title="Target Component">
-          <option value="">-- Target --</option>
-        </select>
-        <input type="text" class="relation-text" placeholder="Describe relation (e.g. Rival, Loves)..." value="${escapeHTML(rel.dynamic || '')}">
-        <button class="btn btn-danger btn-icon btn-sm btn-del-rel">&times;</button>
+        <div class="relation-row-inner">
+          <div class="relation-who-group">
+            <label class="relation-label">Who</label>
+            <select class="relation-select src-select">
+              <option value="">-- character --</option>
+            </select>
+          </div>
+          <span class="relation-arrow">feels/acts toward</span>
+          <div class="relation-who-group">
+            <label class="relation-label">Whom</label>
+            <select class="relation-select tgt-select">
+              <option value="">-- character --</option>
+            </select>
+          </div>
+          <div class="relation-dynamic-group">
+            <label class="relation-label">Dynamic</label>
+            <input type="text" class="relation-text" placeholder='e.g. "rivals but secretly respects", "protective older sister"' value="${escapeHTML(rel.dynamic || '')}">
+          </div>
+          <button class="btn btn-danger btn-icon btn-sm btn-del-rel" title="Remove">&times;</button>
+        </div>
       `;
 
       row.querySelector('.src-select').addEventListener('change', (e) => {

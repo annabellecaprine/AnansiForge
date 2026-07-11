@@ -942,30 +942,90 @@ main#main-canvas {
   font-size: 0.8rem;
 }
 
+.relation-explainer {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
 .relation-row {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.relation-row-inner {
   display: flex;
   gap: 10px;
-  align-items: center;
-  margin-bottom: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.relation-who-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 110px;
+}
+
+.relation-dynamic-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 2;
+  min-width: 160px;
+}
+
+.relation-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.relation-arrow {
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+  padding-bottom: 6px;
+  align-self: flex-end;
 }
 
 .relation-select {
-  flex: 1.2;
-  background-color: var(--bg-primary);
+  width: 100%;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  padding: 6px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  outline: none;
 }
 
 .relation-text {
-  flex: 2;
-  background-color: var(--bg-primary);
+  width: 100%;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  padding: 6px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
+  font-size: 0.82rem;
   outline: none;
+}
+
+.relation-text:focus,
+.relation-select:focus {
+  border-color: var(--accent);
 }
 
 /* Playtest Spindle Sandbox */
