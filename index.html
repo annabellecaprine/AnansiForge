@@ -472,6 +472,7 @@
               </select>
               <button id="btn-sandbox-manage-personas" class="btn btn-ghost btn-icon btn-sm" title="Manage User Personas" style="padding:4px;">👤</button>
             </div>
+            <button id="btn-sandbox-export" class="btn btn-secondary">Export Chat</button>
             <button id="btn-sandbox-reset" class="btn btn-secondary">Reset Chat</button>
             <button id="btn-sandbox-inspect" class="btn btn-ghost btn-icon" title="Inspect Prompt Context">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -499,6 +500,7 @@
             <div class="inspector-tabs">
               <button class="tab-btn active" data-tab="reasoning">Model Reasoning</button>
               <button class="tab-btn" data-tab="prompt">Compiled Prompt</button>
+              <button class="tab-btn" data-tab="notes">Notes</button>
             </div>
             <div class="inspector-content">
               <div id="tab-reasoning" class="tab-panel active">
@@ -508,6 +510,10 @@
               <div id="tab-prompt" class="tab-panel">
                 <p class="tab-info">The exact prompt context compiled from active components, relationships, and history:</p>
                 <pre id="prompt-output" class="prompt-output"></pre>
+              </div>
+              <div id="tab-notes" class="tab-panel">
+                <p class="tab-info">Save your playtest observations, scenario feedback, or ideas here (auto-saved to project):</p>
+                <textarea id="playtest-notes" style="width:100%; min-height:300px; resize:vertical; background-color:rgba(0,0,0,0.25); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px; font-family:var(--font-sans); font-size:0.88rem; outline:none;" placeholder="Type notes here..."></textarea>
               </div>
             </div>
           </div>

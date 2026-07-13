@@ -36,6 +36,7 @@
   const btnInspectToggle = document.getElementById('btn-sandbox-inspect');
   const reasoningOutput = document.getElementById('reasoning-output');
   const promptOutput = document.getElementById('prompt-output');
+  const playtestNotes = document.getElementById('playtest-notes');
 
   function initSandbox() {
     btnSend.addEventListener('click', handleUserSendMessage);
@@ -48,6 +49,16 @@
 
     document.getElementById('btn-sandbox-reset').addEventListener('click', resetChat);
     btnInspectToggle.addEventListener('click', toggleInspector);
+    document.getElementById('btn-sandbox-export').addEventListener('click', exportChatLog);
+
+    // Auto-save notes to the active project
+    if (playtestNotes) {
+      playtestNotes.addEventListener('input', async (e) => {
+        if (!activeProject) return;
+        activeProject.notes = e.target.value;
+        await window.ForgeDB.saveProject(activeProject);
+      });
+    }
 
     // Inspector Tabs
     inspectorPanel.querySelectorAll('.tab-btn').forEach(btn => {
@@ -282,6 +293,11 @@
     reasoningOutput.textContent = 'No reasoning tokens output by model yet.';
     promptOutput.textContent = '';
 
+    // Load project notes
+    if (playtestNotes) {
+      playtestNotes.value = activeProject.notes || '';
+    }
+    
     // If history is empty, seed with compiled greeting
     if (chatHistory.length === 0) {
       const compiled = activeProject.compiledCard?.data || {};
@@ -305,8 +321,8 @@
   function renderChatLog() {
     chatLog.innerHTML = '';
     
-    chatHistory.forEach(msg => {
-      addMessageBubble(msg.role, msg.content, false);
+    chatHistory.forEach((msg, idx) => {
+      addMessageBubble(msg.role, msg.content, idx, false);
     });
 
     chatLog.scrollTop = chatLog.scrollHeight;
@@ -315,7 +331,7 @@
   /**
    * Appends a chat bubble to the log.
    */
-  function addMessageBubble(role, rawContent, animate = true) {
+  function addMessageBubble(role, rawContent, index, animate = true) {
     const bubble = document.createElement('div');
     
     // Reasoning Separation
@@ -342,10 +358,31 @@
     // Run placeholder replacements on dialogue
     const substitutedDialogue = replaceUserPlaceholders(dialogue, activePersona.name);
 
+    let actionsHtml = '';
+    if (role === 'user') {
+      actionsHtml = `<button class="bubble-action-btn btn-edit-msg" title="Edit message">✏️ Edit</button>`;
+    } else if (role === 'model' && index > 0) {
+      actionsHtml = `<button class="bubble-action-btn btn-reroll-msg" title="Re-roll response">🔄 Re-roll</button>`;
+    }
+
     bubble.innerHTML = `
       <div class="chat-bubble-name">${escapeHTML(nameLabel)}</div>
       <div class="chat-bubble-text">${formatMarkdown(substitutedDialogue)}</div>
+      ${actionsHtml ? `<div class="chat-bubble-actions">${actionsHtml}</div>` : ''}
     `;
+
+    // Listeners
+    if (role === 'user') {
+      const editBtn = bubble.querySelector('.btn-edit-msg');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => editUserMessage(index, bubble));
+      }
+    } else if (role === 'model' && index > 0) {
+      const rerollBtn = bubble.querySelector('.btn-reroll-msg');
+      if (rerollBtn) {
+        rerollBtn.addEventListener('click', () => rerollResponse(index));
+      }
+    }
 
     chatLog.appendChild(bubble);
 
@@ -369,18 +406,7 @@
     return [first, ...kept];
   }
 
-  async function handleUserSendMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-
-    chatInput.value = '';
-    
-    // Add user message to log and history
-    chatHistory.push({ role: 'user', content: text });
-    addMessageBubble('user', text);
-    
-    await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
-
+  async function triggerBotResponse() {
     // Show bot thinking loading bubble
     const loadingBubble = document.createElement('div');
     loadingBubble.className = 'chat-bubble character loading-bubble';
@@ -414,9 +440,6 @@
 
     // 4. Trim history to sliding window before sending to LLM
     const windowedHistory = trimHistoryToWindow(chatHistory);
-    if (windowedHistory.length < chatHistory.length) {
-      showToast(`Context window: keeping last ${windowedHistory.length} messages.`, 'info');
-    }
     const mappedHistory = windowedHistory.map(m => ({
       role: m.role,
       content: replaceUserPlaceholders(m.content, activePersona.name)
@@ -433,13 +456,11 @@
       loadingBubble.remove();
 
       chatHistory.push({ role: 'model', content: reply });
-      addMessageBubble('model', reply);
+      addMessageBubble('model', reply, chatHistory.length - 1);
 
       await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
-      
-      // Update prompt output with updated history
-      const substitutedReply = replaceUserPlaceholders(reply, activePersona.name);
-      promptOutput.textContent += `\nAssistant: ${substitutedReply}`;
+      updatePromptInspector();
+
     } catch (err) {
       loadingBubble.remove();
       console.error(err);
@@ -453,6 +474,107 @@
       chatLog.appendChild(errBubble);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
+  }
+
+  async function handleUserSendMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+
+    chatInput.value = '';
+    
+    // Add user message to log and history
+    chatHistory.push({ role: 'user', content: text });
+    addMessageBubble('user', text, chatHistory.length - 1);
+    
+    await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
+
+    await triggerBotResponse();
+  }
+
+  async function rerollResponse(index) {
+    if (index === undefined || index < 1) return;
+
+    // Slice to remove the response we want to re-roll and any subsequent messages
+    chatHistory = chatHistory.slice(0, index);
+    
+    await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
+    renderChatLog();
+    
+    await triggerBotResponse();
+  }
+
+  function editUserMessage(index, bubbleElement) {
+    const textContainer = bubbleElement.querySelector('.chat-bubble-text');
+    const actionsContainer = bubbleElement.querySelector('.chat-bubble-actions');
+    const originalText = chatHistory[index].content;
+    
+    textContainer.style.display = 'none';
+    if (actionsContainer) actionsContainer.style.display = 'none';
+    
+    const editForm = document.createElement('div');
+    editForm.className = 'bubble-edit-form';
+    editForm.style.marginTop = '6px';
+    editForm.innerHTML = `
+      <textarea class="edit-msg-textarea" style="width:100%; min-height:85px; font-family:inherit; font-size:0.9rem; padding:8px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.25); background-color:rgba(0,0,0,0.2); color:white; outline:none; resize:vertical;">${escapeHTML(originalText)}</textarea>
+      <div style="display:flex; gap:6px; margin-top:6px; justify-content:flex-end;">
+        <button class="btn btn-secondary btn-sm btn-cancel-edit" style="padding:4px 8px; font-size:0.75rem; background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer;">Cancel</button>
+        <button class="btn btn-primary btn-sm btn-save-edit" style="padding:4px 8px; font-size:0.75rem; background:white; color:var(--accent); border:none; cursor:pointer;">Save</button>
+      </div>
+    `;
+    
+    bubbleElement.appendChild(editForm);
+    
+    const textarea = editForm.querySelector('.edit-msg-textarea');
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    
+    editForm.querySelector('.btn-cancel-edit').addEventListener('click', () => {
+      editForm.remove();
+      textContainer.style.display = 'block';
+      if (actionsContainer) actionsContainer.style.display = 'flex';
+    });
+    
+    editForm.querySelector('.btn-save-edit').addEventListener('click', async () => {
+      const updatedText = textarea.value.trim();
+      if (!updatedText) return;
+      
+      // Update text in history
+      chatHistory[index].content = updatedText;
+      
+      // Slice history to remove all subsequent messages
+      chatHistory = chatHistory.slice(0, index + 1);
+      
+      await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
+      renderChatLog();
+      
+      await triggerBotResponse();
+    });
+  }
+
+  function exportChatLog() {
+    if (chatHistory.length === 0) {
+      if (window.showToast) window.showToast('No chat history to export.', 'info');
+      return;
+    }
+    
+    const charName = (activeProject && (activeProject.name || activeProject.compiledCard?.data?.name)) || 'Character';
+    const activePersona = personasList.find(p => p.id === activePersonaId) || { name: 'User' };
+    
+    const transcript = chatHistory.map(msg => {
+      const sender = msg.role === 'user' ? activePersona.name : charName;
+      return `${sender}: ${msg.content}\n`;
+    }).join('\n');
+
+    const blob = new Blob([transcript], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeProject.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_chat.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (window.showToast) window.showToast('Chat history exported!', 'success');
   }
 
   function updatePromptInspector() {
