@@ -1152,12 +1152,47 @@ main#main-canvas {
   background-color: rgba(18, 20, 28, 0.35);
   backdrop-filter: blur(8px);
   transition: width var(--transition-normal);
+  position: relative; /* needed for absolute positioning of resize handle */
+  border-left: 1px solid var(--border-color);
+}
+
+.sandbox-inspector.resizing {
+  transition: none !important;
 }
 
 .sandbox-inspector.collapsed {
-  width: 0;
+  width: 0 !important;
   overflow: hidden;
   border-left: none;
+}
+
+.sandbox-inspector-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+.sandbox-inspector-resize-handle:hover,
+.sandbox-inspector-resize-handle.dragging {
+  background-color: var(--accent);
+}
+
+/* Chat formatting overrides */
+.chat-bubble em {
+  color: var(--text-secondary);
+  opacity: 0.9;
+  font-style: italic;
+}
+
+.chat-bubble.user em {
+  color: rgba(255, 255, 255, 0.9); /* High contrast on the indigo/blue background */
+  opacity: 1;
 }
 
 .inspector-header {

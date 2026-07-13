@@ -78,6 +78,44 @@
     personaListSelect.addEventListener('change', handlePersonaModalListSelect);
     btnSavePersona.addEventListener('click', savePersonaForm);
     btnDeletePersona.addEventListener('click', deletePersonaForm);
+
+    // Resize Handler for reasoning/context panel
+    const resizeHandle = document.getElementById('sandbox-inspector-resize');
+    if (resizeHandle) {
+      const savedWidth = localStorage.getItem('sandbox-inspector-width');
+      if (savedWidth) {
+        inspectorPanel.style.width = `${savedWidth}px`;
+      }
+
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        inspectorPanel.classList.add('resizing');
+        resizeHandle.classList.add('dragging');
+
+        const doDrag = (moveEvent) => {
+          const newWidth = window.innerWidth - moveEvent.clientX;
+          // Constrain width between 250px and 800px
+          const constrainedWidth = Math.max(250, Math.min(800, newWidth));
+          inspectorPanel.style.width = `${constrainedWidth}px`;
+        };
+
+        const stopDrag = () => {
+          inspectorPanel.classList.remove('resizing');
+          resizeHandle.classList.remove('dragging');
+
+          const finalWidth = parseInt(inspectorPanel.style.width, 10);
+          if (!isNaN(finalWidth)) {
+            localStorage.setItem('sandbox-inspector-width', finalWidth);
+          }
+
+          document.removeEventListener('mousemove', doDrag);
+          document.removeEventListener('mouseup', stopDrag);
+        };
+
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('mouseup', stopDrag);
+      });
+    }
   }
 
   // --- Persona Management & Seeding ---
@@ -484,7 +522,7 @@
   function formatMarkdown(str) {
     if (!str) return '';
     let text = escapeHTML(str);
-    text = text.replace(/\*([^*]+)\*/g, '<em style="color:var(--text-secondary); opacity:0.85;">$1</em>');
+    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
     text = text.replace(/\n/g, '<br>');
     return text;
   }
