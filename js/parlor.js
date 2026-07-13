@@ -180,6 +180,91 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
     }
   }
 
+  function parseForgeResponse(responseText) {
+    let cleanText = responseText.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+    if (cleanText.startsWith('```')) {
+      cleanText = cleanText.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+    }
+
+    // Try normal JSON parse first
+    try {
+      return JSON.parse(cleanText);
+    } catch (e) {
+      // Try parsing just the brace block
+      const firstBrace = cleanText.indexOf('{');
+      const lastBrace = cleanText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        const candidate = cleanText.substring(firstBrace, lastBrace + 1);
+        try {
+          return JSON.parse(candidate);
+        } catch (e2) {
+          // If candidate parse fails, try to escape literal newlines inside strings in the candidate
+          try {
+            const repaired = candidate.replace(/"([^"\\]|\\.)*"/g, (match) => {
+              return match.replace(/\r?\n/g, '\\n');
+            });
+            return JSON.parse(repaired);
+          } catch (e3) {
+            // Repair failed, fall through to regex extraction
+          }
+        }
+      }
+    }
+
+    // Regex extraction fallback
+    console.warn("AI Forge: standard JSON parsing failed. Using regex extraction fallback.", responseText);
+
+    const unescapeStr = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    };
+
+    // Extract question
+    const qMatch = cleanText.match(/"question"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+    const question = qMatch ? unescapeStr(qMatch[1]) : "I've compiled the draft so far. What would you like to refine next?";
+
+    // Extract draft name
+    const nameMatch = cleanText.match(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+    const name = nameMatch ? unescapeStr(nameMatch[1]) : "";
+
+    // Extract draft content
+    const contentMatch = cleanText.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+    const content = contentMatch ? unescapeStr(contentMatch[1]) : "";
+
+    // Extract inconsistencies
+    const incMatch = cleanText.match(/"inconsistencies"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+    const inconsistencies = incMatch ? unescapeStr(incMatch[1]) : "";
+
+    // Extract suggestions
+    const suggestions = [];
+    const sugBlockMatch = cleanText.match(/"suggestions"\s*:\s*\[([\s\S]*?)\]/i);
+    if (sugBlockMatch) {
+      const itemsRaw = sugBlockMatch[1];
+      const itemRegex = /"((?:[^"\\]|\\.)*)"/g;
+      let m;
+      while ((m = itemRegex.exec(itemsRaw)) !== null) {
+        suggestions.push(unescapeStr(m[1]));
+      }
+    }
+
+    // Extract readyToSave
+    const rtsMatch = cleanText.match(/"readyToSave"\s*:\s*(true|false)/i);
+    const readyToSave = rtsMatch ? rtsMatch[1].toLowerCase() === 'true' : false;
+
+    return {
+      thought: "Regex parse fallback.",
+      question,
+      suggestions,
+      inconsistencies,
+      draft: { name, content },
+      readyToSave
+    };
+  }
+
   async function executeForgeTurn(preMessage = null) {
     if (isGenerating) return;
     isGenerating = true;
@@ -236,26 +321,8 @@ Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed an
       // Remove spinner
       spinner.remove();
 
-      // Parse JSON from response (handling deepseek think tags and markdown json codeblocks)
-      responseText = responseText.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
-      if (responseText.startsWith('```')) {
-        responseText = responseText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
-      }
-
-      let parsed = null;
-      try {
-        parsed = JSON.parse(responseText);
-      } catch (err) {
-        // Fallback: search for first '{' and last '}'
-        const firstBrace = responseText.indexOf('{');
-        const lastBrace = responseText.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-          const cleanString = responseText.substring(firstBrace, lastBrace + 1);
-          parsed = JSON.parse(cleanString);
-        } else {
-          throw err;
-        }
-      }
+      // Parse JSON from response using robust extraction pipeline
+      let parsed = parseForgeResponse(responseText);
 
       // Add bot bubble
       addBotBubble(parsed.question);
@@ -275,7 +342,7 @@ Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed an
     } catch (err) {
       console.error('Forge Turn failed:', err);
       spinner.remove();
-      addBotBubble(`The Forge encountered an error: "${err.message}". Please verify your API Key and try again.`);
+      addBotBubble(`The Forge encountered a processing error: "${err.message}". This usually happens if the model output is malformed or cut off. Try sending your last message again.`);
     } finally {
       isGenerating = false;
     }
