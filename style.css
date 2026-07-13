@@ -1145,6 +1145,7 @@ main#main-canvas {
 
 /* Sandbox Inspector Panel */
 .sandbox-inspector {
+  flex: 0 0 auto; /* locks flex basis/shrink to obey inline width edits */
   width: 380px;
   height: 100%;
   display: flex;
