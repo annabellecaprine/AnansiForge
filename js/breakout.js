@@ -23,7 +23,7 @@
   // Preview Form
   const previewNameInput = document.getElementById('breakout-comp-name');
   const previewCategorySelect = document.getElementById('breakout-comp-category');
-  const previewClusterInput = document.getElementById('breakout-comp-cluster');
+  const previewLineageInput = document.getElementById('breakout-comp-lineage');
   const previewContentPre = document.getElementById('breakout-comp-content-preview');
 
   // --- HTML Stripping Utility (for JanitorAI / HTML-formatted cards) ---
@@ -448,7 +448,7 @@
       reader.onload = async (e) => {
         try {
           await window.ForgeDB.saveCover(charName, e.target.result);
-          console.log(`Saved original card cover artwork for cluster: "${charName}"`);
+          console.log(`Saved original card cover artwork for lineage: "${charName}"`);
         } catch (err) {
           console.error('Failed to save cover artwork:', err);
         }
@@ -600,7 +600,7 @@
     }
 
     previewCategorySelect.value = field.defaultCat;
-    previewClusterInput.value = charName;
+    previewLineageInput.value = charName;
     previewContentPre.textContent = field.content;
 
     if (field.saved) {
@@ -621,7 +621,7 @@
     const comp = {
       name: previewNameInput.value.trim(),
       category: previewCategorySelect.value,
-      cluster: previewClusterInput.value.trim(),
+      lineage: previewLineageInput.value.trim(),
       content: previewContentPre.textContent,
       tags: [activeCard.name || 'imported']
     };

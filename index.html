@@ -51,10 +51,19 @@
           <option value="rules">Scenario Rules</option>
           <option value="lore">Lore Entries</option>
         </select>
-        <select id="vault-cluster-filter">
-          <option value="all">All Clusters</option>
+        <select id="vault-lineage-filter">
+          <option value="all">All Lineages</option>
           <!-- Hydrated dynamically -->
         </select>
+        <select id="vault-scenario-filter">
+          <option value="all">All Scenarios</option>
+          <!-- Hydrated dynamically -->
+        </select>
+      </div>
+      <div class="sidebar-template-toggle-row">
+        <button id="btn-templates-only" class="btn btn-ghost btn-sm template-toggle-btn" title="Show only Golden Templates">
+          ⭐ Templates Only
+        </button>
       </div>
 
       <!-- Actions -->
@@ -177,8 +186,8 @@
                 </div>
               </div>
               <div class="form-group" style="margin-bottom:12px;">
-                <label for="forge-output-cluster">Cluster (Universe / Group)</label>
-                <input type="text" id="forge-output-cluster" placeholder="e.g., Gotham City, Cromwell Legacy" autocomplete="off">
+                <label for="forge-output-lineage">Lineage</label>
+                <input type="text" id="forge-output-lineage" placeholder="e.g., Dick Grayson, Bruce Wayne" autocomplete="off">
               </div>
               <div class="form-group" style="flex-grow:1; display:flex; flex-direction:column; margin-bottom:12px;">
                 <label for="forge-output-content" style="display:flex; justify-content:space-between;">
@@ -304,13 +313,23 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="comp-cluster">Cluster (Universe / Group)</label>
-              <input type="text" id="comp-cluster" placeholder="e.g., Batman, Cyberpunk" list="cluster-suggestions" autocomplete="off">
-              <datalist id="cluster-suggestions"></datalist>
+              <label for="comp-lineage">Lineage (Character Identity Group)</label>
+              <input type="text" id="comp-lineage" placeholder="e.g., Dick Grayson, Bruce Wayne" list="lineage-suggestions" autocomplete="off">
+              <datalist id="lineage-suggestions"></datalist>
+            </div>
+            <div class="form-group">
+              <label for="comp-scenarios">Scenarios Associated (comma separated)</label>
+              <input type="text" id="comp-scenarios" placeholder="e.g., Young Justice, Bat Family, Teen Titans">
             </div>
             <div class="form-group">
               <label for="comp-tags">Tags (comma separated)</label>
               <input type="text" id="comp-tags" placeholder="e.g., hero, dark, sci-fi">
+            </div>
+            <div class="form-group is-template-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="comp-is-template">
+                <span>⭐ Golden Template — canonical baseline for this lineage</span>
+              </label>
             </div>
             <div id="editor-token-counter" class="editor-info-card">
               <h4>Metrics</h4>
@@ -319,6 +338,10 @@
                 <strong id="editor-token-count">0</strong>
               </div>
             </div>
+            <button id="btn-create-variant" class="btn btn-secondary" style="display:none;" title="Create a scenario variant based on this template">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Create Variant
+            </button>
           </div>
         </div>
       </div>
@@ -357,8 +380,8 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="breakout-comp-cluster">Target Cluster</label>
-                  <input type="text" id="breakout-comp-cluster" placeholder="e.g., Imported Cards">
+                  <label for="breakout-comp-lineage">Lineage</label>
+                  <input type="text" id="breakout-comp-lineage" placeholder="e.g., Dick Grayson">
                 </div>
                 <div class="form-group">
                   <label>Content Snippet</label>

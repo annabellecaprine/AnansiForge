@@ -77,7 +77,7 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
   // Preview elements
   const outputName = document.getElementById('forge-output-name');
   const outputCategory = document.getElementById('forge-output-category');
-  const outputCluster = document.getElementById('forge-output-cluster');
+  const outputLineage = document.getElementById('forge-output-lineage');
   const outputContent = document.getElementById('forge-output-content');
   const btnSaveAll = document.getElementById('btn-parlor-save-all');
 
@@ -107,7 +107,7 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
     // Clear preview inputs
     outputName.value = '';
     outputCategory.value = 'character';
-    outputCluster.value = '';
+    outputLineage.value = '';
     outputContent.value = '';
     btnSaveAll.disabled = true;
 
@@ -411,7 +411,7 @@ Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed an
     const name = outputName.value.trim();
     const content = outputContent.value.trim();
     const category = outputCategory.value;
-    const cluster = outputCluster.value.trim();
+    const lineage = outputLineage.value.trim();
 
     if (!name || !content) {
       if (window.showToast) window.showToast('Asset Name and Content cannot be empty.', 'error');
@@ -421,7 +421,7 @@ Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed an
     const component = {
       name,
       category,
-      cluster,
+      lineage,
       content,
       tags: ['forge', category]
     };

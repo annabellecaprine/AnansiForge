@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v1
+ * Database: "anansi-forge" v4
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   
   let dbInstance = null;
 
@@ -40,13 +40,14 @@
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        const oldVersion = event.oldVersion;
         
         // 1. Vault Components Store
         if (!db.objectStoreNames.contains('vault_components')) {
           const store = db.createObjectStore('vault_components', { keyPath: 'id' });
           store.createIndex('name', 'name', { unique: false });
           store.createIndex('category', 'category', { unique: false });
-          store.createIndex('cluster', 'cluster', { unique: false });
+          store.createIndex('lineage', 'lineage', { unique: false });
           store.createIndex('modifiedAt', 'modifiedAt', { unique: false });
         }
         
@@ -70,6 +71,28 @@
         // 5. User Personas Store
         if (!db.objectStoreNames.contains('personas')) {
           db.createObjectStore('personas', { keyPath: 'id' });
+        }
+
+        // v4 Migration: cluster → scenarios, add lineage + isTemplate
+        if (oldVersion < 4 && db.objectStoreNames.contains('vault_components')) {
+          const tx = event.target.transaction;
+          const store = tx.objectStore('vault_components');
+          store.openCursor().onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (!cursor) return;
+            const rec = cursor.value;
+            // Migrate cluster → scenarios array
+            if (!rec.scenarios) {
+              rec.scenarios = rec.cluster ? [rec.cluster] : [];
+            }
+            // Add new fields
+            if (rec.lineage === undefined) rec.lineage = '';
+            if (rec.isTemplate === undefined) rec.isTemplate = false;
+            // Remove old field
+            delete rec.cluster;
+            cursor.update(rec);
+            cursor.continue();
+          };
         }
       };
 
@@ -124,12 +147,16 @@
       id: comp.id || generateId(),
       name: (comp.name || 'Unnamed Item').trim(),
       category: comp.category || 'character',
-      cluster: (comp.cluster || '').trim(),
+      lineage: (comp.lineage || '').trim(),
+      scenarios: Array.isArray(comp.scenarios) ? comp.scenarios : [],
+      isTemplate: comp.isTemplate === true,
       content: comp.content || '',
       tags: Array.isArray(comp.tags) ? comp.tags : [],
       createdAt: comp.createdAt || now,
       modifiedAt: now
     };
+    // Ensure old cluster key is not persisted
+    delete record.cluster;
     
     await promisify(store.put(record));
     return record;

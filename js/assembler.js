@@ -135,7 +135,8 @@
           name: newName.trim(),
           content: text,
           category: comp ? comp.category : 'character',
-          cluster: comp ? comp.cluster : '',
+          lineage: comp ? comp.lineage : '',
+          scenarios: comp ? [...(comp.scenarios || [])] : [],
           tags: comp ? [...comp.tags] : []
         };
 
@@ -395,11 +396,11 @@
 
     // Default project name based on character components
     const characterNames = [];
-    let matchedCluster = null;
+    let matchedLineage = null;
     for (const id of stagedIds) {
       const comp = await window.ForgeDB.getComponent(id);
       if (comp) {
-        if (comp.cluster) matchedCluster = comp.cluster;
+        if (comp.lineage) matchedLineage = comp.lineage;
         if (comp.category === 'character') {
           const cleanName = comp.name.split(' - ')[0];
           if (!characterNames.includes(cleanName)) {
@@ -411,11 +412,11 @@
     
     projNameInput.value = characterNames.length > 0 ? characterNames.join(' & ') : 'New Assembled Bot';
 
-    // Auto-fetch original cover artwork if saved under matched cluster
-    if (matchedCluster) {
-      const clusterCover = await window.ForgeDB.getCover(matchedCluster);
-      if (clusterCover) {
-        coverDataUrl = clusterCover;
+    // Auto-fetch original cover artwork if saved under matched lineage
+    if (matchedLineage) {
+      const lineageCover = await window.ForgeDB.getCover(matchedLineage);
+      if (lineageCover) {
+        coverDataUrl = lineageCover;
       }
     }
 

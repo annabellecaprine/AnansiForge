@@ -34,9 +34,13 @@
   
   // Vault filters / actions rows
   const filterCat = document.getElementById('vault-category-filter');
-  const filterCluster = document.getElementById('vault-cluster-filter');
+  const filterLineage = document.getElementById('vault-lineage-filter');
+  const filterScenario = document.getElementById('vault-scenario-filter');
+  const btnTemplatesOnly = document.getElementById('btn-templates-only');
   const sidebarFiltersRow = document.querySelector('.sidebar-filter-row');
   const sidebarActionsRow = document.querySelector('.sidebar-actions');
+
+  let showTemplatesOnly = false;
 
   // Sidebar Tab Buttons
   const tabVault = document.getElementById('tab-sidebar-vault');
@@ -64,7 +68,10 @@
   const compNameInput = document.getElementById('comp-name');
   const compContentInput = document.getElementById('comp-content');
   const compCategorySelect = document.getElementById('comp-category');
-  const compClusterInput = document.getElementById('comp-cluster');
+  const compLineageInput = document.getElementById('comp-lineage');
+  const compScenariosInput = document.getElementById('comp-scenarios');
+  const compIsTemplateCheck = document.getElementById('comp-is-template');
+  const btnCreateVariant = document.getElementById('btn-create-variant');
   const compTagsInput = document.getElementById('comp-tags');
   const editorTokenCount = document.getElementById('editor-token-count');
   const btnSaveComponent = document.getElementById('btn-save-component');
@@ -135,26 +142,37 @@
     try {
       const components = await window.ForgeDB.getAllComponents();
       
-      // Update Cluster Filter dropdown options
-      const activeClusterFilter = filterCluster.value;
-      const clusters = [...new Set(components.map(c => c.cluster).filter(Boolean))];
-      
-      filterCluster.innerHTML = '<option value="all">All Clusters</option>';
-      clusters.forEach(cls => {
+      // Update Lineage Filter dropdown options
+      const activeLineageFilter = filterLineage.value;
+      const lineages = [...new Set(components.map(c => c.lineage).filter(Boolean))].sort();
+      filterLineage.innerHTML = '<option value="all">All Lineages</option>';
+      lineages.forEach(l => {
         const option = document.createElement('option');
-        option.value = cls;
-        option.textContent = cls;
-        if (cls === activeClusterFilter) option.selected = true;
-        filterCluster.appendChild(option);
+        option.value = l;
+        option.textContent = l;
+        if (l === activeLineageFilter) option.selected = true;
+        filterLineage.appendChild(option);
       });
 
-      // Update Cluster Datalist Suggestions in Editor
-      const suggestions = document.getElementById('cluster-suggestions');
+      // Update Scenario Filter dropdown options
+      const activeScenarioFilter = filterScenario.value;
+      const scenarios = [...new Set(components.flatMap(c => c.scenarios || []).filter(Boolean))].sort();
+      filterScenario.innerHTML = '<option value="all">All Scenarios</option>';
+      scenarios.forEach(s => {
+        const option = document.createElement('option');
+        option.value = s;
+        option.textContent = s;
+        if (s === activeScenarioFilter) option.selected = true;
+        filterScenario.appendChild(option);
+      });
+
+      // Update Lineage Datalist Suggestions in Editor
+      const suggestions = document.getElementById('lineage-suggestions');
       if (suggestions) {
         suggestions.innerHTML = '';
-        clusters.forEach(cls => {
+        lineages.forEach(l => {
           const opt = document.createElement('option');
-          opt.value = cls;
+          opt.value = l;
           suggestions.appendChild(opt);
         });
       }
@@ -162,22 +180,25 @@
       // Filter
       const search = searchInput.value.toLowerCase().trim();
       const cat = filterCat.value;
-      const cluster = filterCluster.value;
+      const lineageVal = filterLineage.value;
+      const scenarioVal = filterScenario.value;
 
       const filtered = components.filter(comp => {
         const matchesSearch = comp.name.toLowerCase().includes(search) || 
                               (comp.content || '').toLowerCase().includes(search) ||
-                              comp.tags.some(t => t.toLowerCase().includes(search));
+                              (comp.tags || []).some(t => t.toLowerCase().includes(search));
         const matchesCat = cat === 'all' || comp.category === cat;
-        const matchesCluster = cluster === 'all' || comp.cluster === cluster;
+        const matchesLineage = lineageVal === 'all' || comp.lineage === lineageVal;
+        const matchesScenario = scenarioVal === 'all' || (comp.scenarios || []).includes(scenarioVal);
+        const matchesTemplate = !showTemplatesOnly || comp.isTemplate === true;
 
-        return matchesSearch && matchesCat && matchesCluster;
+        return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate;
       });
 
       // Update Stats Banner
       const statsBanner = document.getElementById('sidebar-stats-banner');
       if (statsBanner) {
-        if (search || cat !== 'all' || cluster !== 'all') {
+        if (search || cat !== 'all' || lineageVal !== 'all' || scenarioVal !== 'all' || showTemplatesOnly) {
           statsBanner.textContent = `Vault: ${filtered.length} of ${components.length} matched`;
         } else {
           statsBanner.textContent = `Vault: ${components.length} items`;
@@ -200,17 +221,29 @@
         const item = document.createElement('div');
         item.className = 'vault-item';
         
-        const clusterLabel = comp.cluster 
-          ? `<span class="vault-item-cluster">📁 ${escapeHTML(comp.cluster)}</span>` 
+        const templateBadge = comp.isTemplate 
+          ? `<span class="template-badge">⭐ Template</span>` 
+          : '';
+
+        const lineageLabel = comp.lineage 
+          ? `<span class="vault-item-lineage">🔗 ${escapeHTML(comp.lineage)}</span>` 
           : '<span></span>';
+
+        const scenarioPills = (comp.scenarios && comp.scenarios.length > 0)
+          ? `<div class="vault-item-scenarios">${comp.scenarios.map(s => `<span class="scenario-pill">${escapeHTML(s)}</span>`).join('')}</div>`
+          : '';
 
         item.innerHTML = `
           <div class="vault-item-header">
             <span class="vault-item-name" title="${escapeHTML(comp.name)}">${escapeHTML(comp.name)}</span>
-            <span class="vault-item-category ${comp.category}">${comp.category}</span>
+            <div style="display:flex; gap:4px; align-items:center;">
+              ${templateBadge}
+              <span class="vault-item-category ${comp.category}">${comp.category}</span>
+            </div>
           </div>
+          ${scenarioPills}
           <div class="vault-item-footer">
-            ${clusterLabel}
+            ${lineageLabel}
             <div style="display:flex; gap:6px;">
               <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
               <button class="btn btn-primary btn-icon btn-sm btn-stage" title="Stage for Assembly" style="padding:2px 6px;">＋</button>
@@ -391,7 +424,10 @@
     compNameInput.value = '';
     compContentInput.value = '';
     compCategorySelect.value = 'character';
-    compClusterInput.value = '';
+    compLineageInput.value = '';
+    compScenariosInput.value = '';
+    compIsTemplateCheck.checked = false;
+    btnCreateVariant.style.display = 'none';
     compTagsInput.value = '';
     editorTokenCount.textContent = '0';
     btnDeleteComponent.style.display = id ? 'inline-flex' : 'none';
@@ -415,8 +451,11 @@
         compNameInput.value = comp.name;
         compContentInput.value = comp.content;
         compCategorySelect.value = comp.category;
-        compClusterInput.value = comp.cluster || '';
-        compTagsInput.value = comp.tags.join(', ');
+        compLineageInput.value = comp.lineage || '';
+        compScenariosInput.value = (comp.scenarios || []).join(', ');
+        compIsTemplateCheck.checked = comp.isTemplate === true;
+        btnCreateVariant.style.display = (comp.category === 'character' && comp.isTemplate) ? 'inline-flex' : 'none';
+        compTagsInput.value = (comp.tags || []).join(', ');
         updateTokenCount();
       }
     }
@@ -462,12 +501,18 @@
       .map(t => t.trim())
       .filter(Boolean);
 
+    const scenarios = compScenariosInput.value.split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
     const record = {
       id: editingComponentId,
       name,
       content,
       category: compCategorySelect.value,
-      cluster: compClusterInput.value.trim(),
+      lineage: compLineageInput.value.trim(),
+      scenarios,
+      isTemplate: compIsTemplateCheck.checked,
       tags
     };
 
@@ -480,6 +525,82 @@
     } catch (err) {
       console.error(err);
       showToast('Failed to save component', 'error');
+    }
+  }
+
+  async function createComponentVariant() {
+    if (!editingComponentId) return;
+
+    // Get current template state from editor form
+    const originalName = compNameInput.value.trim();
+    let originalLineage = compLineageInput.value.trim();
+
+    // Auto-fallback lineage to template name if blank
+    if (!originalLineage) {
+      originalLineage = originalName;
+      compLineageInput.value = originalLineage;
+      // Auto-save the template's lineage change silently
+      const templateComp = await window.ForgeDB.getComponent(editingComponentId);
+      if (templateComp) {
+        templateComp.lineage = originalLineage;
+        await window.ForgeDB.saveComponent(templateComp);
+      }
+    }
+
+    // Prompts
+    const variantName = prompt('Enter Variant Name:', `${originalName} (Scenario Variant)`);
+    if (!variantName) return; // User cancelled
+
+    const defaultScenarios = compScenariosInput.value.trim();
+    const variantScenariosStr = prompt('Enter Scenarios (comma-separated):', defaultScenarios);
+    if (variantScenariosStr === null) return; // User cancelled
+
+    // Sync form content first
+    if (activeEditorTab === 'form') {
+      const sections = {
+        overview: charOverview.value,
+        personality: charPersonality.value,
+        background: charBackground.value,
+        appearance: charAppearance.value,
+        abilities: charAbilities.value,
+        strengths: charStrengths.value,
+        weaknesses: charWeaknesses.value,
+        likes: charLikes.value,
+        dislikes: charDislikes.value,
+        notes: charNotes.value
+      };
+      compContentInput.value = stitchCharacterMarkdown(sections);
+    }
+
+    const content = compContentInput.value.trim();
+    const tags = compTagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
+    const scenarios = variantScenariosStr.split(',').map(s => s.trim()).filter(Boolean);
+
+    const variantRecord = {
+      name: variantName.trim(),
+      content,
+      category: 'character',
+      lineage: originalLineage,
+      scenarios,
+      isTemplate: false,
+      tags
+    };
+
+    try {
+      const savedVariant = await window.ForgeDB.saveComponent(variantRecord);
+      showToast(`Variant "${variantName}" created!`, 'success');
+      
+      // Open the new variant in editor
+      await openComponentEditor(savedVariant.id);
+      
+      // Auto-focus Notes/Special Instructions field
+      if (charNotes) {
+        charNotes.focus();
+        charNotes.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to create variant component.', 'error');
     }
   }
 
@@ -839,6 +960,7 @@
     document.getElementById('btn-welcome-new').addEventListener('click', () => openComponentEditor(null));
     btnSaveComponent.addEventListener('click', saveComponentForm);
     btnDeleteComponent.addEventListener('click', deleteComponentForm);
+    btnCreateVariant.addEventListener('click', createComponentVariant);
     compContentInput.addEventListener('input', updateTokenCount);
 
     // Editor Tab Buttons events
@@ -861,7 +983,7 @@
 
     // Mark editor dirty on any field change
     const editorInputs = [
-      compNameInput, compContentInput, compCategorySelect, compClusterInput, compTagsInput,
+      compNameInput, compContentInput, compCategorySelect, compLineageInput, compScenariosInput, compIsTemplateCheck, compTagsInput,
       charOverview, charPersonality, charBackground, charAppearance, charAbilities,
       charStrengths, charWeaknesses, charLikes, charDislikes, charNotes
     ];
@@ -882,7 +1004,13 @@
       else refreshProjectsList();
     });
     filterCat.addEventListener('change', refreshVaultList);
-    filterCluster.addEventListener('change', refreshVaultList);
+    filterLineage.addEventListener('change', refreshVaultList);
+    filterScenario.addEventListener('change', refreshVaultList);
+    btnTemplatesOnly.addEventListener('click', () => {
+      showTemplatesOnly = !showTemplatesOnly;
+      btnTemplatesOnly.classList.toggle('active', showTemplatesOnly);
+      refreshVaultList();
+    });
 
     // API Config events
     btnApiConfig.addEventListener('click', openApiModal);

@@ -162,7 +162,7 @@ main#main-canvas {
 .sidebar-filter-row select {
   flex: 1;
   min-width: 0;
-  max-width: calc(50% - 4px);
+  max-width: calc(33.33% - 6px);
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
@@ -179,6 +179,32 @@ main#main-canvas {
 
 .sidebar-filter-row select:hover {
   border-color: var(--border-color-hover);
+}
+
+.sidebar-template-toggle-row {
+  padding: 0 16px 10px;
+  display: flex;
+}
+
+.template-toggle-btn {
+  width: 100%;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
+
+.template-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-color-hover);
+}
+
+.template-toggle-btn.active {
+  background: rgba(234, 179, 8, 0.15) !important;
+  border-color: rgba(234, 179, 8, 0.4) !important;
+  color: #fef08a !important;
+  text-shadow: 0 0 8px rgba(234, 179, 8, 0.4);
 }
 
 .sidebar-actions {
@@ -347,11 +373,67 @@ main#main-canvas {
   color: var(--text-secondary);
 }
 
-.vault-item-cluster {
+.vault-item-lineage {
   opacity: 0.8;
   display: flex;
   align-items: center;
   gap: 3px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.template-badge {
+  background-color: rgba(234, 179, 8, 0.15) !important;
+  color: #fef08a !important;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.vault-item-scenarios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+
+.scenario-pill {
+  background: rgba(147, 51, 234, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(147, 51, 234, 0.25);
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.checkbox-label input {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.is-template-group {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: rgba(234, 179, 8, 0.04);
+  border: 1px dashed rgba(234, 179, 8, 0.2);
+  border-radius: var(--radius-md);
 }
 
 /* Buttons */
