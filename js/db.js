@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v4
+ * Database: "anansi-forge" v5
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 4;
+  const DB_VERSION = 5;
   
   let dbInstance = null;
 
@@ -32,6 +32,49 @@
     });
   }
 
+  async function runSchemaMigration(db) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('vault_components', 'readwrite');
+      const store = tx.objectStore('vault_components');
+      
+      store.openCursor().onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+        
+        const rec = cursor.value;
+        let changed = false;
+        
+        // Migrate cluster → scenarios array
+        if (rec.cluster !== undefined) {
+          if (!rec.scenarios) {
+            rec.scenarios = rec.cluster ? [rec.cluster] : [];
+          }
+          delete rec.cluster;
+          changed = true;
+        }
+        if (rec.lineage === undefined) {
+          rec.lineage = '';
+          changed = true;
+        }
+        if (rec.isTemplate === undefined) {
+          rec.isTemplate = false;
+          changed = true;
+        }
+        
+        if (changed) {
+          cursor.update(rec);
+        }
+        cursor.continue();
+      };
+      
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async function initDB() {
     if (dbInstance) return dbInstance;
 
@@ -49,6 +92,14 @@
           store.createIndex('category', 'category', { unique: false });
           store.createIndex('lineage', 'lineage', { unique: false });
           store.createIndex('modifiedAt', 'modifiedAt', { unique: false });
+        } else {
+          const store = event.target.transaction.objectStore('vault_components');
+          if (!store.indexNames.contains('lineage')) {
+            store.createIndex('lineage', 'lineage', { unique: false });
+          }
+          if (store.indexNames.contains('cluster')) {
+            store.deleteIndex('cluster');
+          }
         }
         
         // 2. Projects Store
@@ -72,33 +123,17 @@
         if (!db.objectStoreNames.contains('personas')) {
           db.createObjectStore('personas', { keyPath: 'id' });
         }
-
-        // v4 Migration: cluster → scenarios, add lineage + isTemplate
-        if (oldVersion < 4 && db.objectStoreNames.contains('vault_components')) {
-          const tx = event.target.transaction;
-          const store = tx.objectStore('vault_components');
-          store.openCursor().onsuccess = (e) => {
-            const cursor = e.target.result;
-            if (!cursor) return;
-            const rec = cursor.value;
-            // Migrate cluster → scenarios array
-            if (!rec.scenarios) {
-              rec.scenarios = rec.cluster ? [rec.cluster] : [];
-            }
-            // Add new fields
-            if (rec.lineage === undefined) rec.lineage = '';
-            if (rec.isTemplate === undefined) rec.isTemplate = false;
-            // Remove old field
-            delete rec.cluster;
-            cursor.update(rec);
-            cursor.continue();
-          };
-        }
       };
 
-      request.onsuccess = (event) => {
+      request.onsuccess = async (event) => {
         dbInstance = event.target.result;
-        resolve(dbInstance);
+        try {
+          await runSchemaMigration(dbInstance);
+          resolve(dbInstance);
+        } catch (err) {
+          console.error('Schema migration failed:', err);
+          reject(err);
+        }
       };
 
       request.onerror = () => reject(request.error);
