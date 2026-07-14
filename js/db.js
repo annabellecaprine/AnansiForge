@@ -81,6 +81,11 @@
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
+      request.onblocked = (event) => {
+        console.warn('Database upgrade is blocked by another tab or connection. Please close all other tabs of this application.');
+        alert('Database upgrade is blocked by another tab of Anansi Forge. Please close all other tabs of the app to allow the upgrade, then refresh this page.');
+      };
+
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
         const oldVersion = event.oldVersion;
