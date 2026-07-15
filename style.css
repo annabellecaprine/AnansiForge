@@ -340,6 +340,11 @@ main#main-canvas {
   color: var(--cat-character);
 }
 
+.vault-item-category.scenario {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+}
+
 .vault-item-category.bio {
   background-color: rgba(236, 72, 153, 0.15);
   color: #f472b6;

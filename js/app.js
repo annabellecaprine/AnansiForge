@@ -96,6 +96,16 @@
   const charDislikes = document.getElementById('char-dislikes');
   const charNotes = document.getElementById('char-notes');
 
+  // Scenario Profile Fields
+  const scenarioSetting = document.getElementById('scenario-setting');
+  const scenarioUserRole = document.getElementById('scenario-user-role');
+  const scenarioSituation = document.getElementById('scenario-situation');
+  const scenarioDynamics = document.getElementById('scenario-dynamics');
+  const scenarioExpectations = document.getElementById('scenario-expectations');
+  const scenarioRelationships = document.getElementById('scenario-relationships');
+  const scenarioRules = document.getElementById('scenario-rules');
+  const scenarioTone = document.getElementById('scenario-tone');
+
   // Navigation Back Buttons
   const btnEditorBack = document.getElementById('btn-editor-back');
   const btnBreakoutBack = document.getElementById('btn-breakout-back');
@@ -365,23 +375,52 @@
 
   // --- Component Editor ---
 
+  function toggleFormFields(category) {
+    const charFields = document.getElementById('char-form-fields');
+    const scenarioFields = document.getElementById('scenario-form-fields');
+    if (category === 'character') {
+      if (charFields) charFields.style.display = 'grid';
+      if (scenarioFields) scenarioFields.style.display = 'none';
+    } else if (category === 'scenario') {
+      if (charFields) charFields.style.display = 'none';
+      if (scenarioFields) scenarioFields.style.display = 'grid';
+    } else {
+      if (charFields) charFields.style.display = 'none';
+      if (scenarioFields) scenarioFields.style.display = 'none';
+    }
+  }
+
   // Helper to switch editor panes
   function switchEditorTab(tabName) {
+    const category = compCategorySelect.value;
+    toggleFormFields(category);
+
     if (tabName === 'form') {
       // Sync raw -> structured fields
       const content = compContentInput.value;
-      const parsed = parseCharacterMarkdown(content);
-      
-      charOverview.value = parsed.overview || '';
-      charPersonality.value = parsed.personality || '';
-      charBackground.value = parsed.background || '';
-      charAppearance.value = parsed.appearance || '';
-      charAbilities.value = parsed.abilities || '';
-      charStrengths.value = parsed.strengths || '';
-      charWeaknesses.value = parsed.weaknesses || '';
-      charLikes.value = parsed.likes || '';
-      charDislikes.value = parsed.dislikes || '';
-      charNotes.value = parsed.notes || '';
+      if (category === 'character') {
+        const parsed = parseCharacterMarkdown(content);
+        charOverview.value = parsed.overview || '';
+        charPersonality.value = parsed.personality || '';
+        charBackground.value = parsed.background || '';
+        charAppearance.value = parsed.appearance || '';
+        charAbilities.value = parsed.abilities || '';
+        charStrengths.value = parsed.strengths || '';
+        charWeaknesses.value = parsed.weaknesses || '';
+        charLikes.value = parsed.likes || '';
+        charDislikes.value = parsed.dislikes || '';
+        charNotes.value = parsed.notes || '';
+      } else if (category === 'scenario') {
+        const parsed = parseScenarioMarkdown(content);
+        scenarioSetting.value = parsed.setting || '';
+        scenarioUserRole.value = parsed.userRole || '';
+        scenarioSituation.value = parsed.situation || '';
+        scenarioDynamics.value = parsed.dynamics || '';
+        scenarioExpectations.value = parsed.expectations || '';
+        scenarioRelationships.value = parsed.relationships || '';
+        scenarioRules.value = parsed.rules || '';
+        scenarioTone.value = parsed.tone || '';
+      }
       
       tabEditorRaw.classList.remove('active');
       tabEditorForm.classList.add('active');
@@ -390,24 +429,40 @@
       activeEditorTab = 'form';
     } else {
       // Sync structured fields -> raw content textarea
-      const sections = {
-        overview: charOverview.value,
-        personality: charPersonality.value,
-        background: charBackground.value,
-        appearance: charAppearance.value,
-        abilities: charAbilities.value,
-        strengths: charStrengths.value,
-        weaknesses: charWeaknesses.value,
-        likes: charLikes.value,
-        dislikes: charDislikes.value,
-        notes: charNotes.value
-      };
-      
-      // Prevent blanking out if there is no form content at all
-      const hasFormContent = Object.values(sections).some(v => v.trim());
-      if (hasFormContent) {
-        compContentInput.value = stitchCharacterMarkdown(sections);
-        updateTokenCount();
+      if (category === 'character') {
+        const sections = {
+          overview: charOverview.value,
+          personality: charPersonality.value,
+          background: charBackground.value,
+          appearance: charAppearance.value,
+          abilities: charAbilities.value,
+          strengths: charStrengths.value,
+          weaknesses: charWeaknesses.value,
+          likes: charLikes.value,
+          dislikes: charDislikes.value,
+          notes: charNotes.value
+        };
+        const hasFormContent = Object.values(sections).some(v => v.trim());
+        if (hasFormContent) {
+          compContentInput.value = stitchCharacterMarkdown(sections);
+          updateTokenCount();
+        }
+      } else if (category === 'scenario') {
+        const sections = {
+          setting: scenarioSetting.value,
+          userRole: scenarioUserRole.value,
+          situation: scenarioSituation.value,
+          dynamics: scenarioDynamics.value,
+          expectations: scenarioExpectations.value,
+          relationships: scenarioRelationships.value,
+          rules: scenarioRules.value,
+          tone: scenarioTone.value
+        };
+        const hasFormContent = Object.values(sections).some(v => v.trim());
+        if (hasFormContent) {
+          compContentInput.value = stitchScenarioMarkdown(sections);
+          updateTokenCount();
+        }
       }
       
       tabEditorForm.classList.remove('active');
@@ -442,7 +497,10 @@
     editorTabsContainer.style.display = 'none';
 
     // Clear form inputs
-    const formFields = [charOverview, charPersonality, charBackground, charAppearance, charAbilities, charStrengths, charWeaknesses, charLikes, charDislikes, charNotes];
+    const formFields = [
+      charOverview, charPersonality, charBackground, charAppearance, charAbilities, charStrengths, charWeaknesses, charLikes, charDislikes, charNotes,
+      scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone
+    ];
     formFields.forEach(field => { if (field) field.value = ''; });
 
     if (id) {
@@ -454,13 +512,13 @@
         compLineageInput.value = comp.lineage || '';
         compScenariosInput.value = (comp.scenarios || []).join(', ');
         compIsTemplateCheck.checked = comp.isTemplate === true;
-        btnCreateVariant.style.display = (comp.category === 'character' && comp.isTemplate) ? 'inline-flex' : 'none';
+        btnCreateVariant.style.display = ((comp.category === 'character' || comp.category === 'scenario') && comp.isTemplate) ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
         updateTokenCount();
       }
     }
 
-    if (compCategorySelect.value === 'character') {
+    if (compCategorySelect.value === 'character' || compCategorySelect.value === 'scenario') {
       editorTabsContainer.style.display = 'flex';
       switchEditorTab('form');
     }
@@ -471,22 +529,39 @@
 
   async function saveComponentForm() {
     // Sync structured tab fields to compContentInput if form is active
-    if (compCategorySelect.value === 'character' && activeEditorTab === 'form') {
-      const sections = {
-        overview: charOverview.value,
-        personality: charPersonality.value,
-        background: charBackground.value,
-        appearance: charAppearance.value,
-        abilities: charAbilities.value,
-        strengths: charStrengths.value,
-        weaknesses: charWeaknesses.value,
-        likes: charLikes.value,
-        dislikes: charDislikes.value,
-        notes: charNotes.value
-      };
-      const stitched = stitchCharacterMarkdown(sections);
-      if (stitched.trim()) {
-        compContentInput.value = stitched;
+    if (activeEditorTab === 'form') {
+      if (compCategorySelect.value === 'character') {
+        const sections = {
+          overview: charOverview.value,
+          personality: charPersonality.value,
+          background: charBackground.value,
+          appearance: charAppearance.value,
+          abilities: charAbilities.value,
+          strengths: charStrengths.value,
+          weaknesses: charWeaknesses.value,
+          likes: charLikes.value,
+          dislikes: charDislikes.value,
+          notes: charNotes.value
+        };
+        const stitched = stitchCharacterMarkdown(sections);
+        if (stitched.trim()) {
+          compContentInput.value = stitched;
+        }
+      } else if (compCategorySelect.value === 'scenario') {
+        const sections = {
+          setting: scenarioSetting.value,
+          userRole: scenarioUserRole.value,
+          situation: scenarioSituation.value,
+          dynamics: scenarioDynamics.value,
+          expectations: scenarioExpectations.value,
+          relationships: scenarioRelationships.value,
+          rules: scenarioRules.value,
+          tone: scenarioTone.value
+        };
+        const stitched = stitchScenarioMarkdown(sections);
+        if (stitched.trim()) {
+          compContentInput.value = stitched;
+        }
       }
     }
 
@@ -556,20 +631,35 @@
     if (variantScenariosStr === null) return; // User cancelled
 
     // Sync form content first
+    const category = compCategorySelect.value;
     if (activeEditorTab === 'form') {
-      const sections = {
-        overview: charOverview.value,
-        personality: charPersonality.value,
-        background: charBackground.value,
-        appearance: charAppearance.value,
-        abilities: charAbilities.value,
-        strengths: charStrengths.value,
-        weaknesses: charWeaknesses.value,
-        likes: charLikes.value,
-        dislikes: charDislikes.value,
-        notes: charNotes.value
-      };
-      compContentInput.value = stitchCharacterMarkdown(sections);
+      if (category === 'character') {
+        const sections = {
+          overview: charOverview.value,
+          personality: charPersonality.value,
+          background: charBackground.value,
+          appearance: charAppearance.value,
+          abilities: charAbilities.value,
+          strengths: charStrengths.value,
+          weaknesses: charWeaknesses.value,
+          likes: charLikes.value,
+          dislikes: charDislikes.value,
+          notes: charNotes.value
+        };
+        compContentInput.value = stitchCharacterMarkdown(sections);
+      } else if (category === 'scenario') {
+        const sections = {
+          setting: scenarioSetting.value,
+          userRole: scenarioUserRole.value,
+          situation: scenarioSituation.value,
+          dynamics: scenarioDynamics.value,
+          expectations: scenarioExpectations.value,
+          relationships: scenarioRelationships.value,
+          rules: scenarioRules.value,
+          tone: scenarioTone.value
+        };
+        compContentInput.value = stitchScenarioMarkdown(sections);
+      }
     }
 
     const content = compContentInput.value.trim();
@@ -579,7 +669,7 @@
     const variantRecord = {
       name: variantName.trim(),
       content,
-      category: 'character',
+      category,
       lineage: originalLineage,
       scenarios,
       isTemplate: false,
@@ -593,10 +683,17 @@
       // Open the new variant in editor
       await openComponentEditor(savedVariant.id);
       
-      // Auto-focus Notes/Special Instructions field
-      if (charNotes) {
-        charNotes.focus();
-        charNotes.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Focus target field
+      if (category === 'character') {
+        if (charNotes) {
+          charNotes.focus();
+          charNotes.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } else if (category === 'scenario') {
+        if (scenarioTone) {
+          scenarioTone.focus();
+          scenarioTone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
     } catch (err) {
       console.error(err);
@@ -935,6 +1032,108 @@
     return parts.join('\n\n');
   }
 
+  function parseScenarioMarkdown(markdown) {
+    const sections = {
+      setting: '',
+      userRole: '',
+      situation: '',
+      dynamics: '',
+      expectations: '',
+      relationships: '',
+      rules: '',
+      tone: ''
+    };
+
+    if (!markdown) return sections;
+
+    const lines = markdown.split('\n');
+    let currentKey = 'setting';
+    let buffer = [];
+
+    const headerMap = {
+      'setting': 'setting',
+      'the world': 'setting',
+      'user role': 'userRole',
+      '{{user}} role': 'userRole',
+      'player role': 'userRole',
+      'opening situation': 'situation',
+      'situation': 'situation',
+      'group dynamic': 'dynamics',
+      'group dynamics': 'dynamics',
+      'team dynamics': 'dynamics',
+      'story expectations': 'expectations',
+      'expectations': 'expectations',
+      'relationship progression': 'relationships',
+      'relationships': 'relationships',
+      'scenario rules': 'rules',
+      'rules': 'rules',
+      'tone': 'tone',
+      'atmosphere': 'tone'
+    };
+
+    const sectionWords = ['setting', 'userRole', 'situation', 'dynamics', 'expectations', 'relationships', 'rules', 'tone'];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      const headerMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+      const boldMatch = trimmed.match(/^\*\*([^*:]+):?\*\*$/);
+      const isPlainHeader = sectionWords.includes(trimmed.toLowerCase());
+
+      let foundKey = null;
+
+      if (headerMatch) {
+        const title = headerMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (boldMatch) {
+        const title = boldMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (isPlainHeader) {
+        foundKey = trimmed.toLowerCase();
+      }
+
+      if (foundKey) {
+        if (buffer.length > 0) {
+          sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+          buffer = [];
+        }
+        currentKey = headerMap[foundKey];
+      } else {
+        buffer.push(line);
+      }
+    }
+
+    if (buffer.length > 0) {
+      sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+    }
+
+    return sections;
+  }
+
+  function stitchScenarioMarkdown(sections) {
+    const parts = [];
+    const fields = [
+      { key: 'setting', label: 'Setting' },
+      { key: 'userRole', label: '{{User}} Role' },
+      { key: 'situation', label: 'Opening Situation' },
+      { key: 'dynamics', label: 'Group Dynamic' },
+      { key: 'expectations', label: 'Story Expectations' },
+      { key: 'relationships', label: 'Relationship Progression' },
+      { key: 'rules', label: 'Scenario Rules' },
+      { key: 'tone', label: 'Tone' }
+    ];
+
+    fields.forEach(f => {
+      const val = sections[f.key]?.trim();
+      if (val) {
+        parts.push(`## ${f.label}\n\n${val}`);
+      }
+    });
+
+    return parts.join('\n\n');
+  }
+
   function escapeHTML(str) {
     if (!str) return '';
     return str
@@ -970,11 +1169,10 @@
     // Dynamic tabs toggle on Category dropdown change
     compCategorySelect.addEventListener('change', () => {
       editorIsDirty = true;
-      if (compCategorySelect.value === 'character') {
+      const cat = compCategorySelect.value;
+      if (cat === 'character' || cat === 'scenario') {
         editorTabsContainer.style.display = 'flex';
-        if (activeEditorTab !== 'form') {
-          switchEditorTab('form');
-        }
+        switchEditorTab('form');
       } else {
         editorTabsContainer.style.display = 'none';
         switchEditorTab('raw');
@@ -985,7 +1183,8 @@
     const editorInputs = [
       compNameInput, compContentInput, compCategorySelect, compLineageInput, compScenariosInput, compIsTemplateCheck, compTagsInput,
       charOverview, charPersonality, charBackground, charAppearance, charAbilities,
-      charStrengths, charWeaknesses, charLikes, charDislikes, charNotes
+      charStrengths, charWeaknesses, charLikes, charDislikes, charNotes,
+      scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone
     ];
     editorInputs.forEach(el => {
       if (el) {

@@ -44,6 +44,7 @@
         <select id="vault-category-filter">
           <option value="all">All Categories</option>
           <option value="character">Characters</option>
+          <option value="scenario">Scenarios</option>
           <option value="bio">Character Bios</option>
           <option value="initial_message">Initial Messages</option>
           <option value="organization">Organizations</option>
@@ -176,6 +177,7 @@
                   <label for="forge-output-category">Category</label>
                   <select id="forge-output-category">
                     <option value="character">Character</option>
+                    <option value="scenario">Scenario</option>
                     <option value="bio">Character Bio</option>
                     <option value="initial_message">Initial Message</option>
                     <option value="organization">Organization</option>
@@ -251,7 +253,8 @@
 
             <!-- TAB 2: STRUCTURED FORM -->
             <div id="editor-form-pane" class="editor-pane" style="display:none;">
-              <div class="form-grid">
+              <!-- Character Form Fields Wrapper -->
+              <div id="char-form-fields" class="form-grid" style="display:none;">
                 <div class="form-group">
                   <label for="char-overview">Overview / Introduction</label>
                   <textarea id="char-overview" placeholder="Summary, role, core introduction..."></textarea>
@@ -297,6 +300,42 @@
                   <textarea id="char-notes" placeholder="Scenario notes, relationships, telepathy notes, trivia..." style="min-height: 120px;"></textarea>
                 </div>
               </div>
+
+              <!-- Scenario Form Fields Wrapper -->
+              <div id="scenario-form-fields" class="form-grid" style="display:none;">
+                <div class="form-group">
+                  <label for="scenario-setting">Setting (The World)</label>
+                  <textarea id="scenario-setting" placeholder="Describe the world itself, locations, assumptions, organization, setting, world rules..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-user-role">{{User}} Role</label>
+                  <textarea id="scenario-user-role" placeholder="Define who the player is in this world (occupation, team position, expectations, capabilities)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-situation">Opening Situation</label>
+                  <textarea id="scenario-situation" placeholder="Describe the current circumstances immediately before the opening message (recent events, current tension)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-dynamics">Group Dynamic</label>
+                  <textarea id="scenario-dynamics" placeholder="Describe how the ensemble behaves as a whole (family dynamic, team chemistry, general interaction style)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-expectations">Story Expectations</label>
+                  <textarea id="scenario-expectations" placeholder="Describe the kind of stories the AI should generate (action, pacing, character moments, consequences)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-relationships">Relationship Progression</label>
+                  <textarea id="scenario-relationships" placeholder="Control pacing (e.g. Trust develops gradually, professional respect comes before friendship)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-rules">Scenario Rules</label>
+                  <textarea id="scenario-rules" placeholder="Describe mechanics unique to THIS scenario (e.g. Injuries matter, recovery affects future scenes)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="scenario-tone">Tone</label>
+                  <textarea id="scenario-tone" placeholder="Describe the emotional atmosphere, not genre (e.g. Mystery, Found Family, Hopeful, relaxed)..."></textarea>
+                </div>
+              </div>
             </div>
           </div>
           <div class="editor-sidebar">
@@ -304,6 +343,7 @@
               <label for="comp-category">Category</label>
               <select id="comp-category">
                 <option value="character">Character</option>
+                <option value="scenario">Scenario</option>
                 <option value="bio">Character Bio</option>
                 <option value="initial_message">Initial Message</option>
                 <option value="organization">Organization</option>
@@ -372,6 +412,7 @@
                   <label for="breakout-comp-category">Target Category</label>
                   <select id="breakout-comp-category">
                     <option value="character">Character</option>
+                    <option value="scenario">Scenario</option>
                     <option value="bio">Character Bio</option>
                     <option value="initial_message">Initial Message</option>
                     <option value="organization">Organization</option>
