@@ -63,8 +63,8 @@
           rec.isTemplate = false;
           changed = true;
         }
-        // Migrate legacy setting/rules categories to scenario
-        if (rec.category === 'setting' || rec.category === 'rules') {
+        // Migrate legacy setting/rules/lore categories to scenario
+        if (rec.category === 'setting' || rec.category === 'rules' || rec.category === 'lore') {
           rec.category = 'scenario';
           changed = true;
         }

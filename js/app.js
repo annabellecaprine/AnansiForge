@@ -154,7 +154,11 @@
       
       // Update Lineage Filter dropdown options
       const activeLineageFilter = filterLineage.value;
-      const lineages = [...new Set(components.map(c => c.lineage).filter(Boolean))].sort();
+      const activeCat = filterCat.value;
+      const filteredForLineages = activeCat === 'all'
+        ? components
+        : components.filter(c => c.category === activeCat);
+      const lineages = [...new Set(filteredForLineages.map(c => c.lineage).filter(Boolean))].sort();
       filterLineage.innerHTML = '<option value="all">All Lineages</option>';
       lineages.forEach(l => {
         const option = document.createElement('option');
@@ -512,7 +516,7 @@
         compLineageInput.value = comp.lineage || '';
         compScenariosInput.value = (comp.scenarios || []).join(', ');
         compIsTemplateCheck.checked = comp.isTemplate === true;
-        btnCreateVariant.style.display = ((comp.category === 'character' || comp.category === 'scenario') && comp.isTemplate) ? 'inline-flex' : 'none';
+        btnCreateVariant.style.display = comp.isTemplate ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
         updateTokenCount();
       }
@@ -1160,6 +1164,9 @@
     btnSaveComponent.addEventListener('click', saveComponentForm);
     btnDeleteComponent.addEventListener('click', deleteComponentForm);
     btnCreateVariant.addEventListener('click', createComponentVariant);
+    compIsTemplateCheck.addEventListener('change', () => {
+      btnCreateVariant.style.display = (compIsTemplateCheck.checked && editingComponentId) ? 'inline-flex' : 'none';
+    });
     compContentInput.addEventListener('input', updateTokenCount);
 
     // Editor Tab Buttons events
