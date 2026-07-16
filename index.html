@@ -40,23 +40,32 @@
         </div>
       </div>
 
-      <div class="sidebar-filter-row">
-        <select id="vault-category-filter">
-          <option value="all">All Categories</option>
-          <option value="character">Characters</option>
-          <option value="scenario">Scenarios</option>
-          <option value="bio">Character Bios</option>
-          <option value="initial_message">Initial Messages</option>
-          <option value="organization">Organizations</option>
-        </select>
-        <select id="vault-lineage-filter">
-          <option value="all">All Lineages</option>
-          <!-- Hydrated dynamically -->
-        </select>
-        <select id="vault-scenario-filter">
-          <option value="all">All Scenarios</option>
-          <!-- Hydrated dynamically -->
-        </select>
+      <div class="sidebar-filters-grid">
+        <div class="sidebar-filter-field">
+          <label for="vault-category-filter">Category</label>
+          <select id="vault-category-filter">
+            <option value="all">All</option>
+            <option value="character">Characters</option>
+            <option value="scenario">Scenarios</option>
+            <option value="bio">Character Bios</option>
+            <option value="initial_message">Initial Messages</option>
+            <option value="organization">Organizations</option>
+          </select>
+        </div>
+        <div class="sidebar-filter-field">
+          <label for="vault-lineage-filter">Lineage</label>
+          <select id="vault-lineage-filter">
+            <option value="all">All</option>
+            <!-- Hydrated dynamically -->
+          </select>
+        </div>
+        <div class="sidebar-filter-field">
+          <label for="vault-scenario-filter">Scenario</label>
+          <select id="vault-scenario-filter">
+            <option value="all">All</option>
+            <!-- Hydrated dynamically -->
+          </select>
+        </div>
       </div>
       <div class="sidebar-template-toggle-row" style="display:flex; gap:8px;">
         <button id="btn-templates-only" class="btn btn-ghost btn-sm template-toggle-btn" style="flex:1;" title="Show only Golden Templates">

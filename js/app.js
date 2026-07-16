@@ -160,7 +160,7 @@
         ? components
         : components.filter(c => c.category === activeCat);
       const lineages = [...new Set(filteredForLineages.map(c => c.lineage).filter(Boolean))].sort();
-      filterLineage.innerHTML = '<option value="all">All Lineages</option>';
+      filterLineage.innerHTML = '<option value="all">All</option>';
       lineages.forEach(l => {
         const option = document.createElement('option');
         option.value = l;
@@ -172,7 +172,7 @@
       // Update Scenario Filter dropdown options
       const activeScenarioFilter = filterScenario.value;
       const scenarios = [...new Set(components.flatMap(c => c.scenarios || []).filter(Boolean))].sort();
-      filterScenario.innerHTML = '<option value="all">All Scenarios</option>';
+      filterScenario.innerHTML = '<option value="all">All</option>';
       scenarios.forEach(s => {
         const option = document.createElement('option');
         option.value = s;

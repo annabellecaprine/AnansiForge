@@ -153,20 +153,34 @@ main#main-canvas {
   padding: 12px 16px 6px;
 }
 
-.sidebar-filter-row {
+.sidebar-filters-grid {
   padding: 6px 16px 12px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
-.sidebar-filter-row select {
-  flex: 1;
-  min-width: 0;
-  max-width: calc(33.33% - 6px);
+.sidebar-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-filter-field label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.sidebar-filter-field select {
+  width: 100%;
+  height: 32px;
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  padding: 6px 10px;
+  padding: 0 8px;
   border-radius: var(--radius-sm);
   outline: none;
   font-size: 0.8rem;
@@ -177,8 +191,12 @@ main#main-canvas {
   overflow: hidden;
 }
 
-.sidebar-filter-row select:hover {
+.sidebar-filter-field select:hover {
   border-color: var(--border-color-hover);
+}
+
+.sidebar-filter-field select:focus {
+  border-color: var(--accent);
 }
 
 .sidebar-template-toggle-row {
