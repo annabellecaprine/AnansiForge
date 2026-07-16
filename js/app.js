@@ -120,6 +120,9 @@
     document.querySelectorAll('.view').forEach(v => {
       v.classList.toggle('active', v.id === viewId);
     });
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
   }
 
   // --- Sidebar Tab Routing ---
@@ -705,13 +708,15 @@
       // Focus target field
       if (category === 'character') {
         if (charNotes) {
-          charNotes.focus();
-          charNotes.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          charNotes.focus({ preventScroll: true });
+          const grid = charNotes.closest('.form-grid');
+          if (grid) grid.scrollTop = grid.scrollHeight;
         }
       } else if (category === 'scenario') {
         if (scenarioTone) {
-          scenarioTone.focus();
-          scenarioTone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          scenarioTone.focus({ preventScroll: true });
+          const grid = scenarioTone.closest('.form-grid');
+          if (grid) grid.scrollTop = grid.scrollHeight;
         }
       }
     } catch (err) {
@@ -1166,6 +1171,13 @@
   // --- Boot ---
 
   async function init() {
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+
     await window.ForgeDB.initDB();
 
     window.BreakoutWizard.init();
