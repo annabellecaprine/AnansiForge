@@ -58,10 +58,15 @@
           <!-- Hydrated dynamically -->
         </select>
       </div>
-      <div class="sidebar-template-toggle-row">
-        <button id="btn-templates-only" class="btn btn-ghost btn-sm template-toggle-btn" title="Show only Golden Templates">
+      <div class="sidebar-template-toggle-row" style="display:flex; gap:8px;">
+        <button id="btn-templates-only" class="btn btn-ghost btn-sm template-toggle-btn" style="flex:1;" title="Show only Golden Templates">
           ⭐ Templates Only
         </button>
+        <select id="vault-sort-select" style="flex:1; border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.03); color: var(--text-secondary); cursor: pointer; text-align: left; padding: 6px 10px; outline: none; font-size: 0.8rem; font-family: var(--font-sans); height: 32px; border-radius: var(--radius-sm); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
+          <option value="modified-desc" style="background: var(--bg-secondary); color: var(--text-primary);">Recently Modified</option>
+          <option value="name-asc" style="background: var(--bg-secondary); color: var(--text-primary);">Name (A - Z)</option>
+          <option value="name-desc" style="background: var(--bg-secondary); color: var(--text-primary);">Name (Z - A)</option>
+        </select>
       </div>
 
       <!-- Actions -->

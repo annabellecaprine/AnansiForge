@@ -37,6 +37,7 @@
   const filterLineage = document.getElementById('vault-lineage-filter');
   const filterScenario = document.getElementById('vault-scenario-filter');
   const btnTemplatesOnly = document.getElementById('btn-templates-only');
+  const filterSort = document.getElementById('vault-sort-select');
   const sidebarFiltersRow = document.querySelector('.sidebar-filter-row');
   const sidebarActionsRow = document.querySelector('.sidebar-actions');
 
@@ -207,6 +208,20 @@
         const matchesTemplate = !showTemplatesOnly || comp.isTemplate === true;
 
         return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate;
+      });
+
+      // Apply Sorting
+      const sortBy = filterSort.value;
+      filtered.sort((a, b) => {
+        if (sortBy === 'name-asc') {
+          return a.name.localeCompare(b.name);
+        } else if (sortBy === 'name-desc') {
+          return b.name.localeCompare(a.name);
+        } else {
+          const dateA = a.modifiedAt || 0;
+          const dateB = b.modifiedAt || 0;
+          return dateB - dateA;
+        }
       });
 
       // Update Stats Banner
@@ -1212,6 +1227,7 @@
     filterCat.addEventListener('change', refreshVaultList);
     filterLineage.addEventListener('change', refreshVaultList);
     filterScenario.addEventListener('change', refreshVaultList);
+    filterSort.addEventListener('change', refreshVaultList);
     btnTemplatesOnly.addEventListener('click', () => {
       showTemplatesOnly = !showTemplatesOnly;
       btnTemplatesOnly.classList.toggle('active', showTemplatesOnly);
