@@ -40,6 +40,7 @@
   const btnAddRelation = document.getElementById('btn-assembler-add-relation');
   const stagedCountBadge = document.getElementById('assembler-staged-count');
   const totalTokensBadge = document.getElementById('assembler-total-tokens');
+  const warningThresholdInput = document.getElementById('warning-threshold-input');
 
   // Cover Image DOM
   const coverEmpty = document.getElementById('assembler-cover-empty');
@@ -64,6 +65,16 @@
 
   function initAssembler() {
     btnAddRelation.addEventListener('click', addRelationRow);
+
+    // Load warning threshold preference from localStorage (default: 4000)
+    const storedThreshold = localStorage.getItem('anansi_warning_threshold');
+    if (storedThreshold) {
+      warningThresholdInput.value = storedThreshold;
+    }
+    warningThresholdInput.addEventListener('input', () => {
+      localStorage.setItem('anansi_warning_threshold', warningThresholdInput.value);
+      updateTokensEstimate();
+    });
     
     // Wire assembly exports
     document.getElementById('btn-assembler-export-json').addEventListener('click', exportAsJSON);
@@ -671,11 +682,12 @@
     }
 
     // 6. Token Budget warning
-    if (estTokens > 3000) {
+    const thresholdVal = parseInt(warningThresholdInput.value, 10) || 4000;
+    if (estTokens > thresholdVal) {
       checks.push({
         type: 'info',
         icon: '⚡',
-        text: `Compiled card size is ${estTokens} tokens. Large cards leave less context memory for actual roleplay chat.`
+        text: `Compiled card size is ${estTokens} tokens (exceeds warning threshold of ${thresholdVal} tokens).`
       });
     }
 
