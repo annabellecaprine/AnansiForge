@@ -38,7 +38,7 @@
   const filterScenario = document.getElementById('vault-scenario-filter');
   const btnTemplatesOnly = document.getElementById('btn-templates-only');
   const filterSort = document.getElementById('vault-sort-select');
-  const sidebarFiltersRow = document.querySelector('.sidebar-filter-row');
+  const sidebarFiltersRow = document.querySelector('.sidebar-filters-grid');
   const sidebarActionsRow = document.querySelector('.sidebar-actions');
 
   let showTemplatesOnly = false;
@@ -133,7 +133,7 @@
 
     if (tabName === 'vault') {
       // Show filters and actions
-      sidebarFiltersRow.style.display = 'flex';
+      sidebarFiltersRow.style.display = 'grid';
       sidebarActionsRow.style.display = 'grid';
       searchInput.placeholder = 'Search Vault components...';
       refreshVaultList();
