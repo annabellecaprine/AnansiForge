@@ -1891,7 +1891,7 @@ main#main-canvas {
 }
 
 /* Getting Started Guide */
-.welcome-container {
+.welcome-container.active {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -1939,7 +1939,7 @@ main#main-canvas {
 }
 
 @media (max-width: 1024px) {
-  .welcome-container {
+  .welcome-container.active {
     flex-direction: column;
     height: auto;
     padding: 40px 20px;
