@@ -548,16 +548,20 @@
 
       row.querySelector('.src-select').addEventListener('change', (e) => {
         rel.sourceId = e.target.value;
+        updateTokensEstimate();
       });
       row.querySelector('.tgt-select').addEventListener('change', (e) => {
         rel.targetId = e.target.value;
+        updateTokensEstimate();
       });
       row.querySelector('.relation-text').addEventListener('input', (e) => {
         rel.dynamic = e.target.value;
+        updateTokensEstimate();
       });
       row.querySelector('.btn-del-rel').addEventListener('click', () => {
         relationships = relationships.filter((_, i) => i !== idx);
         renderRelationships();
+        updateTokensEstimate();
       });
 
       relationsContainer.appendChild(row);
@@ -567,6 +571,7 @@
   function addRelationRow() {
     relationships.push({ sourceId: '', targetId: '', dynamic: '' });
     renderRelationships();
+    updateTokensEstimate();
   }
 
   function getCategoryIcon(cat) {
@@ -577,6 +582,123 @@
     if (cat === 'setting') return '🌍';
     if (cat === 'rules') return '📜';
     return '📦';
+  }
+
+  function runHealthCheck(allComponents) {
+    const healthContainer = document.getElementById('assembler-health-status');
+    if (!healthContainer) return;
+    healthContainer.innerHTML = '';
+
+    const checks = [];
+    
+    // Count mappings
+    const counts = {
+      description: 0,
+      personality: 0,
+      scenario: 0,
+      first_mes: 0,
+      system_prompt: 0,
+      post_history_instructions: 0,
+      mes_example: 0
+    };
+
+    let totalLength = 0;
+    stagedIds.forEach(id => {
+      const comp = allComponents.find(c => c.id === id);
+      if (comp) {
+        const mapVal = mappings[id];
+        if (mapVal && mapVal !== 'ignore') {
+          counts[mapVal]++;
+          const finalContent = contentOverrides[id] !== undefined ? contentOverrides[id] : (comp.content || '');
+          totalLength += finalContent.length;
+        }
+      }
+    });
+
+    const estTokens = Math.round(totalLength / 4);
+
+    // 1. Critical Check: No Description/Personality (missing character core)
+    if (counts.description === 0 && counts.personality === 0) {
+      checks.push({
+        type: 'critical',
+        icon: '⚠️',
+        text: 'No component is mapped to Description or Personality. Your bot will compile empty traits.'
+      });
+    }
+
+    // 2. Warning Check: Missing greeting
+    if (counts.first_mes === 0) {
+      checks.push({
+        type: 'warning',
+        icon: '💬',
+        text: 'Missing Initial Message. The bot will have no greeting when a new chat starts.'
+      });
+    }
+
+    // 3. Warning Check: Multiple greetings
+    if (counts.first_mes > 1) {
+      checks.push({
+        type: 'warning',
+        icon: '💡',
+        text: `${counts.first_mes} components mapped to Initial Message. They will concatenate, creating a disjointed double-greeting.`
+      });
+    }
+
+    // 4. Warning Check: Multiple Post-History instructions
+    if (counts.post_history_instructions > 1) {
+      checks.push({
+        type: 'warning',
+        icon: '💡',
+        text: `${counts.post_history_instructions} components mapped to Post-History. This may lead to conflicting LLM guidelines.`
+      });
+    }
+
+    // 5. Warning Check: Broken Relationship links
+    let brokenRelsCount = 0;
+    relationships.forEach(rel => {
+      const sourceStaged = stagedIds.includes(rel.sourceId);
+      const targetStaged = rel.targetId === '{{User}}' || stagedIds.includes(rel.targetId);
+      if (rel.dynamic && (!sourceStaged || !targetStaged)) {
+        brokenRelsCount++;
+      }
+    });
+    if (brokenRelsCount > 0) {
+      checks.push({
+        type: 'warning',
+        icon: '🔗',
+        text: `${brokenRelsCount} relationship links refer to components that are no longer staged in this project.`
+      });
+    }
+
+    // 6. Token Budget warning
+    if (estTokens > 3000) {
+      checks.push({
+        type: 'info',
+        icon: '⚡',
+        text: `Compiled card size is ${estTokens} tokens. Large cards leave less context memory for actual roleplay chat.`
+      });
+    }
+
+    // Render checks
+    if (checks.length === 0) {
+      const successDiv = document.createElement('div');
+      successDiv.className = 'health-item success';
+      successDiv.innerHTML = `
+        <span class="health-item-icon">✅</span>
+        <span class="health-item-text">All checks passed! Bot compiles successfully.</span>
+      `;
+      healthContainer.appendChild(successDiv);
+    } else {
+      checks.forEach(chk => {
+        const div = document.createElement('div');
+        div.className = `health-item ${chk.type}`;
+        div.innerHTML = `
+          <span class="health-item-icon">${chk.icon}</span>
+          <span class="health-item-text">${chk.text}</span>
+        `;
+        healthContainer.appendChild(div);
+      });
+    }
   }
 
   function updateTokensEstimate() {
@@ -592,6 +714,7 @@
         }
       });
       totalTokensBadge.textContent = `${Math.round(totalLength / 4)} tokens`;
+      runHealthCheck(all);
     });
   }
 
