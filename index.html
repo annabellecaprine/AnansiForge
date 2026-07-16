@@ -127,7 +127,7 @@
       
       <!-- VIEW 1: WELCOME & DROP ZONE -->
       <div id="welcome-view" class="view active">
-        <div id="drop-zone" class="drop-zone">
+        <div id="drop-zone" class="drop-zone" style="min-height: calc(100vh - 120px); flex-grow: 1;">
           <div class="drop-zone-content">
             <div class="drop-illustration">🕸️</div>
             <h2>Anansi Forge</h2>
@@ -136,6 +136,41 @@
             <div class="welcome-actions">
               <button id="btn-welcome-new" class="btn btn-primary btn-lg">Create New Component</button>
               <button id="btn-welcome-parlor" class="btn btn-accent btn-lg">Consult the AI Forge</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Getting Started Guide -->
+        <div class="getting-started-guide">
+          <h3>⚡ Quick Start Guide</h3>
+          <div class="guide-steps-grid">
+            <div class="guide-step">
+              <div class="guide-step-num">1</div>
+              <div class="guide-step-content">
+                <h4>Forge Components</h4>
+                <p>Build character profiles, bios, settings, or initial greetings in your vault library. Or drop an existing SillyTavern PNG/JSON card to carve it into reusable items.</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">2</div>
+              <div class="guide-step-content">
+                <h4>Golden Templates & Variants</h4>
+                <p>Check <strong>⭐ Golden Template</strong> on your baseline rules, then branch them into specialized variants (e.g. specific seasons, alternate universes) with one click.</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">3</div>
+              <div class="guide-step-content">
+                <h4>Assemble Cast & Relations</h4>
+                <p>Stage your selected characters and scenarios in the bottom drawer, click <strong>Assemble</strong>, define cast dynamics, and consult the <strong>Compilation Guard</strong> linter.</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">4</div>
+              <div class="guide-step-content">
+                <h4>Playtest & Export</h4>
+                <p>Launch the chat sandbox to test the bot in real-time, inspect hidden LLM thinking/context states, or compile and export back to a Tavern PNG Card / JSON file.</p>
+              </div>
             </div>
           </div>
         </div>
