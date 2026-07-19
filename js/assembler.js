@@ -927,7 +927,6 @@
         probability: 100,
         selectiveLogic: 0,
         tags: [comp.category],
-        placement: 'personality',
         keywordsRaw: keysRaw
       });
 
