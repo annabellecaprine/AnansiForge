@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 5;
+  const DB_VERSION = 6;
   
   let dbInstance = null;
 
@@ -30,6 +30,28 @@
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
+  }
+
+  function defaultTrackerPipeline(category) {
+    if (category === 'story') {
+      return { concept: false, notesReady: false, initialMessage: false, bio: false, otherMessages: false, testing: false, complete: false, published: false };
+    }
+    if (category === 'release') {
+      return { staged: false, bio: false, scenario: false, initialMessage: false, personalityLocked: false, thumbnail: false, banner: false, tagsDone: false, initialTest: false, regressionTest: false, finalPolish: false, ready: false, released: false, hotfixNeeded: false };
+    }
+    // character, scenario, bio, initial_message, organization, concept_stub
+    return { generated: false, goldenTemplate: false, test1: false, trimmed: false, test2: false, complete: false, published: false };
+  }
+
+  function defaultTracker() {
+    return {
+      universe: '',
+      project: '',
+      priority: null,
+      pipeline: defaultTrackerPipeline('character'),
+      publishedDate: null,
+      trackerTags: []
+    };
   }
 
   async function runSchemaMigration(db) {
@@ -66,6 +88,12 @@
         // Migrate legacy setting/rules/lore categories to scenario
         if (rec.category === 'setting' || rec.category === 'rules' || rec.category === 'lore') {
           rec.category = 'scenario';
+          changed = true;
+        }
+        // v6: inject tracker metadata field
+        if (rec.tracker === undefined) {
+          rec.tracker = defaultTracker();
+          rec.tracker.pipeline = defaultTrackerPipeline(rec.category || 'character');
           changed = true;
         }
         
@@ -133,6 +161,14 @@
         if (!db.objectStoreNames.contains('personas')) {
           db.createObjectStore('personas', { keyPath: 'id' });
         }
+
+        // 6. Tracker Records Store (Stories, Releases, Concept Stubs)
+        if (!db.objectStoreNames.contains('tracker_records')) {
+          const trStore = db.createObjectStore('tracker_records', { keyPath: 'id' });
+          trStore.createIndex('assetType', 'assetType', { unique: false });
+          trStore.createIndex('name', 'name', { unique: false });
+          trStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
       };
 
       request.onsuccess = async (event) => {
@@ -187,16 +223,18 @@
     const store = tx.objectStore('vault_components');
     
     const now = new Date().toISOString();
+    const cat = comp.category || 'character';
     const record = {
       ...comp,
       id: comp.id || generateId(),
       name: (comp.name || 'Unnamed Item').trim(),
-      category: comp.category || 'character',
+      category: cat,
       lineage: (comp.lineage || '').trim(),
       scenarios: Array.isArray(comp.scenarios) ? comp.scenarios : [],
       isTemplate: comp.isTemplate === true,
       content: comp.content || '',
       tags: Array.isArray(comp.tags) ? comp.tags : [],
+      tracker: comp.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] },
       createdAt: comp.createdAt || now,
       modifiedAt: now
     };
@@ -361,27 +399,96 @@
     return promisify(store.delete(id));
   }
 
+  // --- Tracker Records CRUD ---
+
+  async function getAllTrackerRecords() {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readonly');
+    const store = tx.objectStore('tracker_records');
+    return promisify(store.getAll());
+  }
+
+  async function getTrackerRecord(id) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readonly');
+    const store = tx.objectStore('tracker_records');
+    return promisify(store.get(id));
+  }
+
+  async function saveTrackerRecord(rec) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readwrite');
+    const store = tx.objectStore('tracker_records');
+    const now = new Date().toISOString();
+    const aType = rec.assetType || 'concept_stub';
+    const record = {
+      ...rec,
+      id: rec.id || generateId(),
+      assetType: aType,
+      name: (rec.name || 'Unnamed').trim(),
+      universe: rec.universe || '',
+      project: rec.project || '',
+      priority: rec.priority || null,
+      tags: Array.isArray(rec.tags) ? rec.tags : [],
+      notes: rec.notes || '',
+      linkedVaultIds: Array.isArray(rec.linkedVaultIds) ? rec.linkedVaultIds : [],
+      pipeline: rec.pipeline || defaultTrackerPipeline(aType),
+      // release-only
+      visibility: rec.visibility || null,
+      scheduledDate: rec.scheduledDate || null,
+      metrics: rec.metrics || { messages: 0, chats: 0 },
+      // stub-only
+      intendedCategory: rec.intendedCategory || 'character',
+      promotedToVaultId: rec.promotedToVaultId || null,
+      createdAt: rec.createdAt || now,
+      updatedAt: now
+    };
+    await promisify(store.put(record));
+    return record;
+  }
+
+  async function deleteTrackerRecord(id) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readwrite');
+    const store = tx.objectStore('tracker_records');
+    return promisify(store.delete(id));
+  }
+
+  async function updateVaultTracker(id, trackerPatch) {
+    const db = dbInstance || await initDB();
+    const comp = await getComponent(id);
+    if (!comp) throw new Error('Component not found: ' + id);
+    comp.tracker = { ...(comp.tracker || defaultTracker()), ...trackerPatch };
+    comp.modifiedAt = new Date().toISOString();
+    const tx = db.transaction('vault_components', 'readwrite');
+    const store = tx.objectStore('vault_components');
+    await promisify(store.put(comp));
+    return comp;
+  }
+
   // --- Vault Backup / Restore ---
 
   async function exportVault() {
-    const components = await getAllComponents();
-    const projects   = await getAllProjects();
-    const personas   = await getAllPersonas();
+    const components     = await getAllComponents();
+    const projects       = await getAllProjects();
+    const personas       = await getAllPersonas();
+    const trackerRecords = await getAllTrackerRecords();
     return {
-      _version: 1,
+      _version: 2,
       _exportedAt: new Date().toISOString(),
       components,
       projects,
-      personas
+      personas,
+      trackerRecords
     };
   }
 
   async function importVault(bundle) {
-    if (!bundle || bundle._version !== 1) throw new Error('Unrecognised backup format.');
+    if (!bundle || (bundle._version !== 1 && bundle._version !== 2)) throw new Error('Unrecognised backup format.');
     const db = dbInstance || await initDB();
 
-    const stores = ['vault_components', 'projects', 'personas'];
-    const keys   = ['components',       'projects',  'personas'];
+    const stores = ['vault_components', 'projects', 'personas', 'tracker_records'];
+    const keys   = ['components',       'projects',  'personas', 'trackerRecords'];
 
     for (let i = 0; i < stores.length; i++) {
       const storeName = stores[i];
@@ -420,6 +527,12 @@
     getPersona,
     savePersona,
     deletePersona,
+    getAllTrackerRecords,
+    getTrackerRecord,
+    saveTrackerRecord,
+    deleteTrackerRecord,
+    updateVaultTracker,
+    defaultTrackerPipeline,
     exportVault,
     importVault
   };

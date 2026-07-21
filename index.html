@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.9">
 </head>
 <body>
   <div id="app">
@@ -29,6 +29,11 @@
         <button id="tab-sidebar-vault" class="sidebar-tab active">The Vault</button>
         <button id="tab-sidebar-projects" class="sidebar-tab">Projects</button>
       </div>
+      <!-- Mission Control Nav -->
+      <button id="btn-mission-control" class="mc-nav-btn" title="Mission Control Dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:6px;"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h2v3H7zM11 6h2v5h-2zM15 9h2v2h-2z"/></svg>
+        Mission Control
+      </button>
 
       <!-- Search & Filters -->
       <div class="sidebar-search-row">
@@ -635,6 +640,11 @@
         </div>
       </div>
     </main>
+
+  <!-- MISSION CONTROL VIEW (outside main canvas, full width) -->
+  <div id="mission-control-view" class="view mc-view-root" style="display:none; position:absolute; left:var(--sidebar-width); right:0; width:auto !important; top:0; bottom:0; overflow:auto; background:var(--bg-primary); z-index:10;">
+    <!-- Populated by mission-control.js -->
+  </div>
   </div>
 
   <!-- API CONFIGURATION MODAL -->
@@ -741,13 +751,14 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
-  <script src="js/db.js?v=1.1"></script>
+  <script src="js/db.js?v=1.2"></script>
   <script src="js/png-handler.js?v=1.1"></script>
   <script src="js/breakout.js?v=1.1"></script>
   <script src="js/llm.js?v=1.1"></script>
   <script src="js/parlor.js?v=1.1"></script>
   <script src="js/assembler.js?v=1.1"></script>
   <script src="js/sandbox.js?v=1.1"></script>
-  <script src="js/app.js?v=1.1"></script>
+  <script src="js/app.js?v=1.2"></script>
+  <script src="js/mission-control.js?v=1.0"></script>
 </body>
 </html>

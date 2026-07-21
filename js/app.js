@@ -119,6 +119,10 @@
   function showView(viewId) {
     document.querySelectorAll('.view').forEach(v => {
       v.classList.toggle('active', v.id === viewId);
+      // Mission control uses display:none/block, not .active class
+      if (v.id === 'mission-control-view') {
+        v.style.display = v.id === viewId ? 'block' : 'none';
+      }
     });
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
@@ -1305,8 +1309,49 @@
     });
     btnParlorBack.addEventListener('click', () => showView('welcome-view'));
 
+    // Mission Control Nav
+    const btnMC = document.getElementById('btn-mission-control');
+    if (btnMC) {
+      btnMC.addEventListener('click', async () => {
+        btnMC.classList.add('active');
+        // Hide all normal views, show MC
+        document.querySelectorAll('#main-canvas .view').forEach(v => v.classList.remove('active'));
+        const mcView = document.getElementById('mission-control-view');
+        if (mcView) {
+          mcView.style.display = 'block';
+          await window.MissionControl.loadAll();
+          await window.MissionControl.renderCurrentTab();
+        }
+      });
+    }
+
+    // Expose bridge so MissionControl can open the Vault editor
+    window.ForgeAppBridge = {
+      openEditor: (id) => {
+        btnMC?.classList.remove('active');
+        document.getElementById('mission-control-view').style.display = 'none';
+        openComponentEditor(id);
+      },
+      openEditorNew: (prefill) => {
+        btnMC?.classList.remove('active');
+        document.getElementById('mission-control-view').style.display = 'none';
+        // Pre-fill editor fields then open it
+        openComponentEditor(null);
+        if (prefill) {
+          setTimeout(() => {
+            if (prefill.name) { const el = document.getElementById('comp-name'); if(el) el.value = prefill.name; }
+            if (prefill.category) { const el = document.getElementById('comp-category'); if(el) el.value = prefill.category; }
+            if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if(el) el.value = prefill.tags.join(', '); }
+          }, 100);
+        }
+      }
+    };
+
     // Initial List Load
     await refreshVaultList();
+
+    // Init Mission Control (lazy — only renders when opened)
+    if (window.MissionControl) await window.MissionControl.init();
 
     console.log('Anansi Forge fully initialized.');
   }

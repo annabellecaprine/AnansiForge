@@ -1,0 +1,1448 @@
+/**
+ * mission-control.js - Anansi Forge Mission Control Dashboard
+ *
+ * Adds a production-tracking layer on top of existing vault components.
+ * - Vault components (chars, scenarios, orgs etc.) get inline pipeline tracking
+ * - tracker_records store holds Stories, Releases, and Concept Stubs
+ */
+
+(() => {
+
+  // ─── Constants ───────────────────────────────────────────────────────────────
+
+  const PIPELINE_STEPS = {
+    character:      ['generated','goldenTemplate','test1','trimmed','test2','complete','published'],
+    scenario:       ['generated','goldenTemplate','test1','trimmed','test2','complete','published'],
+    bio:            ['generated','goldenTemplate','test1','trimmed','test2','complete','published'],
+    initial_message:['generated','goldenTemplate','test1','trimmed','test2','complete','published'],
+    organization:   ['generated','goldenTemplate','test1','trimmed','test2','complete','published'],
+    concept_stub:   ['generated','goldenTemplate','test1','trimmed','test2','complete','published'],
+    story:          ['concept','notesReady','initialMessage','bio','otherMessages','testing','complete','published'],
+    release:        ['staged','bio','scenario','initialMessage','personalityLocked','thumbnail','banner','tagsDone','initialTest','regressionTest','finalPolish','ready']
+  };
+
+  const STEP_LABELS = {
+    generated: 'Generated', goldenTemplate: '⭐ Template', test1: 'Test 1', trimmed: 'Trimmed',
+    test2: 'Test 2', complete: 'Complete', published: 'Published',
+    concept: 'Concept', notesReady: 'Notes', initialMessage: 'Init Msg', bio: 'Bio',
+    otherMessages: 'Other Msgs', testing: 'Testing',
+    staged: 'Staged', scenario: 'Scenario', personalityLocked: 'Personality', thumbnail: 'Thumbnail',
+    banner: 'Banner', tagsDone: 'Tags', initialTest: 'Test 1', regressionTest: 'Regression', finalPolish: 'Polish', ready: 'Ready'
+  };
+
+  const UNIVERSE_COLORS = { DC: '#2563eb', Marvel: '#dc2626', OC: '#7c3aed', Mixed: '#d97706', Other: '#6b7280' };
+  const PRIORITY_ORDER  = { P1: 0, P2: 1, P3: 2, P4: 3, null: 4 };
+  const CATEGORY_LABELS = {
+    character: 'Characters', scenario: 'Scenarios', bio: 'Bios',
+    initial_message: 'Initial Messages', organization: 'Organizations'
+  };
+
+  // ─── State ───────────────────────────────────────────────────────────────────
+
+  let state = {
+    activeSubTab: 'overview',
+    activeCategory: 'character',   // for asset tabs
+    allComponents: [],             // vault_components cache
+    allTrackerRecords: [],         // tracker_records cache
+    sortDir: 'desc',               // 'desc' = most ready first
+    groupByPriority: false,
+    filters: { search: '', universe: 'all', priority: 'all', tag: '' },
+    activeTagFilter: '',
+    editingRecord: null,           // modal state
+    calendarWeekOffset: 0
+  };
+
+  // ─── Readiness Scoring ────────────────────────────────────────────────────────
+
+  function calcReadiness(pipeline, category) {
+    const steps = PIPELINE_STEPS[category] || PIPELINE_STEPS.character;
+    if (!steps.length) return 0;
+    const checked = steps.filter(s => pipeline && pipeline[s]).length;
+    return checked / steps.length;
+  }
+
+  function calcReadinessForVault(comp) {
+    return calcReadiness(comp.tracker?.pipeline, comp.category);
+  }
+
+  function calcReadinessForRecord(rec) {
+    return calcReadiness(rec.pipeline, rec.assetType);
+  }
+
+  function priorityBoost(priority) {
+    return priority === 'P1' ? 0.005 : priority === 'P2' ? 0.003 : priority === 'P3' ? 0.001 : 0;
+  }
+
+  function sortByReadiness(items, getScore, getPriority, dir) {
+    return [...items].sort((a, b) => {
+      const sa = getScore(a) + priorityBoost(getPriority(a));
+      const sb = getScore(b) + priorityBoost(getPriority(b));
+      return dir === 'desc' ? sb - sa : sa - sb;
+    });
+  }
+
+  // ─── Filter Logic ─────────────────────────────────────────────────────────────
+
+  function filterComponents(components) {
+    let items = components;
+    const { search, universe, priority, tag } = state.filters;
+    const activeTag = state.activeTagFilter;
+
+    if (search) {
+      const q = search.toLowerCase();
+      items = items.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.lineage || '').toLowerCase().includes(q) ||
+        (c.tracker?.project || '').toLowerCase().includes(q)
+      );
+    }
+    if (universe !== 'all') items = items.filter(c => (c.tracker?.universe || '') === universe);
+    if (priority !== 'all') items = items.filter(c => (c.tracker?.priority || null) === priority);
+    if (activeTag) {
+      items = items.filter(c =>
+        (c.tags || []).includes(activeTag) ||
+        (c.tracker?.trackerTags || []).includes(activeTag)
+      );
+    }
+    return items;
+  }
+
+  function filterTrackerRecords(records) {
+    let items = records;
+    const { search, universe, priority } = state.filters;
+    const activeTag = state.activeTagFilter;
+
+    if (search) {
+      const q = search.toLowerCase();
+      items = items.filter(r => r.name.toLowerCase().includes(q) || (r.project || '').toLowerCase().includes(q));
+    }
+    if (universe !== 'all') items = items.filter(r => (r.universe || '') === universe);
+    if (priority !== 'all') items = items.filter(r => (r.priority || null) === priority);
+    if (activeTag) items = items.filter(r => (r.tags || []).includes(activeTag));
+    return items;
+  }
+
+  // ─── Data Loaders ─────────────────────────────────────────────────────────────
+
+  async function loadAll() {
+    const [comps, records] = await Promise.all([
+      window.ForgeDB.getAllComponents(),
+      window.ForgeDB.getAllTrackerRecords()
+    ]);
+    state.allComponents = comps;
+    state.allTrackerRecords = records;
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function readinessBar(score, small = false) {
+    const pct = Math.round(score * 100);
+    const color = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--accent)' : pct >= 30 ? 'var(--warning)' : 'var(--text-muted)';
+    const h = small ? '4px' : '6px';
+    return `<div class="mc-readiness-bar" style="height:${h}; background:var(--border-color); border-radius:3px; overflow:hidden; min-width:60px;">
+      <div style="width:${pct}%; height:100%; background:${color}; transition:width 0.3s ease;"></div>
+    </div><span class="mc-readiness-pct" style="font-size:0.7rem; color:var(--text-muted);">${pct}%</span>`;
+  }
+
+  // Compact percentage badge for table rows (no bar — saves horizontal space)
+  function readinessPct(score) {
+    const pct = Math.round(score * 100);
+    const color = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--accent)' : pct >= 30 ? 'var(--warning)' : 'var(--text-muted)';
+    return `<span class="mc-readiness-pct-badge" style="color:${color};">${pct}%</span>`;
+  }
+
+  function priorityBadge(p) {
+    if (!p) return '';
+    const colors = { P1: '#ef4444', P2: '#f59e0b', P3: '#3b82f6', P4: '#6b7280' };
+    return `<span class="mc-badge" style="background:${colors[p]}22; color:${colors[p]}; border:1px solid ${colors[p]}44;">${p}</span>`;
+  }
+
+  function universeBadge(u) {
+    if (!u) return '';
+    const c = UNIVERSE_COLORS[u] || '#6b7280';
+    return `<span class="mc-badge" style="background:${c}22; color:${c}; border:1px solid ${c}44;">${esc(u)}</span>`;
+  }
+
+  function tagChip(tag, active = false) {
+    return `<button class="mc-tag-chip${active ? ' active' : ''}" data-tag="${esc(tag)}">#${esc(tag)}</button>`;
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  // ─── Pipeline Checkbox Cell ───────────────────────────────────────────────────
+
+  function pipelineCheckboxes(pipeline, steps, recordId, isVault) {
+    return steps.map(step => {
+      const checked = pipeline && pipeline[step];
+      const storeType = isVault ? 'vault' : 'record';
+      return `<td class="mc-pipe-cell">
+        <button class="mc-pipe-btn${checked ? ' checked' : ''}"
+          title="${STEP_LABELS[step] || step}"
+          data-id="${recordId}" data-step="${step}" data-store="${storeType}"
+          aria-label="${STEP_LABELS[step] || step}: ${checked ? 'checked' : 'unchecked'}">
+          ${checked ? '✓' : ''}
+        </button>
+      </td>`;
+    }).join('');
+  }
+
+  // ─── Toolbar HTML ─────────────────────────────────────────────────────────────
+
+  function toolbarHTML(showAddStub = true, showAddRecord = false, recordType = '') {
+    const universes = ['DC','Marvel','OC','Mixed','Other'];
+    const priorities = ['P1','P2','P3','P4'];
+    return `<div class="mc-toolbar">
+      <div class="mc-toolbar-left">
+        <input type="text" id="mc-search" class="mc-search" placeholder="Search…" value="${esc(state.filters.search)}">
+        <select id="mc-filter-universe" class="mc-filter-select">
+          <option value="all">All Universes</option>
+          ${universes.map(u => `<option value="${u}" ${state.filters.universe===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+        <select id="mc-filter-priority" class="mc-filter-select">
+          <option value="all">All Priorities</option>
+          ${priorities.map(p => `<option value="${p}" ${state.filters.priority===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+        <button class="mc-btn mc-btn-ghost mc-sort-btn" id="mc-sort-toggle" title="Toggle sort direction">
+          ${state.sortDir === 'desc' ? '↓ Most Ready' : '↑ Least Ready'}
+        </button>
+        <button class="mc-btn mc-btn-ghost${state.groupByPriority?' active':''}" id="mc-group-priority" title="Group by priority">
+          🏷 Priority Groups
+        </button>
+      </div>
+      <div class="mc-toolbar-right">
+        ${state.activeTagFilter ? `<button class="mc-tag-chip active" id="mc-clear-tag">✕ #${esc(state.activeTagFilter)}</button>` : ''}
+        ${showAddStub ? `<button class="mc-btn mc-btn-primary" id="mc-add-stub">+ Concept</button>` : ''}
+        ${showAddRecord ? `<button class="mc-btn mc-btn-primary" id="mc-add-record" data-type="${recordType}">+ Add ${recordType === 'story' ? 'Story' : 'Release'}</button>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // ─── Sub-tab bar ─────────────────────────────────────────────────────────────
+
+  function subTabBar() {
+    const tabs = [
+      { id: 'overview',    label: '📊 Overview' },
+      { id: 'characters',  label: '👤 Characters' },
+      { id: 'scenarios',   label: '🎭 Scenarios' },
+      { id: 'bios',        label: '📋 Bios' },
+      { id: 'messages',    label: '💬 Init Msgs' },
+      { id: 'orgs',        label: '🏢 Orgs' },
+      { id: 'stories',     label: '📖 Stories' },
+      { id: 'launchpad',   label: '🚀 Launch Pad' },
+      { id: 'metrics',     label: '📈 Metrics' },
+      { id: 'import',      label: '⚙ Import' }
+    ];
+    return `<div class="mc-subtab-bar">
+      ${tabs.map(t => `<button class="mc-subtab${state.activeSubTab === t.id ? ' active' : ''}" data-subtab="${t.id}">${t.label}</button>`).join('')}
+    </div>`;
+  }
+
+  // ─── Overview View ────────────────────────────────────────────────────────────
+
+  function renderOverview() {
+    const comps = state.allComponents;
+    const records = state.allTrackerRecords;
+
+    const byCategory = (cat) => comps.filter(c => c.category === cat);
+    const countPublished = (items) => items.filter(c => c.tracker?.pipeline?.published).length;
+    const countComplete = (items) => items.filter(c => c.tracker?.pipeline?.complete).length;
+    const countInProgress = (items) => items.filter(c => {
+      const p = c.tracker?.pipeline || {};
+      return p.generated && !p.complete;
+    }).length;
+
+    const chars = byCategory('character');
+    const scenarios = byCategory('scenario');
+    const orgs = byCategory('organization');
+    const bios = byCategory('bio');
+    const msgs = byCategory('initial_message');
+    const stubs = records.filter(r => r.assetType === 'concept_stub' && !r.promotedToVaultId);
+    const stories = records.filter(r => r.assetType === 'story');
+    const releases = records.filter(r => r.assetType === 'release');
+    const readyToLaunch = releases.filter(r => {
+      const steps = PIPELINE_STEPS.release;
+      return steps.every(s => r.pipeline?.[s]) && !r.pipeline?.released;
+    });
+
+    // Universe distribution across characters
+    const universeCount = {};
+    chars.forEach(c => {
+      const u = c.tracker?.universe || 'Other';
+      universeCount[u] = (universeCount[u] || 0) + 1;
+    });
+
+    // Priority queue: P1 items not yet complete
+    const p1Incomplete = comps.filter(c => c.tracker?.priority === 'P1' && !c.tracker?.pipeline?.complete);
+
+    // Recent activity
+    const recent = [...comps].sort((a,b) => (b.modifiedAt||'').localeCompare(a.modifiedAt||'')).slice(0, 8);
+
+    const kpiCard = (icon, label, value, sub = '', color = 'var(--accent)') =>
+      `<div class="mc-kpi-card">
+        <div class="mc-kpi-icon" style="color:${color}">${icon}</div>
+        <div class="mc-kpi-body">
+          <div class="mc-kpi-value">${value}</div>
+          <div class="mc-kpi-label">${label}</div>
+          ${sub ? `<div class="mc-kpi-sub">${sub}</div>` : ''}
+        </div>
+      </div>`;
+
+    const totalVault = comps.length;
+    const totalPublished = comps.filter(c => c.tracker?.pipeline?.published).length;
+    const totalComplete = comps.filter(c => c.tracker?.pipeline?.complete).length;
+    const totalInProgress = comps.filter(c => {
+      const p = c.tracker?.pipeline || {};
+      return Object.values(p).some(v => v) && !p.complete;
+    }).length;
+
+    return `<div class="mc-overview">
+      <div class="mc-kpi-grid">
+        ${kpiCard('🗄', 'Total Vault Items', totalVault, `${chars.length} chars · ${scenarios.length} scenarios`)}
+        ${kpiCard('✅', 'Published', totalPublished, `${Math.round(totalPublished/Math.max(totalVault,1)*100)}% of vault`, 'var(--success)')}
+        ${kpiCard('🔄', 'In Progress', totalInProgress, `${totalComplete} complete, pending publish`, 'var(--warning)')}
+        ${kpiCard('💡', 'Concept Stubs', stubs.length, 'items queued to build', 'var(--text-muted)')}
+        ${kpiCard('🚀', 'Ready to Launch', readyToLaunch.length, 'releases fully pre-checked', '#f59e0b')}
+        ${kpiCard('📖', 'Stories', stories.length, `${stories.filter(s=>s.pipeline?.published).length} published`)}
+      </div>
+
+      <div class="mc-overview-grid">
+        <div class="mc-overview-panel">
+          <h3 class="mc-panel-title">Universe Split — Characters</h3>
+          <div class="mc-universe-bars">
+            ${Object.entries(universeCount).sort((a,b)=>b[1]-a[1]).map(([u,n])=>{
+              const pct = Math.round(n/Math.max(chars.length,1)*100);
+              const col = UNIVERSE_COLORS[u] || '#6b7280';
+              return `<div class="mc-uni-row">
+                <span class="mc-uni-label" style="color:${col}">${u}</span>
+                <div class="mc-uni-bar-wrap">
+                  <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
+                </div>
+                <span class="mc-uni-count">${n}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="mc-overview-panel">
+          <h3 class="mc-panel-title">⚡ Priority Queue — P1 Incomplete</h3>
+          ${p1Incomplete.length === 0
+            ? '<p class="mc-empty-state">All P1 items complete! 🎉</p>'
+            : `<div class="mc-priority-list">
+                ${p1Incomplete.slice(0,8).map(c => `
+                  <div class="mc-priority-row">
+                    <span class="mc-priority-name">${esc(c.name)}</span>
+                    ${universeBadge(c.tracker?.universe)}
+                    <div class="mc-priority-bar">${readinessBar(calcReadinessForVault(c), true)}</div>
+                  </div>`).join('')}
+              </div>`
+          }
+        </div>
+
+        <div class="mc-overview-panel">
+          <h3 class="mc-panel-title">🚀 Ready to Launch</h3>
+          ${readyToLaunch.length === 0
+            ? '<p class="mc-empty-state">No releases fully pre-checked yet.</p>'
+            : readyToLaunch.slice(0,5).map(r => `
+                <div class="mc-priority-row">
+                  <span class="mc-priority-name">${esc(r.name)}</span>
+                  ${universeBadge(r.universe)}
+                  <span class="mc-badge" style="background:#10b98122;color:var(--success);border:1px solid #10b98144;">Ready ✓</span>
+                </div>`).join('')
+          }
+        </div>
+
+        <div class="mc-overview-panel">
+          <h3 class="mc-panel-title">🕐 Recently Modified</h3>
+          <div class="mc-recent-list">
+            ${recent.map(c => `
+              <div class="mc-recent-row">
+                <span class="mc-recent-name">${esc(c.name)}</span>
+                <span class="mc-recent-cat">${CATEGORY_LABELS[c.category] || c.category}</span>
+                <span class="mc-recent-date">${formatDate(c.modifiedAt)}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ─── Asset Tab (vault_components) ────────────────────────────────────────────
+
+  function renderAssetTab(category) {
+    state.activeCategory = category;
+    const steps = PIPELINE_STEPS[category] || PIPELINE_STEPS.character;
+
+    let items = filterComponents(state.allComponents.filter(c => c.category === category));
+    const stubs = filterTrackerRecords(
+      state.allTrackerRecords.filter(r => r.assetType === 'concept_stub' && r.intendedCategory === category && !r.promotedToVaultId)
+    );
+
+    items = sortByReadiness(items, calcReadinessForVault, c => c.tracker?.priority, state.sortDir);
+
+    // Pipeline stage distribution bar
+    const total = items.length;
+    const stageCounts = {};
+    steps.forEach(s => {
+      stageCounts[s] = items.filter(c => c.tracker?.pipeline?.[s]).length;
+    });
+    const lastStep = steps[steps.length - 1];
+    const publishedPct = total ? Math.round((stageCounts[lastStep]||0)/total*100) : 0;
+
+    // Group by priority if enabled
+    let rows = '';
+    if (state.groupByPriority) {
+      ['P1','P2','P3','P4', null].forEach(prio => {
+        const group = items.filter(c => (c.tracker?.priority || null) === prio);
+        if (!group.length) return;
+        rows += `<tr class="mc-group-header"><td colspan="${steps.length + 7}">
+          ${prio ? priorityBadge(prio) : '<span class="mc-badge" style="background:#6b728022;color:var(--text-muted);border:1px solid #6b728044;">No Priority</span>'}
+          <span style="color:var(--text-muted); font-size:0.8rem; margin-left:6px;">${group.length} items</span>
+        </td></tr>`;
+        rows += group.map(c => assetRow(c, steps)).join('');
+      });
+    } else {
+      rows = items.map(c => assetRow(c, steps)).join('');
+    }
+
+    // Concept stub rows at top (greyed)
+    const stubRows = stubs.map(stub => stubRow(stub, steps)).join('');
+
+    return `
+      <div class="mc-stage-summary">
+        ${steps.map(s => {
+          const n = stageCounts[s] || 0;
+          const pct = total ? Math.round(n/total*100) : 0;
+          return `<div class="mc-stage-chip" title="${n}/${total} items at ${STEP_LABELS[s]||s}">
+            <span>${STEP_LABELS[s]||s}</span><strong>${n}</strong>
+          </div>`;
+        }).join('')}
+        <div class="mc-stage-chip mc-stage-chip--published" title="${publishedPct}% published">
+          <span>Published %</span><strong>${publishedPct}%</strong>
+        </div>
+      </div>
+
+      ${toolbarHTML(true, false)}
+
+      <div class="mc-table-wrap">
+        <table class="mc-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Universe</th>
+              <th>Project</th>
+              <th>Priority</th>
+              ${steps.map(s => `<th class="mc-pipe-th" title="${STEP_LABELS[s]||s}">${(STEP_LABELS[s]||s).substring(0,4)}</th>`).join('')}
+              <th>Tags</th>
+              <th>Readiness</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${stubRows}
+            ${rows || `<tr><td colspan="${steps.length+8}" class="mc-empty-state">No ${CATEGORY_LABELS[category]||category} tracked yet. Add a Concept to start.</td></tr>`}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function assetRow(comp, steps) {
+    const tracker = comp.tracker || {};
+    const score = calcReadinessForVault(comp);
+    const tags = [...(comp.tags||[]), ...(tracker.trackerTags||[])].filter(Boolean);
+
+    return `<tr class="mc-row" data-id="${comp.id}">
+      <td class="mc-cell-name">
+        <button class="mc-name-link" data-vault-id="${comp.id}" title="Edit in Vault">${esc(comp.name)}</button>
+        ${comp.isTemplate ? '<span class="mc-template-star" title="Golden Template">⭐</span>' : ''}
+      </td>
+      <td>${universeBadge(tracker.universe)}</td>
+      <td class="mc-cell-project">
+        <span class="mc-editable" data-field="project" data-id="${comp.id}" data-store="vault" title="Click to edit">${esc(tracker.project || '—')}</span>
+      </td>
+      <td>
+        <select class="mc-priority-select" data-id="${comp.id}" data-store="vault">
+          <option value="">—</option>
+          ${['P1','P2','P3','P4'].map(p=>`<option value="${p}" ${tracker.priority===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+      </td>
+      ${pipelineCheckboxes(tracker.pipeline, steps, comp.id, true)}
+      <td class="mc-cell-tags">${tags.slice(0,3).map(t=>tagChip(t, t===state.activeTagFilter)).join('')}${tags.length>3?`<span class="mc-more-tags">+${tags.length-3}</span>`:''}</td>
+      <td class="mc-cell-readiness">${readinessPct(score)}</td>
+      <td class="mc-cell-actions">
+        <button class="mc-action-btn" data-vault-id="${comp.id}" title="Open in Vault">✏️</button>
+        <select class="mc-universe-select" data-id="${comp.id}" data-store="vault" title="Set universe">
+          <option value="">Universe</option>
+          ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}" ${tracker.universe===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+  }
+
+  function stubRow(stub, steps) {
+    return `<tr class="mc-row mc-row--stub" data-stub-id="${stub.id}">
+      <td class="mc-cell-name" colspan="2">
+        <span class="mc-stub-icon">💡</span>
+        <span class="mc-stub-name">${esc(stub.name)}</span>
+        <span class="mc-stub-badge">Concept</span>
+      </td>
+      <td>${esc(stub.project || '—')}</td>
+      <td>${priorityBadge(stub.priority)}</td>
+      ${steps.map(() => '<td class="mc-pipe-cell"><button class="mc-pipe-btn" disabled title="Build first">—</button></td>').join('')}
+      <td>${(stub.tags||[]).map(t=>tagChip(t)).join('')}</td>
+      <td>0%</td>
+      <td class="mc-cell-actions">
+        <button class="mc-btn mc-btn-accent mc-btn-sm mc-build-btn" data-stub-id="${stub.id}" title="Build this in Vault">🔨 Build</button>
+        <button class="mc-btn mc-btn-ghost mc-btn-sm mc-delete-stub-btn" data-stub-id="${stub.id}" title="Remove stub">✕</button>
+      </td>
+    </tr>`;
+  }
+
+  // ─── Stories Tab ──────────────────────────────────────────────────────────────
+
+  function renderStoriesTab() {
+    const steps = PIPELINE_STEPS.story;
+    let items = filterTrackerRecords(state.allTrackerRecords.filter(r => r.assetType === 'story'));
+    items = sortByReadiness(items, calcReadinessForRecord, r => r.priority, state.sortDir);
+
+    return `
+      ${toolbarHTML(false, true, 'story')}
+      <div class="mc-table-wrap">
+        <table class="mc-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Universe</th>
+              <th>Project</th>
+              <th>Priority</th>
+              ${steps.map(s=>`<th class="mc-pipe-th" title="${STEP_LABELS[s]||s}">${(STEP_LABELS[s]||s).substring(0,5)}</th>`).join('')}
+              <th>Tags</th>
+              <th>Readiness</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.length ? items.map(r => recordRow(r, steps)).join('') : `<tr><td colspan="${steps.length+8}" class="mc-empty-state">No stories yet. Add one to track your narrative pipeline.</td></tr>`}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function recordRow(rec, steps) {
+    const score = calcReadinessForRecord(rec);
+    return `<tr class="mc-row" data-record-id="${rec.id}">
+      <td class="mc-cell-name">
+        <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
+      </td>
+      <td>${universeBadge(rec.universe)}</td>
+      <td class="mc-cell-project">${esc(rec.project || '—')}</td>
+      <td>${priorityBadge(rec.priority)}</td>
+      ${pipelineCheckboxes(rec.pipeline, steps, rec.id, false)}
+      <td class="mc-cell-tags">${(rec.tags||[]).slice(0,3).map(t=>tagChip(t,t===state.activeTagFilter)).join('')}</td>
+      <td class="mc-cell-readiness">${readinessPct(score)}</td>
+      <td class="mc-cell-actions">
+        <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit">✏️</button>
+        <button class="mc-action-btn mc-delete-record" data-record-id="${rec.id}" title="Delete">🗑</button>
+      </td>
+    </tr>`;
+  }
+
+  // ─── Launch Pad ───────────────────────────────────────────────────────────────
+
+  function renderLaunchPad() {
+    const steps = PIPELINE_STEPS.release;
+    let releases = filterTrackerRecords(state.allTrackerRecords.filter(r => r.assetType === 'release'));
+    releases = sortByReadiness(releases, calcReadinessForRecord, r => r.priority, state.sortDir);
+
+    const readyItems = releases.filter(r => steps.every(s => r.pipeline?.[s]) && !r.pipeline?.released);
+    const inProgress = releases.filter(r => !steps.every(s => r.pipeline?.[s]));
+    const released   = releases.filter(r => r.pipeline?.released);
+
+    const releaseSection = (title, items, showReady = false) => {
+      if (!items.length && !showReady) return '';
+      return `<div class="mc-launch-section">
+        <h3 class="mc-section-title">${title} <span class="mc-section-count">${items.length}</span></h3>
+        ${items.length === 0 ? '<p class="mc-empty-state">None yet.</p>' : `
+        <div class="mc-table-wrap">
+          <table class="mc-table mc-table--release">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Universe</th>
+                <th>Priority</th>
+                ${steps.map(s=>`<th class="mc-pipe-th" title="${STEP_LABELS[s]||s}">${(STEP_LABELS[s]||s).substring(0,4)}</th>`).join('')}
+                <th>Visibility</th>
+                <th>Scheduled</th>
+                <th>Readiness</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(r => releaseRow(r, steps)).join('')}
+            </tbody>
+          </table>
+        </div>`}
+      </div>`;
+    };
+
+    const calendarHTML = renderCalendar(releases);
+
+    return `
+      ${toolbarHTML(false, true, 'release')}
+      ${readyItems.length > 0 ? `<div class="mc-ready-banner">
+        🚀 <strong>${readyItems.length}</strong> release${readyItems.length>1?'s':''} ready to launch!
+      </div>` : ''}
+      ${releaseSection('🟢 Ready to Launch', readyItems, true)}
+      ${releaseSection('🔄 In Progress', inProgress)}
+      ${releaseSection('✅ Released', released)}
+      ${calendarHTML}`;
+  }
+
+  function releaseRow(rec, steps) {
+    const score = calcReadinessForRecord(rec);
+    const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)' };
+    return `<tr class="mc-row${rec.pipeline?.released?' mc-row--released':''}" data-record-id="${rec.id}">
+      <td class="mc-cell-name">
+        <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
+      </td>
+      <td>${universeBadge(rec.universe)}</td>
+      <td>${priorityBadge(rec.priority)}</td>
+      ${pipelineCheckboxes(rec.pipeline, steps, rec.id, false)}
+      <td>
+        <select class="mc-vis-select" data-id="${rec.id}" style="color:${visColors[rec.visibility]||'var(--text-muted)'}">
+          <option value="">—</option>
+          ${['Private','Unlisted','Public'].map(v=>`<option value="${v}" ${rec.visibility===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </td>
+      <td class="mc-cell-date">
+        <input type="date" class="mc-date-input" data-id="${rec.id}" value="${rec.scheduledDate||''}" title="Scheduled date">
+      </td>
+      <td class="mc-cell-readiness">${readinessPct(score)}</td>
+      <td class="mc-cell-actions">
+        <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit">✏️</button>
+        <button class="mc-action-btn mc-delete-record" data-record-id="${rec.id}" title="Delete">🗑</button>
+      </td>
+    </tr>`;
+  }
+
+  // ─── Release Calendar ─────────────────────────────────────────────────────────
+
+  function renderCalendar(releases) {
+    const scheduled = releases.filter(r => r.scheduledDate && !r.pipeline?.released);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    // Get Mon of current week + offset
+    const weekStart = new Date(today);
+    const dayOfWeek = (weekStart.getDay() + 6) % 7; // Mon=0
+    weekStart.setDate(weekStart.getDate() - dayOfWeek + (state.calendarWeekOffset * 7));
+
+    const days = Array.from({length: 7}, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+
+    const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const isReleasDay = (d) => d.getDay() === 2 || d.getDay() === 4; // Tue=2, Thu=4
+
+    return `<div class="mc-calendar-section">
+      <div class="mc-calendar-header">
+        <h3 class="mc-section-title">📅 Release Calendar</h3>
+        <div class="mc-calendar-nav">
+          <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-cal-prev">← Prev</button>
+          <span class="mc-cal-range">${days[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${days[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+          <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-cal-next">Next →</button>
+        </div>
+      </div>
+      <div class="mc-calendar-grid">
+        ${days.map((d, i) => {
+          const dateStr = d.toISOString().split('T')[0];
+          const isToday = d.getTime() === today.getTime();
+          const isSlot = isReleasDay(d);
+          const dayReleases = scheduled.filter(r => r.scheduledDate === dateStr);
+
+          return `<div class="mc-cal-day${isToday?' mc-cal-today':''}${isSlot?' mc-cal-slot':''}">
+            <div class="mc-cal-day-header">
+              <span class="mc-cal-day-name">${dayNames[i]}</span>
+              <span class="mc-cal-day-num${isToday?' mc-cal-today-num':''}">${d.getDate()}</span>
+              ${isSlot ? '<span class="mc-cal-slot-badge">📡</span>' : ''}
+            </div>
+            <div class="mc-cal-events">
+              ${dayReleases.map(r => `
+                <div class="mc-cal-event" title="${esc(r.name)}">
+                  ${universeBadge(r.universe)}
+                  <span class="mc-cal-event-name">${esc(r.name)}</span>
+                </div>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ─── Import Tool ──────────────────────────────────────────────────────────────
+
+  function renderImportTab() {
+    return `<div class="mc-import-panel">
+      <h3 class="mc-section-title">📥 Import Tracker Data</h3>
+      <p class="mc-import-desc">Import tracking metadata from your Excel spreadsheets. Export your Excel file to JSON first using the PowerShell script below, then upload it here.</p>
+
+      <div class="mc-import-instructions">
+        <h4>Step 1: Export your Excel to JSON</h4>
+        <p>Run this script in PowerShell, pointed at your Excel file:</p>
+        <pre class="mc-code-block">$excel = New-Object -ComObject Excel.Application
+$excel.Visible = $false
+$wb = $excel.Workbooks.Open("C:\\path\\to\\Anansi_Forge_Master_Production_Tracker_V2.xlsx")
+
+$result = @{ characters = @(); scenarios = @(); stories = @() }
+
+$ws = $wb.Sheets["Characters"]
+for ($r = 2; $r -le $ws.UsedRange.Rows.Count; $r++) {
+  $name = $ws.Cells.Item($r,1).Text
+  if ($name -eq "") { continue }
+  $result.characters += @{
+    name=$name; universe=$ws.Cells.Item($r,2).Text
+    project=$ws.Cells.Item($r,3).Text; priority=$ws.Cells.Item($r,5).Text
+    status=$ws.Cells.Item($r,6).Text
+    generated=($ws.Cells.Item($r,7).Text -ne "")
+    goldenTemplate=($ws.Cells.Item($r,8).Text -ne "")
+    test1=($ws.Cells.Item($r,9).Text -ne "")
+    trimmed=($ws.Cells.Item($r,10).Text -ne "")
+    test2=($ws.Cells.Item($r,11).Text -ne "")
+    complete=($ws.Cells.Item($r,12).Text -ne "")
+    published=($ws.Cells.Item($r,13).Text -ne "")
+  }
+}
+
+$wb.Close($false)
+$excel.Quit()
+$result | ConvertTo-Json -Depth 5 | Out-File "tracker-import.json" -Encoding utf8
+Write-Host "Done! tracker-import.json created."</pre>
+      </div>
+
+      <div class="mc-import-upload">
+        <h4>Step 2: Upload JSON</h4>
+        <div class="mc-import-dropzone" id="mc-import-dropzone">
+          <div class="mc-import-drop-content">
+            <span class="mc-import-icon">📂</span>
+            <p>Drop your <code>tracker-import.json</code> here, or click to browse</p>
+            <button class="mc-btn mc-btn-primary" id="mc-import-browse">Browse File</button>
+          </div>
+        </div>
+        <input type="file" id="mc-import-file-input" accept=".json" hidden>
+        <div id="mc-import-preview" class="mc-import-preview" style="display:none;"></div>
+        <button class="mc-btn mc-btn-primary" id="mc-import-confirm" style="display:none; margin-top:12px;">✓ Import ${''} Records</button>
+      </div>
+    </div>`;
+  }
+
+  // ─── Record Edit Modal ────────────────────────────────────────────────────────
+
+  function openRecordModal(rec, assetType) {
+    const isNew = !rec;
+    const r = rec || { assetType, name: '', universe: '', project: '', priority: null, tags: [], notes: '', linkedVaultIds: [], pipeline: window.ForgeDB.defaultTrackerPipeline(assetType) };
+    state.editingRecord = r;
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body  = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.textContent = isNew ? `New ${assetType === 'story' ? 'Story' : 'Release'}` : `Edit: ${r.name}`;
+    body.innerHTML = `
+      <div class="form-group"><label>Name</label>
+        <input type="text" id="mc-rec-name" value="${esc(r.name)}" placeholder="Name…" class="mc-modal-input">
+      </div>
+      <div class="mc-form-row">
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-rec-universe" class="mc-modal-input">
+            <option value="">—</option>
+            ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}" ${r.universe===u?'selected':''}>${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="mc-rec-priority" class="mc-modal-input">
+            <option value="">—</option>
+            ${['P1','P2','P3','P4'].map(p=>`<option value="${p}" ${r.priority===p?'selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Project / Group</label>
+        <input type="text" id="mc-rec-project" value="${esc(r.project||'')}" class="mc-modal-input" placeholder="e.g. Young Justice">
+      </div>
+      <div class="form-group"><label>Tags (comma separated)</label>
+        <input type="text" id="mc-rec-tags" value="${esc((r.tags||[]).join(', '))}" class="mc-modal-input" placeholder="e.g. hero, DC, tested">
+      </div>
+      <div class="form-group"><label>Notes</label>
+        <textarea id="mc-rec-notes" class="mc-modal-input" rows="3">${esc(r.notes||'')}</textarea>
+      </div>
+      ${assetType === 'release' ? `
+      <div class="mc-form-row">
+        <div class="form-group"><label>Visibility</label>
+          <select id="mc-rec-visibility" class="mc-modal-input">
+            <option value="">—</option>
+            ${['Private','Unlisted','Public'].map(v=>`<option value="${v}" ${r.visibility===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Scheduled Date</label>
+          <input type="date" id="mc-rec-date" value="${r.scheduledDate||''}" class="mc-modal-input">
+        </div>
+      </div>
+      <hr class="mc-modal-divider">
+      <p class="mc-modal-section-label">📈 Post-Release Metrics</p>
+      <div class="mc-form-row">
+        <div class="form-group"><label>Snapshot Date</label>
+          <input type="date" id="mc-rec-metrics-date" value="${r.metrics?.date||''}" class="mc-modal-input">
+        </div>
+        <div class="form-group"><label>Snapshot Time</label>
+          <input type="time" id="mc-rec-metrics-time" value="${r.metrics?.time||''}" class="mc-modal-input">
+        </div>
+      </div>
+      <div class="mc-form-row">
+        <div class="form-group"><label>Unique Chats</label>
+          <input type="number" id="mc-rec-unique-chats" value="${r.metrics?.uniqueChats||0}" class="mc-modal-input" min="0">
+        </div>
+        <div class="form-group"><label>Messages</label>
+          <input type="number" id="mc-rec-messages" value="${r.metrics?.messages||0}" class="mc-modal-input" min="0">
+        </div>
+      </div>
+      <div class="mc-metrics-derived">
+        <span class="mc-metrics-derived-label">Derived Msg / Chat</span>
+        <span class="mc-metrics-derived-value" id="mc-derived-mpc">${
+          r.metrics?.uniqueChats > 0
+            ? (r.metrics.messages / r.metrics.uniqueChats).toFixed(2)
+            : '—'
+        }</span>
+      </div>` : ''}
+    `;
+
+    modal.classList.remove('hidden');
+    document.getElementById('mc-rec-name').focus();
+  }
+
+  function openStubModal() {
+    const modal = document.getElementById('mc-modal-overlay');
+    const body  = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+    state.editingRecord = { assetType: 'concept_stub' };
+    title.textContent = 'New Concept Stub';
+    body.innerHTML = `
+      <div class="form-group"><label>Name</label>
+        <input type="text" id="mc-rec-name" class="mc-modal-input" placeholder="e.g. Kamala Khan">
+      </div>
+      <div class="mc-form-row">
+        <div class="form-group"><label>Category</label>
+          <select id="mc-stub-category" class="mc-modal-input">
+            <option value="character">Character</option>
+            <option value="scenario">Scenario</option>
+            <option value="bio">Bio</option>
+            <option value="initial_message">Initial Message</option>
+            <option value="organization">Organization</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-rec-universe" class="mc-modal-input">
+            <option value="">—</option>
+            ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}">${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="mc-rec-priority" class="mc-modal-input">
+            <option value="">—</option>
+            ${['P1','P2','P3','P4'].map(p=>`<option value="${p}">${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Project / Group</label>
+        <input type="text" id="mc-rec-project" class="mc-modal-input" placeholder="e.g. Ant-Man">
+      </div>
+      <div class="form-group"><label>Tags (comma separated)</label>
+        <input type="text" id="mc-rec-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel">
+      </div>
+      <div class="form-group"><label>Notes</label>
+        <textarea id="mc-rec-notes" class="mc-modal-input" rows="2"></textarea>
+      </div>`;
+
+    modal.classList.remove('hidden');
+    document.getElementById('mc-rec-name').focus();
+  }
+
+  async function saveModalRecord() {
+    const r = state.editingRecord;
+    if (!r) return;
+
+    const name = document.getElementById('mc-rec-name')?.value?.trim();
+    if (!name) { showToast('Name is required.', 'error'); return; }
+
+    const universe  = document.getElementById('mc-rec-universe')?.value || '';
+    const priority  = document.getElementById('mc-rec-priority')?.value || null;
+    const project   = document.getElementById('mc-rec-project')?.value?.trim() || '';
+    const tags      = (document.getElementById('mc-rec-tags')?.value||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const notes     = document.getElementById('mc-rec-notes')?.value || '';
+
+    const updated = {
+      ...r, name, universe, priority, project, tags, notes,
+      pipeline: r.pipeline || window.ForgeDB.defaultTrackerPipeline(r.assetType)
+    };
+
+    if (r.assetType === 'concept_stub') {
+      updated.intendedCategory = document.getElementById('mc-stub-category')?.value || 'character';
+    }
+    if (r.assetType === 'release') {
+      updated.visibility   = document.getElementById('mc-rec-visibility')?.value || null;
+      updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
+      const uniqueChats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
+      const messages    = parseInt(document.getElementById('mc-rec-messages')?.value)    || 0;
+      updated.metrics = {
+        date:        document.getElementById('mc-rec-metrics-date')?.value || null,
+        time:        document.getElementById('mc-rec-metrics-time')?.value || null,
+        uniqueChats,
+        messages,
+        // derived — stored for easy sorting/export, always recomputed on save
+        msgPerChat:  uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null
+      };
+    }
+
+    await window.ForgeDB.saveTrackerRecord(updated);
+    await loadAll();
+    closeModal();
+    renderCurrentTab();
+    showToast(`${updated.name} saved.`, 'success');
+  }
+
+  function closeModal() {
+    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+    state.editingRecord = null;
+  }
+
+  // ─── Promote Stub → Vault ─────────────────────────────────────────────────────
+
+  async function promoteStub(stubId) {
+    const stub = await window.ForgeDB.getTrackerRecord(stubId);
+    if (!stub) return;
+
+    // Pre-fill the component editor and switch to it
+    if (window.ForgeAppBridge && window.ForgeAppBridge.openEditorNew) {
+      window.ForgeAppBridge.openEditorNew({
+        name: stub.name,
+        category: stub.intendedCategory || 'character',
+        tags: stub.tags || [],
+        _stubId: stub.id
+      });
+    } else {
+      // Fallback: switch to editor view via existing app routing
+      document.getElementById('btn-new-component')?.click();
+      showToast(`Building "${stub.name}" — fill out the editor and save to Vault.`, 'info');
+    }
+  }
+
+  // ─── Import Handler ───────────────────────────────────────────────────────────
+
+  let importData = null;
+
+  async function handleImportFile(file) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      importData = data;
+
+      const chars = data.characters || [];
+      const scenarios = data.scenarios || [];
+      const stories = data.stories || [];
+
+      const allComps = state.allComponents;
+      const compByName = {};
+      allComps.forEach(c => { compByName[c.name.toLowerCase()] = c; });
+
+      let matched = 0, stubs = 0;
+      chars.forEach(row => { compByName[row.name?.toLowerCase()] ? matched++ : stubs++; });
+      scenarios.forEach(row => { compByName[row.name?.toLowerCase()] ? matched++ : stubs++; });
+
+      const preview = document.getElementById('mc-import-preview');
+      const confirmBtn = document.getElementById('mc-import-confirm');
+      preview.style.display = 'block';
+      preview.innerHTML = `<div class="mc-import-summary">
+        <div class="mc-import-stat"><strong>${chars.length + scenarios.length + stories.length}</strong> total rows found</div>
+        <div class="mc-import-stat mc-import-stat--match"><strong>${matched}</strong> matched to existing vault items → will update tracking data</div>
+        <div class="mc-import-stat mc-import-stat--stub"><strong>${stubs}</strong> unmatched → will become Concept Stubs</div>
+      </div>`;
+      confirmBtn.style.display = 'block';
+      confirmBtn.textContent = `✓ Import ${chars.length + scenarios.length + stories.length} Records`;
+    } catch(e) {
+      showToast('Failed to parse JSON file: ' + e.message, 'error');
+    }
+  }
+
+  async function executeImport() {
+    if (!importData) return;
+    const allComps = state.allComponents;
+    const compByName = {};
+    allComps.forEach(c => { compByName[c.name.toLowerCase()] = c; });
+
+    const mapPipeline = (row, category) => {
+      if (category === 'character' || category === 'scenario' || category === 'organization') {
+        return {
+          generated: !!row.generated, goldenTemplate: !!row.goldenTemplate,
+          test1: !!row.test1, trimmed: !!row.trimmed, test2: !!row.test2,
+          complete: !!row.complete, published: !!row.published
+        };
+      }
+      return window.ForgeDB.defaultTrackerPipeline(category);
+    };
+
+    let updated = 0, created = 0;
+
+    const processRows = async (rows, category) => {
+      for (const row of rows) {
+        if (!row.name) continue;
+        const existing = compByName[row.name.toLowerCase()];
+        if (existing) {
+          await window.ForgeDB.updateVaultTracker(existing.id, {
+            universe: row.universe || existing.tracker?.universe || '',
+            project: row.project || existing.tracker?.project || '',
+            priority: row.priority || existing.tracker?.priority || null,
+            pipeline: mapPipeline(row, category)
+          });
+          updated++;
+        } else {
+          await window.ForgeDB.saveTrackerRecord({
+            assetType: 'concept_stub',
+            name: row.name,
+            universe: row.universe || '',
+            project: row.project || '',
+            priority: row.priority || null,
+            intendedCategory: category,
+            pipeline: window.ForgeDB.defaultTrackerPipeline(category),
+            tags: []
+          });
+          created++;
+        }
+      }
+    };
+
+    await processRows(importData.characters || [], 'character');
+    await processRows(importData.scenarios  || [], 'scenario');
+    await processRows(importData.stories    || [], 'story');
+
+    await loadAll();
+    renderCurrentTab();
+    showToast(`Import complete: ${updated} vault items updated, ${created} concept stubs created.`, 'success');
+    importData = null;
+    document.getElementById('mc-import-preview').style.display = 'none';
+    document.getElementById('mc-import-confirm').style.display = 'none';
+  }
+
+  // ─── Event Delegation ─────────────────────────────────────────────────────────
+
+  function bindEvents(container) {
+    container.addEventListener('click', async (e) => {
+      const t = e.target;
+
+      // Sub-tab switching
+      if (t.matches('.mc-subtab')) {
+        state.activeSubTab = t.dataset.subtab;
+        state.activeTagFilter = '';
+        await renderCurrentTab();
+        return;
+      }
+
+      // Sort toggle
+      if (t.closest('#mc-sort-toggle')) {
+        state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+        await renderCurrentTab();
+        return;
+      }
+
+      // Priority group toggle
+      if (t.closest('#mc-group-priority')) {
+        state.groupByPriority = !state.groupByPriority;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Tag chip filter
+      if (t.matches('.mc-tag-chip') && !t.id === 'mc-clear-tag') {
+        state.activeTagFilter = t.dataset.tag === state.activeTagFilter ? '' : t.dataset.tag;
+        await renderCurrentTab();
+        return;
+      }
+      if (t.id === 'mc-clear-tag') {
+        state.activeTagFilter = '';
+        await renderCurrentTab();
+        return;
+      }
+
+      // Pipeline checkbox toggle (vault)
+      if (t.matches('.mc-pipe-btn') && !t.disabled) {
+        const id    = t.dataset.id;
+        const step  = t.dataset.step;
+        const store = t.dataset.store;
+        if (store === 'vault') {
+          const comp = state.allComponents.find(c => c.id === id);
+          if (!comp) return;
+          const pipeline = { ...(comp.tracker?.pipeline || window.ForgeDB.defaultTrackerPipeline(comp.category)) };
+          pipeline[step] = !pipeline[step];
+          await window.ForgeDB.updateVaultTracker(id, { pipeline });
+          await loadAll();
+          await renderCurrentTab();
+        } else {
+          const rec = state.allTrackerRecords.find(r => r.id === id);
+          if (!rec) return;
+          const pipeline = { ...(rec.pipeline || {}) };
+          pipeline[step] = !pipeline[step];
+          await window.ForgeDB.saveTrackerRecord({ ...rec, pipeline });
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
+      // Open in Vault
+      if (t.matches('.mc-name-link[data-vault-id]') || t.matches('.mc-action-btn[data-vault-id]')) {
+        const id = t.dataset.vaultId;
+        if (window.ForgeAppBridge?.openEditor) window.ForgeAppBridge.openEditor(id);
+        return;
+      }
+
+      // Edit tracker record
+      if (t.closest('.mc-edit-record')) {
+        const id = t.closest('[data-record-id]')?.dataset.recordId || t.dataset.recordId;
+        const rec = state.allTrackerRecords.find(r => r.id === id);
+        if (rec) openRecordModal(rec, rec.assetType);
+        return;
+      }
+
+      // Delete tracker record
+      if (t.matches('.mc-delete-record')) {
+        const id = t.dataset.recordId;
+        if (confirm('Delete this record?')) {
+          await window.ForgeDB.deleteTrackerRecord(id);
+          await loadAll();
+          await renderCurrentTab();
+          showToast('Record deleted.', 'info');
+        }
+        return;
+      }
+
+      // Add concept stub
+      if (t.id === 'mc-add-stub') { openStubModal(); return; }
+
+      // Add tracker record
+      if (t.id === 'mc-add-record') { openRecordModal(null, t.dataset.type); return; }
+
+      // Build stub → vault
+      if (t.matches('.mc-build-btn')) {
+        promoteStub(t.dataset.stubId);
+        return;
+      }
+
+      // Delete stub
+      if (t.matches('.mc-delete-stub-btn')) {
+        if (confirm('Remove this concept stub?')) {
+          await window.ForgeDB.deleteTrackerRecord(t.dataset.stubId);
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
+      // Modal save
+      if (t.id === 'mc-modal-save') { await saveModalRecord(); return; }
+      if (t.id === 'mc-modal-cancel') { closeModal(); return; }
+
+      // Calendar nav
+      if (t.id === 'mc-cal-prev') { state.calendarWeekOffset--; await renderCurrentTab(); return; }
+      if (t.id === 'mc-cal-next') { state.calendarWeekOffset++; await renderCurrentTab(); return; }
+
+      // Import browse
+      if (t.id === 'mc-import-browse') {
+        document.getElementById('mc-import-file-input')?.click();
+        return;
+      }
+      if (t.id === 'mc-import-confirm') { await executeImport(); return; }
+
+      // Import dropzone click
+      if (t.closest('#mc-import-dropzone') && !t.id) {
+        document.getElementById('mc-import-file-input')?.click();
+        return;
+      }
+    });
+
+    // Filter inputs + live derived field
+    container.addEventListener('input', async (e) => {
+      const t = e.target;
+      if (t.id === 'mc-search') {
+        state.filters.search = t.value;
+        await renderCurrentTab();
+      }
+      // Live Msg/Chat derivation in release modal
+      if (t.id === 'mc-rec-unique-chats' || t.id === 'mc-rec-messages') {
+        const msgs  = parseInt(document.getElementById('mc-rec-messages')?.value)     || 0;
+        const chats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
+        const el = document.getElementById('mc-derived-mpc');
+        if (el) el.textContent = chats > 0 ? (msgs / chats).toFixed(2) : '—';
+      }
+    });
+
+    container.addEventListener('change', async (e) => {
+      const t = e.target;
+
+      // Filter dropdowns
+      if (t.id === 'mc-filter-universe') { state.filters.universe = t.value; await renderCurrentTab(); return; }
+      if (t.id === 'mc-filter-priority')  { state.filters.priority  = t.value; await renderCurrentTab(); return; }
+
+      // Priority select inline
+      if (t.matches('.mc-priority-select') && t.dataset.store === 'vault') {
+        const comp = state.allComponents.find(c => c.id === t.dataset.id);
+        if (comp) {
+          await window.ForgeDB.updateVaultTracker(t.dataset.id, { priority: t.value || null });
+          await loadAll();
+        }
+        return;
+      }
+
+      // Universe select inline
+      if (t.matches('.mc-universe-select') && t.dataset.store === 'vault') {
+        await window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
+        await loadAll();
+        return;
+      }
+
+      // Visibility select
+      if (t.matches('.mc-vis-select')) {
+        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+        if (rec) { await window.ForgeDB.saveTrackerRecord({ ...rec, visibility: t.value || null }); await loadAll(); }
+        return;
+      }
+
+      // Date input
+      if (t.matches('.mc-date-input')) {
+        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+        if (rec) { await window.ForgeDB.saveTrackerRecord({ ...rec, scheduledDate: t.value || null }); await loadAll(); }
+        return;
+      }
+
+      // Import file
+      if (t.id === 'mc-import-file-input' && t.files[0]) {
+        await handleImportFile(t.files[0]);
+        return;
+      }
+    });
+
+    // Import drag-and-drop
+    const dzEl = () => container.querySelector('#mc-import-dropzone');
+    container.addEventListener('dragover', (e) => { if (dzEl() && dzEl().contains(e.target)) { e.preventDefault(); dzEl().classList.add('drag-over'); } });
+    container.addEventListener('dragleave', () => { dzEl()?.classList.remove('drag-over'); });
+    container.addEventListener('drop', async (e) => {
+      const dz = dzEl();
+      if (!dz || !dz.contains(e.target)) return;
+      e.preventDefault();
+      dz.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.json')) await handleImportFile(file);
+    });
+  }
+
+  // ─── Metrics Tab ──────────────────────────────────────────────────────────────
+
+  function renderMetrics() {
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
+    const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0);
+    const noMetrics   = releases.filter(r => !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0));
+
+    // Sort by messages descending by default
+    const sorted = [...withMetrics].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0));
+
+    // Totals
+    const totalMsgs   = sorted.reduce((s, r) => s + (r.metrics?.messages    || 0), 0);
+    const totalChats  = sorted.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
+    const avgMPC      = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+    const topBot      = sorted[0];
+
+    const kpiCard = (icon, val, label, color = 'var(--accent)') =>
+      `<div class="mc-kpi-card">
+        <div class="mc-kpi-icon" style="color:${color}">${icon}</div>
+        <div class="mc-kpi-body">
+          <div class="mc-kpi-value">${val}</div>
+          <div class="mc-kpi-label">${label}</div>
+        </div>
+      </div>`;
+
+    const metricRow = (rec, rank) => {
+      const m   = rec.metrics || {};
+      const mpc = m.uniqueChats > 0 ? (m.messages / m.uniqueChats).toFixed(2) : '—';
+      const maxMsgs = sorted[0]?.metrics?.messages || 1;
+      const barPct  = Math.round((m.messages || 0) / maxMsgs * 100);
+      return `<tr class="mc-row">
+        <td class="mc-metrics-rank">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</td>
+        <td class="mc-cell-name">
+          <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
+        </td>
+        <td>${universeBadge(rec.universe)}</td>
+        <td>${priorityBadge(rec.priority)}</td>
+        <td class="mc-metrics-bar-cell">
+          <div class="mc-metrics-bar-wrap">
+            <div class="mc-metrics-bar" style="width:${barPct}%;"></div>
+          </div>
+          <span class="mc-metrics-num">${(m.messages||0).toLocaleString()}</span>
+        </td>
+        <td class="mc-metrics-num">${(m.uniqueChats||0).toLocaleString()}</td>
+        <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">${mpc}</td>
+        <td class="mc-metrics-date">${m.date ? `${m.date}${m.time ? ' ' + m.time : ''}` : '—'}</td>
+        <td class="mc-cell-actions">
+          <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit metrics">✏️</button>
+        </td>
+      </tr>`;
+    };
+
+    return `
+      <div class="mc-kpi-grid" style="margin-bottom:20px;">
+        ${kpiCard('💬', totalMsgs.toLocaleString(), 'Total Messages across all bots')}
+        ${kpiCard('👥', totalChats.toLocaleString(), 'Total Unique Chats', 'var(--success)')}
+        ${kpiCard('📐', avgMPC, 'Avg Msg / Chat (all bots)', 'var(--warning)')}
+        ${topBot ? kpiCard('🏆', esc(topBot.name), `Top bot · ${(topBot.metrics?.messages||0).toLocaleString()} msgs`, '#f59e0b') : ''}
+      </div>
+
+      <div class="mc-metrics-section">
+        <h3 class="mc-section-title">📊 Leaderboard — by Messages</h3>
+        ${sorted.length === 0
+          ? '<p class="mc-empty-state">No metrics recorded yet. Edit a release record to add data.</p>'
+          : `<div class="mc-table-wrap">
+            <table class="mc-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Universe</th>
+                  <th>Priority</th>
+                  <th>Messages</th>
+                  <th>Unique Chats</th>
+                  <th>Msg / Chat</th>
+                  <th>Snapshot</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sorted.map((r, i) => metricRow(r, i + 1)).join('')}
+              </tbody>
+            </table>
+          </div>`
+        }
+      </div>
+
+      ${noMetrics.length > 0 ? `
+      <div class="mc-metrics-section" style="margin-top:24px;">
+        <h3 class="mc-section-title">⏳ Released — No Metrics Yet
+          <span class="mc-section-count">${noMetrics.length}</span>
+        </h3>
+        <div class="mc-table-wrap">
+          <table class="mc-table">
+            <thead><tr><th>Name</th><th>Universe</th><th>Scheduled</th><th></th></tr></thead>
+            <tbody>
+              ${noMetrics.map(r => `
+                <tr class="mc-row" style="opacity:0.6;">
+                  <td><button class="mc-name-link mc-edit-record" data-record-id="${r.id}">${esc(r.name)}</button></td>
+                  <td>${universeBadge(r.universe)}</td>
+                  <td>${formatDate(r.scheduledDate)}</td>
+                  <td><button class="mc-action-btn mc-edit-record" data-record-id="${r.id}" title="Add metrics">+ Add Metrics</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}`;
+  }
+
+  // ─── Main Render ──────────────────────────────────────────────────────────────
+
+  const CAT_FOR_TAB = {
+    characters: 'character', scenarios: 'scenario',
+    bios: 'bio', messages: 'initial_message', orgs: 'organization'
+  };
+
+  async function renderCurrentTab() {
+    const view = document.getElementById('mission-control-view');
+    if (!view) return;
+
+    const contentEl = document.getElementById('mc-content');
+    if (!contentEl) return;
+
+    // Re-render subtab bar
+    const subtabEl = document.getElementById('mc-subtab-bar');
+    if (subtabEl) subtabEl.innerHTML = subTabBar().replace('<div class="mc-subtab-bar">','').replace('</div>','');
+
+    const tab = state.activeSubTab;
+    let html = '';
+
+    if (tab === 'overview') {
+      html = renderOverview();
+    } else if (CAT_FOR_TAB[tab]) {
+      html = renderAssetTab(CAT_FOR_TAB[tab]);
+    } else if (tab === 'stories') {
+      html = renderStoriesTab();
+    } else if (tab === 'launchpad') {
+      html = renderLaunchPad();
+    } else if (tab === 'metrics') {
+      html = renderMetrics();
+    } else if (tab === 'import') {
+      html = renderImportTab();
+    }
+
+    contentEl.innerHTML = html;
+
+    // Update subtab active class
+    view.querySelectorAll('.mc-subtab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.subtab === tab);
+    });
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────────────────────
+
+  async function init() {
+    await loadAll();
+
+    const view = document.getElementById('mission-control-view');
+    if (!view) return;
+
+    view.innerHTML = `
+      <div class="mc-layout">
+        <div id="mc-subtab-bar" class="mc-subtab-bar">
+          ${subTabBar().replace('<div class="mc-subtab-bar">','').replace('</div>','')}
+        </div>
+        <div id="mc-content" class="mc-content"></div>
+      </div>
+
+      <!-- Record Edit Modal -->
+      <div id="mc-modal-overlay" class="modal-overlay hidden">
+        <div class="modal" style="max-width:520px; width:92%;">
+          <div class="modal-header">
+            <h3 id="mc-modal-title">Edit Record</h3>
+            <button id="mc-modal-cancel" class="btn btn-ghost btn-icon">&times;</button>
+          </div>
+          <div class="modal-body" id="mc-modal-body"></div>
+          <div class="modal-footer">
+            <button id="mc-modal-cancel2" class="btn btn-secondary">Cancel</button>
+            <button id="mc-modal-save" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </div>`;
+
+    // Bind second cancel button
+    view.addEventListener('click', (e) => {
+      if (e.target.id === 'mc-modal-cancel2') closeModal();
+    });
+
+    bindEvents(view);
+    await renderCurrentTab();
+  }
+
+  // ─── Public API ───────────────────────────────────────────────────────────────
+
+  window.MissionControl = { init, renderCurrentTab, loadAll };
+
+})();
