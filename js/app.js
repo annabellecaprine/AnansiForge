@@ -134,6 +134,13 @@
   function switchSidebarTab(tabName) {
     activeSidebarTab = tabName;
     
+    // Deactivate Mission Control if open
+    const btnMC = document.getElementById('btn-mission-control');
+    if (btnMC) btnMC.classList.remove('active');
+    const mcView = document.getElementById('mission-control-view');
+    if (mcView) mcView.style.display = 'none';
+    window.lastViewMC = false;
+
     // Toggle active classes on tab buttons
     tabVault.classList.toggle('active', tabName === 'vault');
     tabProjects.classList.toggle('active', tabName === 'projects');
@@ -151,6 +158,7 @@
       searchInput.placeholder = 'Search compiled projects...';
       refreshProjectsList();
     }
+    showView('welcome-view');
   }
 
   // --- Render Vault Components List ---
@@ -1295,7 +1303,18 @@
         if (!leave) return;
       }
       editorIsDirty = false;
-      showView('welcome-view');
+      if (window.lastViewMC) {
+        window.lastViewMC = false;
+        const btnMC = document.getElementById('btn-mission-control');
+        btnMC?.classList.add('active');
+        const mcView = document.getElementById('mission-control-view');
+        if (mcView) {
+          mcView.style.display = 'block';
+          window.MissionControl.renderCurrentTab();
+        }
+      } else {
+        showView('welcome-view');
+      }
     });
     btnBreakoutBack.addEventListener('click', () => showView('welcome-view'));
     btnAssemblerBack.addEventListener('click', () => showView('welcome-view'));
@@ -1328,11 +1347,13 @@
     // Expose bridge so MissionControl can open the Vault editor
     window.ForgeAppBridge = {
       openEditor: (id) => {
+        window.lastViewMC = true;
         btnMC?.classList.remove('active');
         document.getElementById('mission-control-view').style.display = 'none';
         openComponentEditor(id);
       },
       openEditorNew: (prefill) => {
+        window.lastViewMC = true;
         btnMC?.classList.remove('active');
         document.getElementById('mission-control-view').style.display = 'none';
         // Pre-fill editor fields then open it
