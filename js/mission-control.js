@@ -216,6 +216,23 @@
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // ─── Pipeline Checkbox Cell ───────────────────────────────────────────────────
+
+  function pipelineCheckboxes(pipeline, steps, recordId, isVault) {
+    return steps.map(step => {
+      const checked = pipeline && pipeline[step];
+      const storeType = isVault ? 'vault' : 'record';
+      return `<td class="mc-pipe-cell">
+        <button class="mc-pipe-btn${checked ? ' checked' : ''}"
+          title="${STEP_LABELS[step] || step}"
+          data-id="${recordId}" data-step="${step}" data-store="${storeType}"
+          aria-label="${STEP_LABELS[step] || step}: ${checked ? 'checked' : 'unchecked'}">
+          ${checked ? '✓' : ''}
+        </button>
+      </td>`;
+    }).join('');
+  }
+
   function toolbarHTML(showAddStub = true, showAddRecord = false, recordType = '') {
     const universes = ['DC','Marvel','OC','Mixed','Other'];
     const priorities = ['P1','P2','P3','P4'];
