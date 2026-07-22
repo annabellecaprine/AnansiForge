@@ -219,23 +219,27 @@
 
   async function saveComponent(comp) {
     const db = dbInstance || await initDB();
+    const existing = comp.id ? await getComponent(comp.id) : null;
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
     
     const now = new Date().toISOString();
-    const cat = comp.category || 'character';
+    const cat = comp.category || existing?.category || 'character';
+    const tracker = comp.tracker || existing?.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] };
+
     const record = {
+      ...(existing || {}),
       ...comp,
       id: comp.id || generateId(),
-      name: (comp.name || 'Unnamed Item').trim(),
+      name: (comp.name || existing?.name || 'Unnamed Item').trim(),
       category: cat,
-      lineage: (comp.lineage || '').trim(),
-      scenarios: Array.isArray(comp.scenarios) ? comp.scenarios : [],
-      isTemplate: comp.isTemplate === true,
-      content: comp.content || '',
-      tags: Array.isArray(comp.tags) ? comp.tags : [],
-      tracker: comp.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] },
-      createdAt: comp.createdAt || now,
+      lineage: (comp.lineage !== undefined ? comp.lineage : existing?.lineage || '').trim(),
+      scenarios: Array.isArray(comp.scenarios) ? comp.scenarios : (existing?.scenarios || []),
+      isTemplate: comp.isTemplate !== undefined ? (comp.isTemplate === true) : (existing?.isTemplate === true),
+      content: comp.content !== undefined ? comp.content : (existing?.content || ''),
+      tags: Array.isArray(comp.tags) ? comp.tags : (existing?.tags || []),
+      tracker: tracker,
+      createdAt: comp.createdAt || existing?.createdAt || now,
       modifiedAt: now
     };
     // Ensure old cluster key is not persisted

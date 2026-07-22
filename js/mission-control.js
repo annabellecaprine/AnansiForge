@@ -1116,19 +1116,38 @@ Write-Host "Done! tracker-import.json created."</pre>
         if (store === 'vault') {
           const comp = state.allComponents.find(c => c.id === id);
           if (!comp) return;
-          const pipeline = { ...(comp.tracker?.pipeline || window.ForgeDB.defaultTrackerPipeline(comp.category)) };
-          pipeline[step] = !pipeline[step];
-          await window.ForgeDB.updateVaultTracker(id, { pipeline });
-          await loadAll();
-          await renderCurrentTab();
+          if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+          if (!comp.tracker.pipeline) comp.tracker.pipeline = window.ForgeDB.defaultTrackerPipeline(comp.category);
+
+          comp.tracker.pipeline[step] = !comp.tracker.pipeline[step];
+
+          t.classList.toggle('checked', comp.tracker.pipeline[step]);
+          t.textContent = comp.tracker.pipeline[step] ? '✓' : '';
+
+          const row = t.closest('.mc-row');
+          if (row) {
+            const readinessEl = row.querySelector('.mc-cell-readiness');
+            if (readinessEl) readinessEl.innerHTML = readinessPct(calcReadinessForVault(comp));
+          }
+
+          window.ForgeDB.updateVaultTracker(id, { pipeline: comp.tracker.pipeline });
         } else {
           const rec = state.allTrackerRecords.find(r => r.id === id);
           if (!rec) return;
-          const pipeline = { ...(rec.pipeline || {}) };
-          pipeline[step] = !pipeline[step];
-          await window.ForgeDB.saveTrackerRecord({ ...rec, pipeline });
-          await loadAll();
-          await renderCurrentTab();
+          if (!rec.pipeline) rec.pipeline = {};
+
+          rec.pipeline[step] = !rec.pipeline[step];
+
+          t.classList.toggle('checked', rec.pipeline[step]);
+          t.textContent = rec.pipeline[step] ? '✓' : '';
+
+          const row = t.closest('.mc-row');
+          if (row) {
+            const readinessEl = row.querySelector('.mc-cell-readiness');
+            if (readinessEl) readinessEl.innerHTML = readinessPct(calcReadinessForRecord(rec));
+          }
+
+          window.ForgeDB.saveTrackerRecord({ ...rec });
         }
         return;
       }
@@ -1162,20 +1181,47 @@ Write-Host "Done! tracker-import.json created."</pre>
           if (saved) return;
           saved = true;
           const newVal = input.value.trim();
+
+          const span = document.createElement('span');
+          span.className = 'mc-editable';
+          span.dataset.field = field;
+          span.dataset.id = id;
+          span.dataset.store = store;
+          span.title = 'Click to edit';
+          span.textContent = newVal || '—';
+
+          input.replaceWith(span);
+
           if (store === 'vault') {
-            await window.ForgeDB.updateVaultTracker(id, { [field]: newVal });
+            const comp = state.allComponents.find(c => c.id === id);
+            if (comp) {
+              if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+              comp.tracker[field] = newVal;
+            }
+            window.ForgeDB.updateVaultTracker(id, { [field]: newVal });
           } else {
             const rec = state.allTrackerRecords.find(r => r.id === id);
-            if (rec) await window.ForgeDB.saveTrackerRecord({ ...rec, [field]: newVal });
+            if (rec) {
+              rec[field] = newVal;
+              window.ForgeDB.saveTrackerRecord(rec);
+            }
           }
-          await loadAll();
-          await renderCurrentTab();
         };
 
         input.addEventListener('blur', commitEdit);
         input.addEventListener('keydown', (ke) => {
           if (ke.key === 'Enter') { input.blur(); }
-          if (ke.key === 'Escape') { saved = true; input.value = currentVal; renderCurrentTab(); }
+          if (ke.key === 'Escape') {
+            saved = true;
+            const span = document.createElement('span');
+            span.className = 'mc-editable';
+            span.dataset.field = field;
+            span.dataset.id = id;
+            span.dataset.store = store;
+            span.title = 'Click to edit';
+            span.textContent = currentVal || '—';
+            input.replaceWith(span);
+          }
         });
         return;
       }
@@ -1259,11 +1305,15 @@ Write-Host "Done! tracker-import.json created."</pre>
     });
 
     // Filter inputs + live derived field
-    container.addEventListener('input', async (e) => {
+    let searchDebounceTimer = null;
+    container.addEventListener('input', (e) => {
       const t = e.target;
       if (t.id === 'mc-search') {
         state.filters.search = t.value;
-        await renderCurrentTab();
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          renderCurrentTab();
+        }, 120);
       }
       // Live Msg/Chat derivation in release modal
       if (t.id === 'mc-rec-unique-chats' || t.id === 'mc-rec-messages') {
@@ -1285,16 +1335,28 @@ Write-Host "Done! tracker-import.json created."</pre>
       if (t.matches('.mc-priority-select') && t.dataset.store === 'vault') {
         const comp = state.allComponents.find(c => c.id === t.dataset.id);
         if (comp) {
-          await window.ForgeDB.updateVaultTracker(t.dataset.id, { priority: t.value || null });
-          await loadAll();
+          if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+          comp.tracker.priority = t.value || null;
+          window.ForgeDB.updateVaultTracker(t.dataset.id, { priority: t.value || null });
         }
         return;
       }
 
       // Universe select inline
       if (t.matches('.mc-universe-select') && t.dataset.store === 'vault') {
-        await window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
-        await loadAll();
+        const comp = state.allComponents.find(c => c.id === t.dataset.id);
+        if (comp) {
+          if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+          comp.tracker.universe = t.value || '';
+          
+          const row = t.closest('.mc-row');
+          if (row) {
+            const uniTd = row.children[1];
+            if (uniTd) uniTd.innerHTML = universeBadge(t.value);
+          }
+
+          window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
+        }
         return;
       }
 
