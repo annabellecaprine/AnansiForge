@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v5
+ * Database: "anansi-forge" v7
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 6;
+  const DB_VERSION = 7;
   
   let dbInstance = null;
 
@@ -169,6 +169,32 @@
           trStore.createIndex('name', 'name', { unique: false });
           trStore.createIndex('updatedAt', 'updatedAt', { unique: false });
         }
+
+        // 7. Component Versions
+        if (!db.objectStoreNames.contains('component_versions')) {
+          const cvStore = db.createObjectStore('component_versions', { keyPath: 'id' });
+          cvStore.createIndex('componentId', 'componentId', { unique: false });
+          cvStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+        
+        // 8. Activity Log
+        if (!db.objectStoreNames.contains('activity_log')) {
+          const alStore = db.createObjectStore('activity_log', { keyPath: 'id' });
+          alStore.createIndex('timestamp', 'timestamp', { unique: false });
+          alStore.createIndex('targetType', 'targetType', { unique: false });
+        }
+
+        // 9. Snapshots
+        if (!db.objectStoreNames.contains('snapshots')) {
+          const snapStore = db.createObjectStore('snapshots', { keyPath: 'id' });
+          snapStore.createIndex('date', 'date', { unique: true });
+        }
+
+        // 10. Auto Backups
+        if (!db.objectStoreNames.contains('auto_backups')) {
+          const backupStore = db.createObjectStore('auto_backups', { keyPath: 'id' });
+          backupStore.createIndex('createdAt', 'createdAt', { unique: false });
+        }
       };
 
       request.onsuccess = async (event) => {
@@ -246,14 +272,38 @@
     delete record.cluster;
     
     await promisify(store.put(record));
+
+    // Activity Log
+    logActivity({
+      action: existing ? 'edited' : 'created',
+      targetType: 'component',
+      targetId: record.id,
+      targetName: record.name,
+      details: record.category
+    });
+
+    // Version History
+    if (existing) {
+      saveComponentVersion(record.id, {
+        name: record.name,
+        content: record.content,
+        category: record.category,
+        tags: record.tags,
+        tracker: record.tracker
+      });
+    }
+
     return record;
   }
 
   async function deleteComponent(id) {
     const db = dbInstance || await initDB();
+    const comp = await getComponent(id);
+    const name = comp ? comp.name : 'Unknown';
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
-    return promisify(store.delete(id));
+    await promisify(store.delete(id));
+    logActivity({ action: 'deleted', targetType: 'component', targetId: id, targetName: name });
   }
 
   // --- Project CRUD ---
@@ -468,7 +518,265 @@
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
     await promisify(store.put(comp));
+    
+    logActivity({
+      action: 'tracker_updated',
+      targetType: 'component',
+      targetId: id,
+      targetName: comp.name,
+      details: Object.keys(trackerPatch).join(', ')
+    });
+    
     return comp;
+  }
+
+  // --- Version History ---
+  async function saveComponentVersion(componentId, snapshot) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('component_versions', 'readwrite');
+    const store = tx.objectStore('component_versions');
+    const record = { id: generateId(), componentId, ...snapshot, timestamp: new Date().toISOString() };
+    await promisify(store.put(record));
+    deleteOldVersions(componentId, 10);
+  }
+
+  async function getComponentVersions(componentId) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('component_versions', 'readonly');
+    const store = tx.objectStore('component_versions');
+    const index = store.index('componentId');
+    const results = await new Promise((resolve, reject) => {
+      const req = index.getAll(componentId);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  async function deleteOldVersions(componentId, keepCount) {
+    const versions = await getComponentVersions(componentId);
+    if (versions.length <= keepCount) return;
+    const db = dbInstance || await initDB();
+    const toDelete = versions.slice(keepCount);
+    const tx = db.transaction('component_versions', 'readwrite');
+    const store = tx.objectStore('component_versions');
+    for (const v of toDelete) {
+      store.delete(v.id);
+    }
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  // --- Activity Logging ---
+  async function logActivity(entry) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('activity_log', 'readwrite');
+    const store = tx.objectStore('activity_log');
+    const record = { id: generateId(), ...entry, timestamp: new Date().toISOString() };
+    await promisify(store.put(record));
+    pruneActivityLog(500); // fire and forget
+  }
+
+  async function getRecentActivity(limit = 50) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('activity_log', 'readonly');
+    const store = tx.objectStore('activity_log');
+    const index = store.index('timestamp');
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < limit) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  async function pruneActivityLog(keepCount = 500) {
+    const db = dbInstance || await initDB();
+    const txRead = db.transaction('activity_log', 'readonly');
+    const storeRead = txRead.objectStore('activity_log');
+    const index = storeRead.index('timestamp');
+    const entries = await new Promise((resolve, reject) => {
+      const req = index.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    if (entries.length <= keepCount) return;
+    const toDelete = entries.slice(keepCount);
+    const txDelete = db.transaction('activity_log', 'readwrite');
+    const storeDelete = txDelete.objectStore('activity_log');
+    for (const entry of toDelete) {
+      storeDelete.delete(entry.id);
+    }
+  }
+
+  // --- Snapshots ---
+  async function captureSnapshot() {
+    const components = await getAllComponents();
+    let publishedCount = 0;
+    const byCategory = {};
+    const universes = {};
+    
+    components.forEach(c => {
+      if (c.tracker && c.tracker.pipeline && c.tracker.pipeline.published) {
+        publishedCount++;
+      }
+      const cat = c.category || 'character';
+      if (!byCategory[cat]) byCategory[cat] = { total: 0, published: 0 };
+      byCategory[cat].total++;
+      if (c.tracker && c.tracker.pipeline && c.tracker.pipeline.published) {
+        byCategory[cat].published++;
+      }
+      if (c.tracker && c.tracker.universe) {
+        const u = c.tracker.universe;
+        universes[u] = (universes[u] || 0) + 1;
+      }
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const db = dbInstance || await initDB();
+    
+    // Check if snapshot for today exists
+    const txCheck = db.transaction('snapshots', 'readonly');
+    const storeCheck = txCheck.objectStore('snapshots');
+    const index = storeCheck.index('date');
+    const existing = await new Promise((resolve, reject) => {
+      const req = index.get(dateStr);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    
+    if (existing) return existing;
+
+    const snapshot = {
+      id: generateId(),
+      date: dateStr,
+      totalItems: components.length,
+      publishedCount,
+      byCategory,
+      universes,
+      timestamp: new Date().toISOString()
+    };
+    
+    await saveSnapshot(snapshot);
+    return snapshot;
+  }
+
+  async function getSnapshots(limit = 12) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('snapshots', 'readonly');
+    const store = tx.objectStore('snapshots');
+    const index = store.index('date');
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < limit) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  async function saveSnapshot(snapshot) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('snapshots', 'readwrite');
+    const store = tx.objectStore('snapshots');
+    return promisify(store.put(snapshot));
+  }
+
+  // --- Auto-Backup ---
+  async function saveAutoBackup(bundleJSON) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('auto_backups', 'readwrite');
+    const store = tx.objectStore('auto_backups');
+    const record = { id: generateId(), bundle: bundleJSON, createdAt: new Date().toISOString() };
+    await promisify(store.put(record));
+    
+    const all = await getAllAutoBackups();
+    if (all.length > 3) {
+      const toDelete = all.slice(3);
+      const txDelete = db.transaction('auto_backups', 'readwrite');
+      const storeDelete = txDelete.objectStore('auto_backups');
+      for (const b of toDelete) {
+        storeDelete.delete(b.id);
+      }
+    }
+  }
+
+  async function getLatestAutoBackup() {
+    const all = await getAllAutoBackups();
+    return all.length > 0 ? all[0] : null;
+  }
+
+  async function getAllAutoBackups() {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('auto_backups', 'readonly');
+    const store = tx.objectStore('auto_backups');
+    const index = store.index('createdAt');
+    const results = await new Promise((resolve, reject) => {
+      const req = index.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return results.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  // --- Duplicate Detection ---
+  function normalizeForComparison(str) {
+    if (!str) return '';
+    return str.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  }
+
+  function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
+  function findSimilarComponents(name, components, threshold = 0.8) {
+    const normName = normalizeForComparison(name);
+    if (!normName) return [];
+    
+    return components.filter(c => {
+      const normC = normalizeForComparison(c.name);
+      if (!normC) return false;
+      const dist = levenshteinDistance(normName, normC);
+      const maxLen = Math.max(normName.length, normC.length);
+      const sim = 1 - (dist / maxLen);
+      return sim >= threshold;
+    });
   }
 
   // --- Vault Backup / Restore ---
@@ -478,27 +786,43 @@
     const projects       = await getAllProjects();
     const personas       = await getAllPersonas();
     const trackerRecords = await getAllTrackerRecords();
+    
+    let component_versions = [];
+    let activity_log = [];
+    try {
+      const db = dbInstance || await initDB();
+      const tx = db.transaction(['component_versions', 'activity_log'], 'readonly');
+      component_versions = await promisify(tx.objectStore('component_versions').getAll());
+      activity_log = await promisify(tx.objectStore('activity_log').getAll());
+    } catch (e) {
+      console.warn('Could not export versions/activity', e);
+    }
+
     return {
-      _version: 2,
+      _version: 3,
       _exportedAt: new Date().toISOString(),
       components,
       projects,
       personas,
-      trackerRecords
+      trackerRecords,
+      component_versions,
+      activity_log
     };
   }
 
   async function importVault(bundle) {
-    if (!bundle || (bundle._version !== 1 && bundle._version !== 2)) throw new Error('Unrecognised backup format.');
+    if (!bundle || (bundle._version !== 1 && bundle._version !== 2 && bundle._version !== 3)) throw new Error('Unrecognised backup format.');
     const db = dbInstance || await initDB();
 
-    const stores = ['vault_components', 'projects', 'personas', 'tracker_records'];
-    const keys   = ['components',       'projects',  'personas', 'trackerRecords'];
+    const stores = ['vault_components', 'projects', 'personas', 'tracker_records', 'component_versions', 'activity_log'];
+    const keys   = ['components',       'projects',  'personas', 'trackerRecords',  'component_versions', 'activity_log'];
 
     for (let i = 0; i < stores.length; i++) {
       const storeName = stores[i];
       const records   = bundle[keys[i]] || [];
       if (!records.length) continue;
+
+      if (!db.objectStoreNames.contains(storeName)) continue;
 
       await new Promise((resolve, reject) => {
         const tx    = db.transaction(storeName, 'readwrite');
@@ -539,6 +863,20 @@
     updateVaultTracker,
     defaultTrackerPipeline,
     exportVault,
-    importVault
+    importVault,
+    saveComponentVersion,
+    getComponentVersions,
+    deleteOldVersions,
+    logActivity,
+    getRecentActivity,
+    pruneActivityLog,
+    captureSnapshot,
+    getSnapshots,
+    saveSnapshot,
+    saveAutoBackup,
+    getLatestAutoBackup,
+    getAllAutoBackups,
+    findSimilarComponents,
+    levenshteinDistance
   };
 })();

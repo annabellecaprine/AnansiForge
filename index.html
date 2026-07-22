@@ -274,6 +274,7 @@
           </button>
           <h2 id="editor-title">Create Vault Component</h2>
           <div class="view-header-actions">
+            <button id="btn-version-history" class="btn btn-ghost" style="display:none;" title="View component version history">📜 History</button>
             <button id="btn-save-component" class="btn btn-primary">Save to Vault</button>
             <button id="btn-delete-component" class="btn btn-danger" style="display:none;">Delete</button>
           </div>
@@ -423,6 +424,7 @@
                 <strong id="editor-token-count">0</strong>
               </div>
             </div>
+            <div id="editor-dep-container" style="margin-top: 12px;"></div>
             <button id="btn-create-variant" class="btn btn-secondary" style="display:none;" title="Create a scenario variant based on this template">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Create Variant
@@ -744,6 +746,46 @@
     </div>
   </div>
 
+  <!-- VERSION HISTORY MODAL -->
+  <div id="version-history-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 650px; width: 92%;">
+      <div class="modal-header">
+        <h3>📜 Component Version History</h3>
+        <button onclick="document.getElementById('version-history-modal').classList.add('hidden')" class="btn btn-ghost btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:12px;">
+          Saved snapshots for this component (keeps up to last 10 versions). Click <strong>Restore</strong> to revert component content.
+        </p>
+        <div id="version-history-list" class="version-history-list" style="max-height:380px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="document.getElementById('version-history-modal').classList.add('hidden')" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KEYBOARD SHORTCUTS HELP MODAL -->
+  <div id="kbd-shortcuts-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 500px; width: 90%;">
+      <div class="modal-header">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <button onclick="document.getElementById('kbd-shortcuts-modal').classList.add('hidden')" class="btn btn-ghost btn-icon">&times;</button>
+      </div>
+      <div class="modal-body" style="font-size:0.85rem;">
+        <div class="kbd-grid" style="display:grid; grid-template-columns: 120px 1fr; gap:8px 12px; align-items:center;">
+          <kbd class="omni-kbd">Ctrl + K</kbd> <span>Global Omni-Search (Components, Projects, Releases, Stories)</span>
+          <kbd class="omni-kbd">?</kbd> <span>Toggle this shortcuts guide</span>
+          <kbd class="omni-kbd">ESC</kbd> <span>Close active modal or search overlay</span>
+          <kbd class="omni-kbd">N</kbd> <span>New Concept Stub (when in Mission Control)</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="document.getElementById('kbd-shortcuts-modal').classList.add('hidden')" class="btn btn-secondary">Got it</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATIONS -->
   <div id="toast-container" class="toast-container"></div>
 
@@ -752,14 +794,15 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
-  <script src="js/db.js?v=2.4"></script>
-  <script src="js/png-handler.js?v=2.4"></script>
-  <script src="js/breakout.js?v=2.4"></script>
-  <script src="js/llm.js?v=2.4"></script>
-  <script src="js/parlor.js?v=2.4"></script>
-  <script src="js/assembler.js?v=2.4"></script>
-  <script src="js/sandbox.js?v=2.4"></script>
-  <script src="js/app.js?v=2.4"></script>
-  <script src="js/mission-control.js?v=2.4"></script>
+  <script src="js/db.js?v=3.0"></script>
+  <script src="js/png-handler.js?v=3.0"></script>
+  <script src="js/breakout.js?v=3.0"></script>
+  <script src="js/llm.js?v=3.0"></script>
+  <script src="js/parlor.js?v=3.0"></script>
+  <script src="js/assembler.js?v=3.0"></script>
+  <script src="js/sandbox.js?v=3.0"></script>
+  <script src="js/omni-search.js?v=3.0"></script>
+  <script src="js/app.js?v=3.0"></script>
+  <script src="js/mission-control.js?v=3.0"></script>
 </body>
 </html>

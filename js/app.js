@@ -226,17 +226,19 @@
         return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate;
       });
 
-      // Apply Sorting
+      // Apply Sorting (Pinned components first)
       const sortBy = filterSort.value;
       filtered.sort((a, b) => {
+        const isAPinned = a.tracker?.pinned === true ? 1 : 0;
+        const isBPinned = b.tracker?.pinned === true ? 1 : 0;
+        if (isAPinned !== isBPinned) return isBPinned - isAPinned; // pinned items first
+
         if (sortBy === 'name-asc') {
           return a.name.localeCompare(b.name);
         } else if (sortBy === 'name-desc') {
           return b.name.localeCompare(a.name);
-        } else {
-          const dateA = a.modifiedAt || 0;
-          const dateB = b.modifiedAt || 0;
-          return dateB - dateA;
+        } else { // modified-desc default
+          return new Date(b.modifiedAt || 0) - new Date(a.modifiedAt || 0);
         }
       });
 
@@ -267,11 +269,14 @@
 
       chunk.forEach(comp => {
         const item = document.createElement('div');
-        item.className = 'vault-item';
+        const isPinned = comp.tracker?.pinned === true;
+        item.className = `vault-item${isPinned ? ' vault-item--pinned' : ''}`;
         
         const templateBadge = comp.isTemplate 
           ? `<span class="template-badge">⭐ Template</span>` 
           : '';
+
+        const pinIcon = isPinned ? `<span class="pin-badge" title="Pinned">📌</span>` : '';
 
         const lineageLabel = comp.lineage 
           ? `<span class="vault-item-lineage">🔗 ${escapeHTML(comp.lineage)}</span>` 
@@ -283,7 +288,7 @@
 
         item.innerHTML = `
           <div class="vault-item-header">
-            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${escapeHTML(comp.name)}</span>
+            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${pinIcon}${escapeHTML(comp.name)}</span>
             <div style="display:flex; gap:4px; align-items:center;">
               ${templateBadge}
               <span class="vault-item-category ${comp.category}">${comp.category}</span>
@@ -293,11 +298,19 @@
           <div class="vault-item-footer">
             ${lineageLabel}
             <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost btn-icon btn-sm btn-pin-toggle" title="${isPinned ? 'Unpin' : 'Pin'}" style="padding:2px 6px;">${isPinned ? '📌' : '☆'}</button>
               <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
               <button class="btn btn-primary btn-icon btn-sm btn-stage" title="Stage for Assembly" style="padding:2px 6px;">＋</button>
             </div>
           </div>
         `;
+
+        item.querySelector('.btn-pin-toggle').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const newVal = !isPinned;
+          await window.ForgeDB.updateVaultTracker(comp.id, { pinned: newVal });
+          refreshVaultList();
+        });
 
         item.querySelector('.btn-edit').addEventListener('click', (e) => {
           e.stopPropagation();
@@ -565,8 +578,18 @@
         btnCreateVariant.style.display = comp.isTemplate ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
         updateTokenCount();
+
+        // Load Dependency Map (projects referencing this component)
+        await loadComponentDependencies(id);
       }
+    } else {
+      const depContainer = document.getElementById('editor-dep-container');
+      if (depContainer) depContainer.innerHTML = '';
     }
+
+    // Toggle Version History button visibility
+    const btnHistory = document.getElementById('btn-version-history');
+    if (btnHistory) btnHistory.style.display = id ? 'inline-flex' : 'none';
 
     if (compCategorySelect.value === 'character' || compCategorySelect.value === 'scenario') {
       editorTabsContainer.style.display = 'flex';
@@ -575,6 +598,38 @@
 
     showView('editor-view');
     editorIsDirty = false;  // fresh open — nothing changed yet
+  }
+
+  // Load projects using this component for Dependency Map
+  async function loadComponentDependencies(compTargetId) {
+    const depContainer = document.getElementById('editor-dep-container');
+    if (!depContainer) return;
+
+    try {
+      const allProjects = await window.ForgeDB.getAllProjects();
+      const matchingProjects = allProjects.filter(p => (p.componentIds || []).includes(compTargetId));
+
+      if (matchingProjects.length === 0) {
+        depContainer.innerHTML = `<div class="dep-panel-empty">📦 Used in 0 Projects</div>`;
+        return;
+      }
+
+      depContainer.innerHTML = `
+        <div class="dep-panel">
+          <div class="dep-panel-header">📦 Used in ${matchingProjects.length} Project${matchingProjects.length > 1 ? 's' : ''}</div>
+          <div class="dep-panel-list">
+            ${matchingProjects.map(p => `
+              <div class="dep-item">
+                <span class="dep-item-name">🤖 ${esc(p.name)}</span>
+                <button class="btn btn-ghost btn-sm dep-open-btn" data-project-id="${p.id}">Open ↗</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   async function saveComponentForm() {
@@ -620,6 +675,21 @@
     if (!name || !content) {
       showToast('Name and Content are required fields.', 'error');
       return;
+    }
+
+    // Duplicate / Similarity Detection check for new components
+    if (!editingComponentId && window.ForgeDB?.findSimilarComponents) {
+      try {
+        const allComps = await window.ForgeDB.getAllComponents();
+        const similars = window.ForgeDB.findSimilarComponents(name, allComps, 0.85);
+        if (similars.length > 0) {
+          const matchNames = similars.map(s => s.name).join(', ');
+          const confirmProceed = confirm(`⚠️ Warning: Highly similar component(s) already exist in your Vault: "${matchNames}". Save anyway?`);
+          if (!confirmProceed) return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     const tags = compTagsInput.value.split(',')
@@ -1365,6 +1435,81 @@
       });
     }
 
+    // Version History Drawer Handler
+    const btnVersionHistory = document.getElementById('btn-version-history');
+    if (btnVersionHistory) {
+      btnVersionHistory.addEventListener('click', async () => {
+        if (!editingComponentId) return;
+        const modal = document.getElementById('version-history-modal');
+        const list = document.getElementById('version-history-list');
+        if (!modal || !list) return;
+
+        list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Loading version history…</div>';
+        modal.classList.remove('hidden');
+
+        try {
+          const versions = await window.ForgeDB.getComponentVersions(editingComponentId);
+          if (versions.length === 0) {
+            list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No prior versions recorded for this component yet.</div>';
+            return;
+          }
+
+          list.innerHTML = versions.map((v, idx) => `
+            <div class="version-card">
+              <div class="version-card-header">
+                <strong>Version #${versions.length - idx}</strong> — ${new Date(v.timestamp).toLocaleString()}
+                <button class="btn btn-accent btn-sm btn-restore-version" data-version-id="${v.id}">Restore</button>
+              </div>
+              <div class="version-card-meta">Category: ${v.category} | Name: ${esc(v.name)}</div>
+              <pre class="version-card-content">${esc((v.content || '').substring(0, 200))}${v.content?.length > 200 ? '…' : ''}</pre>
+            </div>
+          `).join('');
+
+          list.querySelectorAll('.btn-restore-version').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const ver = versions.find(v => v.id === btn.dataset.versionId);
+              if (ver) {
+                compNameInput.value = ver.name;
+                compContentInput.value = ver.content;
+                compCategorySelect.value = ver.category;
+                editorIsDirty = true;
+                showToast(`Restored version from ${new Date(ver.timestamp).toLocaleTimeString()}`, 'success');
+                modal.classList.add('hidden');
+              }
+            });
+          });
+        } catch (err) {
+          console.error(err);
+          list.innerHTML = '<div style="color:var(--danger); padding:10px;">Failed to load versions.</div>';
+        }
+      });
+    }
+
+    // Auto-Backup Timer (IndexedDB target as requested)
+    function initAutoBackupTimer() {
+      const intervalMs = 30 * 60 * 1000; // 30 minutes
+      setInterval(async () => {
+        try {
+          const bundle = await window.ForgeDB.exportVault();
+          await window.ForgeDB.saveAutoBackup(JSON.stringify(bundle));
+          console.log('[Auto-Backup] Saved silent IndexedDB vault backup.');
+        } catch (e) {
+          console.error('[Auto-Backup] Error during silent backup:', e);
+        }
+      }, intervalMs);
+    }
+    initAutoBackupTimer();
+
+    // Keyboard Shortcuts Help Modal Toggle (?)
+    document.addEventListener('keydown', (e) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+      if (!isInput && e.key === '?') {
+        const kbdModal = document.getElementById('kbd-shortcuts-modal');
+        if (kbdModal) kbdModal.classList.toggle('hidden');
+      }
+    });
+
     // Expose bridge so MissionControl can open the Vault editor
     window.ForgeAppBridge = {
       openEditor: (id) => {
@@ -1395,6 +1540,9 @@
 
     // Init Mission Control (lazy — only renders when opened)
     if (window.MissionControl) await window.MissionControl.init();
+
+    // Init Omni-Search module
+    if (window.OmniSearch) window.OmniSearch.init();
 
     console.log('Anansi Forge fully initialized.');
   }

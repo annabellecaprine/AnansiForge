@@ -49,6 +49,8 @@
     recordMap: new Map(),          // O(1) id lookup
     pageSize: 50,                  // 50, 100, 250, or 'all'
     currentPage: 1,
+    selectedIds: new Set(),        // bulk operations selection
+    focusedRowIndex: -1,           // keyboard nav focused row
     sortDir: 'desc',               // 'desc' = most ready first
     groupByPriority: false,
     filters: { search: '', universe: 'all', priority: 'all', tag: '' },
@@ -140,6 +142,11 @@
     state.allProjects = projects || [];
     state.compMap = new Map(comps.map(c => [c.id, c]));
     state.recordMap = new Map(records.map(r => [r.id, r]));
+
+    // Auto-capture daily burndown snapshot when Mission Control is loaded
+    if (window.ForgeDB?.captureSnapshot) {
+      window.ForgeDB.captureSnapshot().catch(err => console.error(err));
+    }
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -253,25 +260,39 @@
     </div>`;
   }
 
+  // ─── Bulk Operations Toolbar ──────────────────────────────────────────────────
+
+  function bulkToolbarHTML() {
+    const count = state.selectedIds.size;
+    if (count === 0) return '';
+    return `<div class="mc-bulk-toolbar">
+      <div class="mc-bulk-info">✓ <strong>${count}</strong> selected</div>
+      <div class="mc-bulk-actions">
+        <select id="mc-bulk-universe" class="mc-filter-select mc-bulk-select">
+          <option value="">Set Universe…</option>
+          ${['DC','Marvel','OC','Mixed','Other'].map(u => `<option value="${u}">${u}</option>`).join('')}
+        </select>
+        <select id="mc-bulk-priority" class="mc-filter-select mc-bulk-select">
+          <option value="">Set Priority…</option>
+          ${['P1','P2','P3','P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
+          <option value="__clear__">Clear Priority</option>
+        </select>
+        <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-bulk-pin">📌 Pin All</button>
+        <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-bulk-unpin">Unpin All</button>
+        <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-bulk-deselect">✕ Deselect</button>
+      </div>
+    </div>`;
+  }
+
   // ─── Overview View ────────────────────────────────────────────────────────────
 
-  function renderOverview() {
+  async function renderOverview() {
     const comps = state.allComponents;
     const records = state.allTrackerRecords;
 
     const byCategory = (cat) => comps.filter(c => c.category === cat);
-    const countPublished = (items) => items.filter(c => c.tracker?.pipeline?.published).length;
-    const countComplete = (items) => items.filter(c => c.tracker?.pipeline?.complete).length;
-    const countInProgress = (items) => items.filter(c => {
-      const p = c.tracker?.pipeline || {};
-      return p.generated && !p.complete;
-    }).length;
-
     const chars = byCategory('character');
     const scenarios = byCategory('scenario');
-    const orgs = byCategory('organization');
-    const bios = byCategory('bio');
-    const msgs = byCategory('initial_message');
     const stubs = records.filter(r => r.assetType === 'concept_stub' && !r.promotedToVaultId);
     const stories = records.filter(r => r.assetType === 'story');
     const releases = records.filter(r => r.assetType === 'release');
@@ -290,8 +311,17 @@
     // Priority queue: P1 items not yet complete
     const p1Incomplete = comps.filter(c => c.tracker?.priority === 'P1' && !c.tracker?.pipeline?.complete);
 
-    // Recent activity
-    const recent = [...comps].sort((a,b) => (b.modifiedAt||'').localeCompare(a.modifiedAt||'')).slice(0, 8);
+    // Fetch real activity log from IndexedDB
+    let activityLogs = [];
+    if (window.ForgeDB?.getRecentActivity) {
+      try { activityLogs = await window.ForgeDB.getRecentActivity(12); } catch (e) { console.error(e); }
+    }
+
+    // Fetch burndown snapshots
+    let snapshots = [];
+    if (window.ForgeDB?.getSnapshots) {
+      try { snapshots = await window.ForgeDB.getSnapshots(6); } catch (e) { console.error(e); }
+    }
 
     const kpiCard = (icon, label, value, sub = '', color = 'var(--accent)') =>
       `<div class="mc-kpi-card">
@@ -311,6 +341,17 @@
       return Object.values(p).some(v => v) && !p.complete;
     }).length;
 
+    const formatTimeAgo = (isoStr) => {
+      if (!isoStr) return 'recently';
+      const diffSec = Math.floor((new Date() - new Date(isoStr)) / 1000);
+      if (diffSec < 60) return 'just now';
+      if (diffSec < 3600) return `${Math.floor(diffSec/60)}m ago`;
+      if (diffSec < 86400) return `${Math.floor(diffSec/3600)}h ago`;
+      return `${Math.floor(diffSec/86400)}d ago`;
+    };
+
+    const actionIcons = { created: '✨', edited: '✏️', deleted: '🗑️', tracker_updated: '🔧', record_saved: '📝', project_compiled: '🤖' };
+
     return `<div class="mc-overview">
       <div class="mc-kpi-grid">
         ${kpiCard('🗄', 'Total Vault Items', totalVault, `${chars.length} chars · ${scenarios.length} scenarios`)}
@@ -319,6 +360,28 @@
         ${kpiCard('💡', 'Concept Stubs', stubs.length, 'items queued to build', 'var(--text-muted)')}
         ${kpiCard('🚀', 'Ready to Launch', readyToLaunch.length, 'releases fully pre-checked', '#f59e0b')}
         ${kpiCard('📖', 'Stories', stories.length, `${stories.filter(s=>s.pipeline?.published).length} published`)}
+      </div>
+
+      <!-- Pipeline Burndown Progress Chart -->
+      <div class="mc-overview-panel mc-burndown-panel" style="margin-bottom:1.25rem;">
+        <h3 class="mc-panel-title">📈 Pipeline Burndown — Progress History</h3>
+        ${snapshots.length === 0
+          ? '<p class="mc-empty-state">Snapshot history recording active. Returns snapshots on future visits!</p>'
+          : `<div class="mc-burndown-chart">
+              ${snapshots.map(s => {
+                const tot = s.data?.totalItems || 1;
+                const pub = s.data?.publishedCount || 0;
+                const pct = Math.round(pub / tot * 100);
+                return `<div class="mc-burndown-row">
+                  <span class="mc-burndown-date">${s.date || 'Today'}</span>
+                  <div class="mc-burndown-bar-wrap">
+                    <div class="mc-burndown-bar" style="width:${pct}%"></div>
+                  </div>
+                  <span class="mc-burndown-pct">${pct}% (${pub}/${tot})</span>
+                </div>`;
+              }).join('')}
+            </div>`
+        }
       </div>
 
       <div class="mc-overview-grid">
@@ -367,15 +430,22 @@
           }
         </div>
 
+        <!-- Activity Feed Timeline -->
         <div class="mc-overview-panel">
-          <h3 class="mc-panel-title">🕐 Recently Modified</h3>
-          <div class="mc-recent-list">
-            ${recent.map(c => `
-              <div class="mc-recent-row">
-                <span class="mc-recent-name">${esc(c.name)}</span>
-                <span class="mc-recent-cat">${CATEGORY_LABELS[c.category] || c.category}</span>
-                <span class="mc-recent-date">${formatDate(c.modifiedAt)}</span>
-              </div>`).join('')}
+          <h3 class="mc-panel-title">📜 Activity Feed Timeline</h3>
+          <div class="mc-activity-feed">
+            ${activityLogs.length === 0
+              ? '<p class="mc-empty-state">No recent activity logged yet.</p>'
+              : activityLogs.map(log => `
+                <div class="mc-activity-entry">
+                  <span class="mc-activity-icon">${actionIcons[log.action] || '📌'}</span>
+                  <div class="mc-activity-details">
+                    <span class="mc-activity-target">${esc(log.targetName || 'Item')}</span>
+                    <span class="mc-activity-action">${esc(log.action.replace('_', ' '))} ${log.details ? `(${esc(log.details)})` : ''}</span>
+                  </div>
+                  <span class="mc-activity-time">${formatTimeAgo(log.timestamp)}</span>
+                </div>`).join('')
+            }
           </div>
         </div>
       </div>
@@ -474,10 +544,12 @@
 
       ${toolbarHTML(true, false)}
 
+      ${bulkToolbarHTML()}
       <div class="mc-table-wrap">
         <table class="mc-table">
           <thead>
             <tr>
+              <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
               <th>Name</th>
               <th>Universe</th>
               <th>Project</th>
@@ -490,7 +562,7 @@
           </thead>
           <tbody>
             ${stubRows}
-            ${rows || `<tr><td colspan="${steps.length+8}" class="mc-empty-state">No ${CATEGORY_LABELS[category]||category} tracked yet. Add a Concept to start.</td></tr>`}
+            ${rows || `<tr><td colspan="${steps.length+9}" class="mc-empty-state">No ${CATEGORY_LABELS[category]||category} tracked yet. Add a Concept to start.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -502,10 +574,17 @@
     const score = calcReadinessForVault(comp);
     const tags = [...(comp.tags||[]), ...(tracker.trackerTags||[])].filter(Boolean);
 
-    return `<tr class="mc-row" data-id="${comp.id}">
+    const isPinned = tracker.pinned;
+    const depCount = state.allProjects.filter(p => (p.componentIds || []).includes(comp.id)).length;
+    const isSelected = state.selectedIds.has(comp.id);
+
+    return `<tr class="mc-row${isPinned ? ' mc-row--pinned' : ''}${isSelected ? ' mc-row--selected' : ''}" data-id="${comp.id}" data-universe="${esc(tracker.universe || '')}">
+      <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${comp.id}" ${isSelected ? 'checked' : ''}></td>
       <td class="mc-cell-name">
         <button class="mc-name-link" data-vault-id="${comp.id}" title="Edit in Vault">${esc(comp.name)}</button>
         ${comp.isTemplate ? '<span class="mc-template-star" title="Golden Template">⭐</span>' : ''}
+        ${isPinned ? '<span class="mc-pin-icon" title="Pinned">📌</span>' : ''}
+        ${depCount > 0 ? `<span class="mc-dep-badge" title="Used in ${depCount} project${depCount>1?'s':''}">📦 ${depCount}</span>` : ''}
       </td>
       <td>${universeBadge(tracker.universe)}</td>
       <td class="mc-cell-project">
@@ -521,6 +600,7 @@
       <td class="mc-cell-tags">${tags.slice(0,3).map(t=>tagChip(t, t===state.activeTagFilter)).join('')}${tags.length>3?`<span class="mc-more-tags">+${tags.length-3}</span>`:''}</td>
       <td class="mc-cell-readiness">${readinessPct(score)}</td>
       <td class="mc-cell-actions">
+        <button class="mc-action-btn mc-pin-toggle" data-id="${comp.id}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '📌' : '☆'}</button>
         <button class="mc-action-btn" data-vault-id="${comp.id}" title="Open in Vault">✏️</button>
         <select class="mc-universe-select" data-id="${comp.id}" data-store="vault" title="Set universe">
           <option value="">Universe</option>
@@ -581,7 +661,7 @@
 
   function recordRow(rec, steps) {
     const score = calcReadinessForRecord(rec);
-    return `<tr class="mc-row" data-record-id="${rec.id}">
+    return `<tr class="mc-row" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
       <td class="mc-cell-name">
         <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
       </td>
@@ -1120,7 +1200,69 @@ Write-Host "Done! tracker-import.json created."</pre>
       if (t.matches('.mc-subtab')) {
         state.activeSubTab = t.dataset.subtab;
         state.activeTagFilter = '';
+        state.selectedIds.clear();
+        state.currentPage = 1;
         await renderCurrentTab();
+        return;
+      }
+
+      // Bulk checkbox toggle
+      if (t.matches('.mc-bulk-check')) {
+        const id = t.dataset.id;
+        if (t.checked) state.selectedIds.add(id);
+        else state.selectedIds.delete(id);
+        await renderCurrentTab();
+        return;
+      }
+
+      // Select All on page
+      if (t.id === 'mc-bulk-select-all') {
+        const checks = container.querySelectorAll('.mc-bulk-check');
+        checks.forEach(chk => {
+          if (t.checked) state.selectedIds.add(chk.dataset.id);
+          else state.selectedIds.delete(chk.dataset.id);
+        });
+        await renderCurrentTab();
+        return;
+      }
+
+      // Bulk deselect
+      if (t.id === 'mc-bulk-deselect') {
+        state.selectedIds.clear();
+        await renderCurrentTab();
+        return;
+      }
+
+      // Bulk pin / unpin
+      if (t.id === 'mc-bulk-pin' || t.id === 'mc-bulk-unpin') {
+        const pinVal = t.id === 'mc-bulk-pin';
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const comp = state.compMap.get(id);
+          if (comp) {
+            if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+            comp.tracker.pinned = pinVal;
+            promises.push(window.ForgeDB.updateVaultTracker(id, { pinned: pinVal }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        showToast(`${promises.length} items ${pinVal ? 'pinned' : 'unpinned'}`, 'success');
+        await renderCurrentTab();
+        return;
+      }
+
+      // Pin toggle (single item)
+      if (t.matches('.mc-pin-toggle')) {
+        const id = t.dataset.id;
+        const comp = state.compMap.get(id);
+        if (comp) {
+          if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+          const newVal = !comp.tracker.pinned;
+          comp.tracker.pinned = newVal;
+          window.ForgeDB.updateVaultTracker(id, { pinned: newVal });
+          await renderCurrentTab();
+        }
         return;
       }
 
@@ -1389,9 +1531,45 @@ Write-Host "Done! tracker-import.json created."</pre>
         return;
       }
 
-      // Filter dropdowns
-      if (t.id === 'mc-filter-universe') { state.filters.universe = t.value; await renderCurrentTab(); return; }
-      if (t.id === 'mc-filter-priority')  { state.filters.priority  = t.value; await renderCurrentTab(); return; }
+      // Bulk universe set
+      if (t.id === 'mc-bulk-universe') {
+        const uniVal = t.value;
+        if (!uniVal) return;
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const comp = state.compMap.get(id);
+          if (comp) {
+            if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+            comp.tracker.universe = uniVal;
+            promises.push(window.ForgeDB.updateVaultTracker(id, { universe: uniVal }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        showToast(`Universe set to ${uniVal} for ${promises.length} items`, 'success');
+        await renderCurrentTab();
+        return;
+      }
+
+      // Bulk priority set
+      if (t.id === 'mc-bulk-priority') {
+        const prioVal = t.value === '__clear__' ? null : t.value;
+        if (t.value === '') return;
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const comp = state.compMap.get(id);
+          if (comp) {
+            if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+            comp.tracker.priority = prioVal;
+            promises.push(window.ForgeDB.updateVaultTracker(id, { priority: prioVal }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        showToast(`Priority ${prioVal ? 'set to ' + prioVal : 'cleared'} for ${promises.length} items`, 'success');
+        await renderCurrentTab();
+        return;
+      }
 
       // Priority select inline
       if (t.matches('.mc-priority-select') && t.dataset.store === 'vault') {
@@ -1588,7 +1766,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     let html = '';
 
     if (tab === 'overview') {
-      html = renderOverview();
+      html = await renderOverview();
     } else if (CAT_FOR_TAB[tab]) {
       html = renderAssetTab(CAT_FOR_TAB[tab]);
     } else if (tab === 'stories') {

@@ -2458,3 +2458,201 @@ textarea.mc-modal-input { resize: vertical; }
   font-weight: 500;
   color: var(--text-muted);
 }
+
+/* ─── AnansiForge v3 Feature Expansion Styles ─────────────────────────────── */
+
+/* 1. Universe Row Tinting */
+.mc-row[data-universe="DC"]     { background: rgba(37, 99, 235, 0.05); border-left: 3px solid rgba(37, 99, 235, 0.4); }
+.mc-row[data-universe="Marvel"] { background: rgba(220, 38, 38, 0.05); border-left: 3px solid rgba(220, 38, 38, 0.4); }
+.mc-row[data-universe="OC"]     { background: rgba(124, 58, 237, 0.05); border-left: 3px solid rgba(124, 58, 237, 0.4); }
+.mc-row[data-universe="Mixed"]  { background: rgba(217, 119, 6, 0.05); border-left: 3px solid rgba(217, 119, 6, 0.4); }
+
+/* 2. Pinned Items */
+.vault-item--pinned {
+  border-left: 3px solid #f59e0b !important;
+  background: rgba(245, 158, 11, 0.03) !important;
+}
+.mc-row--pinned {
+  border-left: 3px solid #f59e0b !important;
+}
+.mc-pin-icon, .pin-badge {
+  margin-right: 4px;
+  font-size: 0.75rem;
+}
+
+/* 3. Dependency Map Badge & Panel */
+.mc-dep-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+.dep-panel {
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+.dep-panel-header {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.dep-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dep-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+/* 4. Bulk Operations Floating Toolbar */
+.mc-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  margin-bottom: 10px;
+  background: rgba(30, 35, 52, 0.95);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+.mc-bulk-info { font-size: 0.82rem; color: var(--text-primary); }
+.mc-bulk-actions { display: flex; align-items: center; gap: 8px; }
+.mc-bulk-select { font-size: 0.78rem; padding: 3px 6px; }
+.mc-row--selected { background: rgba(99, 102, 241, 0.12) !important; }
+
+/* 5. Omni-Search Spotter (Ctrl+K) */
+.omni-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 15vh;
+}
+.omni-overlay.hidden { display: none; }
+.omni-backdrop {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+.omni-panel {
+  position: relative;
+  width: 90%;
+  max-width: 600px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.omni-input-wrap {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
+}
+.omni-search-icon { font-size: 1.1rem; }
+.omni-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+}
+.omni-kbd {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.omni-results {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.omni-category-header {
+  padding: 8px 16px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.omni-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.omni-result:hover, .omni-result--selected {
+  background: var(--bg-surface-hover);
+}
+.omni-result-name { font-size: 0.88rem; color: var(--text-primary); font-weight: 500; }
+.omni-result-meta { display: flex; gap: 6px; align-items: center; font-size: 0.72rem; color: var(--text-muted); }
+
+/* 6. Activity Feed Timeline */
+.mc-activity-feed { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.mc-activity-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+.mc-activity-icon { font-size: 0.9rem; }
+.mc-activity-details { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-activity-target { font-weight: 600; color: var(--text-primary); margin-right: 6px; }
+.mc-activity-action { color: var(--text-muted); font-size: 0.75rem; }
+.mc-activity-time { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+
+/* 7. Burndown Progress History */
+.mc-burndown-chart { display: flex; flex-direction: column; gap: 6px; }
+.mc-burndown-row { display: flex; align-items: center; gap: 12px; font-size: 0.8rem; }
+.mc-burndown-date { width: 90px; color: var(--text-muted); font-size: 0.75rem; }
+.mc-burndown-bar-wrap { flex: 1; height: 10px; background: var(--border-color); border-radius: 5px; overflow: hidden; }
+.mc-burndown-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--success)); border-radius: 5px; transition: width 0.4s ease; }
+.mc-burndown-pct { width: 85px; text-align: right; color: var(--text-secondary); font-weight: 600; font-size: 0.78rem; }
+
+/* 8. Version History Cards */
+.version-card {
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+.version-card-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; margin-bottom: 4px; }
+.version-card-meta { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
+.version-card-content {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin: 0;
+  white-space: pre-wrap;
+}
