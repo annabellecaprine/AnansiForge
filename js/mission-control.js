@@ -339,6 +339,20 @@
       universeCount[u] = (universeCount[u] || 0) + 1;
     });
 
+    // Role distribution across characters
+    const roleCount = { Hero: 0, Villain: 0, AntiHero: 0, Support: 0, Other: 0 };
+    chars.forEach(c => {
+      const r = c.tracker?.role || 'Other';
+      roleCount[r] = (roleCount[r] || 0) + 1;
+    });
+
+    // Category distribution across vault components
+    const catCount = {};
+    comps.forEach(c => {
+      const catName = CATEGORY_LABELS[c.category] || c.category;
+      catCount[catName] = (catCount[catName] || 0) + 1;
+    });
+
     // Priority queue: P1 items not yet complete
     const p1Incomplete = comps.filter(c => c.tracker?.priority === 'P1' && !c.tracker?.pipeline?.complete);
 
@@ -416,8 +430,9 @@
       </div>
 
       <div class="mc-overview-grid">
+        <!-- Universe Split Panel -->
         <div class="mc-overview-panel">
-          <h3 class="mc-panel-title">Universe Split — Characters</h3>
+          <h3 class="mc-panel-title">🌌 Universe Split — Characters</h3>
           <div class="mc-universe-bars">
             ${Object.entries(universeCount).sort((a,b)=>b[1]-a[1]).map(([u,n])=>{
               const pct = Math.round(n/Math.max(chars.length,1)*100);
@@ -426,6 +441,42 @@
                 <span class="mc-uni-label" style="color:${col}">${u}</span>
                 <div class="mc-uni-bar-wrap">
                   <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
+                </div>
+                <span class="mc-uni-count">${n}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Role Split Panel -->
+        <div class="mc-overview-panel">
+          <h3 class="mc-panel-title">🎭 Role Breakdown — Characters</h3>
+          <div class="mc-universe-bars">
+            ${Object.entries(roleCount).filter(([_, n]) => n > 0).sort((a,b)=>b[1]-a[1]).map(([r,n])=>{
+              const pct = Math.round(n/Math.max(chars.length,1)*100);
+              const col = ROLE_COLORS[r] || '#6b7280';
+              const icon = ROLE_ICONS[r] || '❓';
+              return `<div class="mc-uni-row">
+                <span class="mc-uni-label" style="color:${col}">${icon} ${r}</span>
+                <div class="mc-uni-bar-wrap">
+                  <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
+                </div>
+                <span class="mc-uni-count">${n}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Vault Composition Panel -->
+        <div class="mc-overview-panel">
+          <h3 class="mc-panel-title">🗄️ Vault Composition — All Items</h3>
+          <div class="mc-universe-bars">
+            ${Object.entries(catCount).sort((a,b)=>b[1]-a[1]).map(([cat,n])=>{
+              const pct = Math.round(n/Math.max(comps.length,1)*100);
+              return `<div class="mc-uni-row">
+                <span class="mc-uni-label" style="color:var(--text-secondary); min-width:85px;">${cat}</span>
+                <div class="mc-uni-bar-wrap">
+                  <div class="mc-uni-bar" style="width:${pct}%;background:var(--accent);"></div>
                 </div>
                 <span class="mc-uni-count">${n}</span>
               </div>`;
