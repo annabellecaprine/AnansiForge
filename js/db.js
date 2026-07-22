@@ -434,6 +434,7 @@
       linkedVaultIds: Array.isArray(rec.linkedVaultIds) ? rec.linkedVaultIds : [],
       pipeline: rec.pipeline || defaultTrackerPipeline(aType),
       // release-only
+      projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
       metrics: rec.metrics || { messages: 0, chats: 0 },

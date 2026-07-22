@@ -44,6 +44,7 @@
     activeCategory: 'character',   // for asset tabs
     allComponents: [],             // vault_components cache
     allTrackerRecords: [],         // tracker_records cache
+    allProjects: [],               // projects cache
     sortDir: 'desc',               // 'desc' = most ready first
     groupByPriority: false,
     filters: { search: '', universe: 'all', priority: 'all', tag: '' },
@@ -125,12 +126,14 @@
   // ─── Data Loaders ─────────────────────────────────────────────────────────────
 
   async function loadAll() {
-    const [comps, records] = await Promise.all([
+    const [comps, records, projects] = await Promise.all([
       window.ForgeDB.getAllComponents(),
-      window.ForgeDB.getAllTrackerRecords()
+      window.ForgeDB.getAllTrackerRecords(),
+      window.ForgeDB.getAllProjects()
     ]);
     state.allComponents = comps;
     state.allTrackerRecords = records;
+    state.allProjects = projects || [];
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -229,12 +232,12 @@
   function subTabBar() {
     const tabs = [
       { id: 'overview',    label: '📊 Overview' },
-      { id: 'characters',  label: '👤 Characters' },
-      { id: 'scenarios',   label: '🎭 Scenarios' },
-      { id: 'bios',        label: '📋 Bios' },
-      { id: 'messages',    label: '💬 Init Msgs' },
-      { id: 'orgs',        label: '🏢 Orgs' },
       { id: 'stories',     label: '📖 Stories' },
+      { id: 'characters',  label: '👤 Characters' },
+      { id: 'orgs',        label: '🏢 Orgs' },
+      { id: 'scenarios',   label: '🎭 Scenarios' },
+      { id: 'messages',    label: '💬 Init Msgs' },
+      { id: 'bios',        label: '📋 Bios' },
       { id: 'launchpad',   label: '🚀 Launch Pad' },
       { id: 'metrics',     label: '📈 Metrics' },
       { id: 'import',      label: '⚙ Import' }
@@ -607,9 +610,12 @@
   function releaseRow(rec, steps) {
     const score = calcReadinessForRecord(rec);
     const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)' };
+    const linkedProj = state.allProjects.find(p => p.id === rec.projectId);
+
     return `<tr class="mc-row${rec.pipeline?.released?' mc-row--released':''}" data-record-id="${rec.id}">
       <td class="mc-cell-name">
         <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
+        ${linkedProj ? `<div class="mc-linked-proj-tag" title="Linked to compiled project: ${esc(linkedProj.name)}">🤖 ${esc(linkedProj.name)} (${(linkedProj.componentIds||[]).length} items)</div>` : ''}
       </td>
       <td>${universeBadge(rec.universe)}</td>
       <td>${priorityBadge(rec.priority)}</td>
@@ -625,6 +631,10 @@
       </td>
       <td class="mc-cell-readiness">${readinessPct(score)}</td>
       <td class="mc-cell-actions">
+        ${rec.projectId ? `
+          <button class="mc-action-btn mc-open-assembler" data-project-id="${rec.projectId}" title="Open in Assembler">✏️ Assembler</button>
+          <button class="mc-action-btn mc-open-sandbox" data-project-id="${rec.projectId}" title="Playtest in Sandbox">🧪 Playtest</button>
+        ` : ''}
         <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit">✏️</button>
         <button class="mc-action-btn mc-delete-record" data-record-id="${rec.id}" title="Delete">🗑</button>
       </td>
@@ -747,7 +757,7 @@ Write-Host "Done! tracker-import.json created."</pre>
 
   function openRecordModal(rec, assetType) {
     const isNew = !rec;
-    const r = rec || { assetType, name: '', universe: '', project: '', priority: null, tags: [], notes: '', linkedVaultIds: [], pipeline: window.ForgeDB.defaultTrackerPipeline(assetType) };
+    const r = rec || { assetType, name: '', universe: '', project: '', priority: null, tags: [], notes: '', linkedVaultIds: [], projectId: null, pipeline: window.ForgeDB.defaultTrackerPipeline(assetType) };
     state.editingRecord = r;
 
     const modal = document.getElementById('mc-modal-overlay');
@@ -759,6 +769,14 @@ Write-Host "Done! tracker-import.json created."</pre>
       <div class="form-group"><label>Name</label>
         <input type="text" id="mc-rec-name" value="${esc(r.name)}" placeholder="Name…" class="mc-modal-input">
       </div>
+      ${assetType === 'release' ? `
+      <div class="form-group"><label>Linked Assembled Bot / Project</label>
+        <select id="mc-rec-project-id" class="mc-modal-input">
+          <option value="">— No Linked Project —</option>
+          ${(state.allProjects || []).map(p => `<option value="${p.id}" ${r.projectId === p.id ? 'selected' : ''}>🤖 ${esc(p.name)} (${(p.componentIds||[]).length} items)</option>`).join('')}
+        </select>
+      </div>
+      ` : ''}
       <div class="mc-form-row">
         <div class="form-group"><label>Universe</label>
           <select id="mc-rec-universe" class="mc-modal-input">
@@ -895,8 +913,21 @@ Write-Host "Done! tracker-import.json created."</pre>
       updated.intendedCategory = document.getElementById('mc-stub-category')?.value || 'character';
     }
     if (r.assetType === 'release') {
+      updated.projectId    = document.getElementById('mc-rec-project-id')?.value || null;
       updated.visibility   = document.getElementById('mc-rec-visibility')?.value || null;
       updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
+
+      // Auto-check pipeline steps if an assembled project is linked
+      if (updated.projectId) {
+        const proj = state.allProjects.find(p => p.id === updated.projectId);
+        if (proj && proj.componentIds && proj.componentIds.length) {
+          const comps = state.allComponents.filter(c => proj.componentIds.includes(c.id));
+          if (comps.some(c => c.category === 'bio')) updated.pipeline.bio = true;
+          if (comps.some(c => c.category === 'scenario')) updated.pipeline.scenario = true;
+          if (comps.some(c => c.category === 'initial_message')) updated.pipeline.initialMessage = true;
+        }
+      }
+
       const uniqueChats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
       const messages    = parseInt(document.getElementById('mc-rec-messages')?.value)    || 0;
       updated.metrics = {
@@ -904,7 +935,6 @@ Write-Host "Done! tracker-import.json created."</pre>
         time:        document.getElementById('mc-rec-metrics-time')?.value || null,
         uniqueChats,
         messages,
-        // derived — stored for easy sorting/export, always recomputed on save
         msgPerChat:  uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null
       };
     }
@@ -1107,6 +1137,60 @@ Write-Host "Done! tracker-import.json created."</pre>
       if (t.matches('.mc-name-link[data-vault-id]') || t.matches('.mc-action-btn[data-vault-id]')) {
         const id = t.dataset.vaultId;
         if (window.ForgeAppBridge?.openEditor) window.ForgeAppBridge.openEditor(id);
+        return;
+      }
+
+      // Inline editable text field (e.g. Project)
+      if (t.matches('.mc-editable')) {
+        const id = t.dataset.id;
+        const field = t.dataset.field;
+        const store = t.dataset.store;
+        const currentVal = t.textContent === '—' ? '' : t.textContent.trim();
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'mc-modal-input';
+        input.style.cssText = 'padding:2px 6px; font-size:0.8rem; height:24px; width:110px; display:inline-block;';
+        input.value = currentVal;
+
+        t.replaceWith(input);
+        input.focus();
+        input.select();
+
+        let saved = false;
+        const commitEdit = async () => {
+          if (saved) return;
+          saved = true;
+          const newVal = input.value.trim();
+          if (store === 'vault') {
+            await window.ForgeDB.updateVaultTracker(id, { [field]: newVal });
+          } else {
+            const rec = state.allTrackerRecords.find(r => r.id === id);
+            if (rec) await window.ForgeDB.saveTrackerRecord({ ...rec, [field]: newVal });
+          }
+          await loadAll();
+          await renderCurrentTab();
+        };
+
+        input.addEventListener('blur', commitEdit);
+        input.addEventListener('keydown', (ke) => {
+          if (ke.key === 'Enter') { input.blur(); }
+          if (ke.key === 'Escape') { saved = true; input.value = currentVal; renderCurrentTab(); }
+        });
+        return;
+      }
+
+      // Open in Assembler
+      if (t.closest('.mc-open-assembler')) {
+        const projId = t.closest('[data-project-id]')?.dataset.projectId || t.dataset.projectId;
+        if (projId && window.ProjectAssembler?.open) window.ProjectAssembler.open(projId);
+        return;
+      }
+
+      // Playtest in Sandbox
+      if (t.closest('.mc-open-sandbox')) {
+        const projId = t.closest('[data-project-id]')?.dataset.projectId || t.dataset.projectId;
+        if (projId && window.SandboxPlaytest?.start) window.SandboxPlaytest.start(projId);
         return;
       }
 
@@ -1393,7 +1477,20 @@ Write-Host "Done! tracker-import.json created."</pre>
       html = renderImportTab();
     }
 
+    const activeEl = document.activeElement;
+    const isSearchFocused = activeEl && activeEl.id === 'mc-search';
+    const selectionStart = isSearchFocused ? activeEl.selectionStart : 0;
+    const selectionEnd = isSearchFocused ? activeEl.selectionEnd : 0;
+
     contentEl.innerHTML = html;
+
+    if (isSearchFocused) {
+      const searchEl = document.getElementById('mc-search');
+      if (searchEl) {
+        searchEl.focus();
+        try { searchEl.setSelectionRange(selectionStart, selectionEnd); } catch (e) {}
+      }
+    }
 
     // Update subtab active class
     view.querySelectorAll('.mc-subtab').forEach(btn => {
@@ -1441,8 +1538,37 @@ Write-Host "Done! tracker-import.json created."</pre>
     await renderCurrentTab();
   }
 
+  async function openNewReleaseForProject(proj) {
+    if (!proj) return;
+    state.activeSubTab = 'launchpad';
+    await renderCurrentTab();
+    
+    const pipeline = window.ForgeDB.defaultTrackerPipeline('release');
+    const compIds = proj.componentIds || [];
+    if (compIds.length > 0) {
+      const comps = state.allComponents.filter(c => compIds.includes(c.id));
+      if (comps.some(c => c.category === 'bio')) pipeline.bio = true;
+      if (comps.some(c => c.category === 'scenario')) pipeline.scenario = true;
+      if (comps.some(c => c.category === 'initial_message')) pipeline.initialMessage = true;
+    }
+
+    const rec = {
+      assetType: 'release',
+      name: proj.name || 'New Release',
+      projectId: proj.id,
+      universe: '',
+      project: proj.name || '',
+      priority: null,
+      tags: [],
+      notes: '',
+      pipeline
+    };
+
+    openRecordModal(rec, 'release');
+  }
+
   // ─── Public API ───────────────────────────────────────────────────────────────
 
-  window.MissionControl = { init, renderCurrentTab, loadAll };
+  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject };
 
 })();

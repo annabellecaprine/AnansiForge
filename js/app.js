@@ -23,6 +23,7 @@
 
   // Active state
   let editingComponentId = null;
+  let pendingStubId = null;
   let activeSidebarTab = 'vault'; // 'vault' or 'projects'
   let editorIsDirty = false;  // tracks unsaved editor changes
   let activeEditorTab = 'raw'; // 'raw' or 'form'
@@ -627,6 +628,11 @@
 
     try {
       await window.ForgeDB.saveComponent(record);
+      if (pendingStubId) {
+        await window.ForgeDB.deleteTrackerRecord(pendingStubId);
+        pendingStubId = null;
+        if (window.MissionControl) await window.MissionControl.loadAll();
+      }
       editorIsDirty = false;  // saved — clear dirty flag
       showToast(`Component "${name}" saved!`, 'success');
       showView('welcome-view');
@@ -1356,6 +1362,7 @@
         window.lastViewMC = true;
         btnMC?.classList.remove('active');
         document.getElementById('mission-control-view').style.display = 'none';
+        pendingStubId = prefill?._stubId || null;
         // Pre-fill editor fields then open it
         openComponentEditor(null);
         if (prefill) {

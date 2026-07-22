@@ -1,4 +1,4 @@
-﻿/* style.css - Anansi Forge Design System */
+/* style.css - Anansi Forge Design System */
 
 :root {
   /* Colors */
@@ -2226,6 +2226,18 @@ main#main-canvas {
 /* Table cells */
 .mc-cell-name { min-width: 160px; }
 .mc-cell-project { min-width: 100px; }
+.mc-editable {
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  border: 1px transparent dashed;
+}
+.mc-editable:hover {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+  border-color: rgba(99, 102, 241, 0.3);
+}
 .mc-cell-tags { min-width: 100px; }
 .mc-cell-readiness { min-width: 100px; white-space: nowrap; }
 .mc-cell-actions { white-space: nowrap; }

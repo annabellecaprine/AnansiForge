@@ -81,6 +81,7 @@
     document.getElementById('btn-assembler-export-png').addEventListener('click', exportAsPNG);
     document.getElementById('btn-assembler-export-lorebook').addEventListener('click', exportAsLorebook);
     document.getElementById('btn-assembler-playtest').addEventListener('click', launchSandbox);
+    document.getElementById('btn-assembler-schedule-release')?.addEventListener('click', scheduleReleaseFromAssembler);
 
     // Sidebar staged count click triggers drawer toggle
     document.getElementById('project-drawer-header').addEventListener('click', toggleDrawer);
@@ -1173,6 +1174,41 @@
     } catch (err) {
       console.error(err);
       if (window.showToast) window.showToast('Playtest launch failed', 'error');
+    }
+  }
+
+  async function scheduleReleaseFromAssembler() {
+    try {
+      if (!activeProjectId) {
+        const card = await compileCardData();
+        const projectRecord = {
+          name: projNameInput.value.trim() || 'New Assembled Bot',
+          componentIds: [...stagedIds],
+          mappings: { ...mappings },
+          relationships: [...relationships],
+          contentOverrides: { ...contentOverrides },
+          compiledCard: card
+        };
+        const savedProj = await window.ForgeDB.saveProject(projectRecord);
+        activeProjectId = savedProj.id;
+        if (coverDataUrl) {
+          await window.ForgeDB.saveCover(savedProj.id, coverDataUrl);
+        }
+        if (window.refreshProjectsList) window.refreshProjectsList();
+      }
+
+      const proj = await window.ForgeDB.getProject(activeProjectId);
+      if (!proj) return;
+
+      const btnMC = document.getElementById('btn-mission-control');
+      if (btnMC) btnMC.click();
+
+      if (window.MissionControl?.openNewReleaseForProject) {
+        await window.MissionControl.openNewReleaseForProject(proj);
+      }
+    } catch (err) {
+      console.error('Failed to schedule release from assembler:', err);
+      if (window.showToast) window.showToast('Schedule release failed: ' + err.message, 'error');
     }
   }
 
