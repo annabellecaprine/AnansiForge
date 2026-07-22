@@ -1216,8 +1216,9 @@ Write-Host "Done! tracker-import.json created."</pre>
       const t = e.target;
 
       // Sub-tab switching
-      if (t.matches('.mc-subtab')) {
-        state.activeSubTab = t.dataset.subtab;
+      const subtabBtn = t.closest('.mc-subtab');
+      if (subtabBtn) {
+        state.activeSubTab = subtabBtn.dataset.subtab;
         state.activeTagFilter = '';
         state.selectedIds.clear();
         state.currentPage = 1;
@@ -1825,18 +1826,26 @@ Write-Host "Done! tracker-import.json created."</pre>
     const tab = state.activeSubTab;
     let html = '';
 
-    if (tab === 'overview') {
-      html = await renderOverview();
-    } else if (CAT_FOR_TAB[tab]) {
-      html = renderAssetTab(CAT_FOR_TAB[tab]);
-    } else if (tab === 'stories') {
-      html = renderStoriesTab();
-    } else if (tab === 'launchpad') {
-      html = renderLaunchPad();
-    } else if (tab === 'metrics') {
-      html = renderMetrics();
-    } else if (tab === 'import') {
-      html = renderImportTab();
+    try {
+      if (tab === 'overview') {
+        html = await renderOverview();
+      } else if (CAT_FOR_TAB[tab]) {
+        html = renderAssetTab(CAT_FOR_TAB[tab]);
+      } else if (tab === 'stories') {
+        html = renderStoriesTab();
+      } else if (tab === 'launchpad') {
+        html = renderLaunchPad();
+      } else if (tab === 'metrics') {
+        html = renderMetrics();
+      } else if (tab === 'import') {
+        html = renderImportTab();
+      }
+    } catch (err) {
+      console.error('Error rendering Mission Control tab:', err);
+      html = `<div style="padding:30px; text-align:center; color:var(--danger);">
+        <h4>Error loading tab "${tab}"</h4>
+        <p style="font-size:0.8rem; color:var(--text-muted);">${esc(err.message)}</p>
+      </div>`;
     }
 
     const activeEl = document.activeElement;
