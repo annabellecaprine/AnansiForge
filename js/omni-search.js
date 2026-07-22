@@ -93,11 +93,13 @@
         query = query.toLowerCase();
         
         const matchItem = (item) => {
+            const tracker = item.tracker || {};
             const searchFields = [
                 item.name,
                 item.lineage,
-                item.universe,
-                item.project,
+                item.universe || tracker.universe,
+                tracker.role || item.role,
+                item.project || tracker.project,
                 ...(item.tags || [])
             ];
             

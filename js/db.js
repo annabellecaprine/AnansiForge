@@ -47,6 +47,8 @@
     return {
       universe: '',
       project: '',
+      role: '',         // 'Hero' | 'Villain' | 'AntiHero' | 'Support' | 'Other'
+      faction: '',      // e.g. 'X-Men', 'Avengers', 'Sinister Six'
       priority: null,
       pipeline: defaultTrackerPipeline('character'),
       publishedDate: null,

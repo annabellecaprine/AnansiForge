@@ -53,7 +53,7 @@
     focusedRowIndex: -1,           // keyboard nav focused row
     sortDir: 'desc',               // 'desc' = most ready first
     groupByPriority: false,
-    filters: { search: '', universe: 'all', priority: 'all', tag: '' },
+    filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -92,7 +92,7 @@
 
   function filterComponents(components) {
     let items = components;
-    const { search, universe, priority, tag } = state.filters;
+    const { search, universe, priority, role } = state.filters;
     const activeTag = state.activeTagFilter;
 
     if (search) {
@@ -105,6 +105,7 @@
     }
     if (universe !== 'all') items = items.filter(c => (c.tracker?.universe || '') === universe);
     if (priority !== 'all') items = items.filter(c => (c.tracker?.priority || null) === priority);
+    if (role !== 'all')     items = items.filter(c => (c.tracker?.role || '') === role);
     if (activeTag) {
       items = items.filter(c =>
         (c.tags || []).includes(activeTag) ||
@@ -116,7 +117,7 @@
 
   function filterTrackerRecords(records) {
     let items = records;
-    const { search, universe, priority } = state.filters;
+    const { search, universe, priority, role } = state.filters;
     const activeTag = state.activeTagFilter;
 
     if (search) {
@@ -177,6 +178,29 @@
     return `<span class="mc-badge" style="background:${colors[p]}22; color:${colors[p]}; border:1px solid ${colors[p]}44;">${p}</span>`;
   }
 
+  const ROLE_COLORS = {
+    Hero: '#10b981',      // Emerald Green
+    Villain: '#ef4444',   // Crimson Red
+    AntiHero: '#f59e0b',  // Amber
+    Support: '#06b6d4',   // Cyan
+    Other: '#6b7280'      // Gray
+  };
+
+  const ROLE_ICONS = {
+    Hero: '🦸',
+    Villain: '🦹',
+    AntiHero: '⚡',
+    Support: '🤝',
+    Other: '❓'
+  };
+
+  function roleBadge(r) {
+    if (!r) return '';
+    const c = ROLE_COLORS[r] || '#6b7280';
+    const icon = ROLE_ICONS[r] || '';
+    return `<span class="mc-badge" style="background:${c}22; color:${c}; border:1px solid ${c}44;">${icon} ${esc(r)}</span>`;
+  }
+
   function universeBadge(u) {
     if (!u) return '';
     const c = UNIVERSE_COLORS[u] || '#6b7280';
@@ -192,34 +216,20 @@
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // ─── Pipeline Checkbox Cell ───────────────────────────────────────────────────
-
-  function pipelineCheckboxes(pipeline, steps, recordId, isVault) {
-    return steps.map(step => {
-      const checked = pipeline && pipeline[step];
-      const storeType = isVault ? 'vault' : 'record';
-      return `<td class="mc-pipe-cell">
-        <button class="mc-pipe-btn${checked ? ' checked' : ''}"
-          title="${STEP_LABELS[step] || step}"
-          data-id="${recordId}" data-step="${step}" data-store="${storeType}"
-          aria-label="${STEP_LABELS[step] || step}: ${checked ? 'checked' : 'unchecked'}">
-          ${checked ? '✓' : ''}
-        </button>
-      </td>`;
-    }).join('');
-  }
-
-  // ─── Toolbar HTML ─────────────────────────────────────────────────────────────
-
   function toolbarHTML(showAddStub = true, showAddRecord = false, recordType = '') {
     const universes = ['DC','Marvel','OC','Mixed','Other'];
     const priorities = ['P1','P2','P3','P4'];
+    const roles = ['Hero','Villain','AntiHero','Support','Other'];
     return `<div class="mc-toolbar">
       <div class="mc-toolbar-left">
         <input type="text" id="mc-search" class="mc-search" placeholder="Search…" value="${esc(state.filters.search)}">
         <select id="mc-filter-universe" class="mc-filter-select">
           <option value="all">All Universes</option>
           ${universes.map(u => `<option value="${u}" ${state.filters.universe===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+        <select id="mc-filter-role" class="mc-filter-select">
+          <option value="all">All Roles</option>
+          ${roles.map(r => `<option value="${r}" ${state.filters.role===r?'selected':''}>${r}</option>`).join('')}
         </select>
         <select id="mc-filter-priority" class="mc-filter-select">
           <option value="all">All Priorities</option>
@@ -271,6 +281,10 @@
         <select id="mc-bulk-universe" class="mc-filter-select mc-bulk-select">
           <option value="">Set Universe…</option>
           ${['DC','Marvel','OC','Mixed','Other'].map(u => `<option value="${u}">${u}</option>`).join('')}
+        </select>
+        <select id="mc-bulk-role" class="mc-filter-select mc-bulk-select">
+          <option value="">Set Role…</option>
+          ${['Hero','Villain','AntiHero','Support','Other'].map(r => `<option value="${r}">${r}</option>`).join('')}
         </select>
         <select id="mc-bulk-priority" class="mc-filter-select mc-bulk-select">
           <option value="">Set Priority…</option>
@@ -544,7 +558,6 @@
 
       ${toolbarHTML(true, false)}
 
-      ${bulkToolbarHTML()}
       <div class="mc-table-wrap">
         <table class="mc-table">
           <thead>
@@ -552,6 +565,7 @@
               <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
               <th>Name</th>
               <th>Universe</th>
+              <th>Role</th>
               <th>Project</th>
               <th>Priority</th>
               ${steps.map(s => `<th class="mc-pipe-th" title="${STEP_LABELS[s]||s}">${(STEP_LABELS[s]||s).substring(0,4)}</th>`).join('')}
@@ -562,7 +576,7 @@
           </thead>
           <tbody>
             ${stubRows}
-            ${rows || `<tr><td colspan="${steps.length+9}" class="mc-empty-state">No ${CATEGORY_LABELS[category]||category} tracked yet. Add a Concept to start.</td></tr>`}
+            ${rows || `<tr><td colspan="${steps.length+10}" class="mc-empty-state">No ${CATEGORY_LABELS[category]||category} tracked yet. Add a Concept to start.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -587,6 +601,7 @@
         ${depCount > 0 ? `<span class="mc-dep-badge" title="Used in ${depCount} project${depCount>1?'s':''}">📦 ${depCount}</span>` : ''}
       </td>
       <td>${universeBadge(tracker.universe)}</td>
+      <td>${roleBadge(tracker.role)}</td>
       <td class="mc-cell-project">
         <span class="mc-editable" data-field="project" data-id="${comp.id}" data-store="vault" title="Click to edit">${esc(tracker.project || '—')}</span>
       </td>
@@ -602,6 +617,10 @@
       <td class="mc-cell-actions">
         <button class="mc-action-btn mc-pin-toggle" data-id="${comp.id}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '📌' : '☆'}</button>
         <button class="mc-action-btn" data-vault-id="${comp.id}" title="Open in Vault">✏️</button>
+        <select class="mc-role-select" data-id="${comp.id}" data-store="vault" title="Set role">
+          <option value="">Role</option>
+          ${['Hero','Villain','AntiHero','Support','Other'].map(r=>`<option value="${r}" ${tracker.role===r?'selected':''}>${r}</option>`).join('')}
+        </select>
         <select class="mc-universe-select" data-id="${comp.id}" data-store="vault" title="Set universe">
           <option value="">Universe</option>
           ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}" ${tracker.universe===u?'selected':''}>${u}</option>`).join('')}
@@ -1568,6 +1587,47 @@ Write-Host "Done! tracker-import.json created."</pre>
         state.selectedIds.clear();
         showToast(`Priority ${prioVal ? 'set to ' + prioVal : 'cleared'} for ${promises.length} items`, 'success');
         await renderCurrentTab();
+        return;
+      }
+
+      // Filter dropdowns
+      if (t.id === 'mc-filter-role') { state.filters.role = t.value; await renderCurrentTab(); return; }
+
+      // Bulk role set
+      if (t.id === 'mc-bulk-role') {
+        const roleVal = t.value;
+        if (!roleVal) return;
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const comp = state.compMap.get(id);
+          if (comp) {
+            if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+            comp.tracker.role = roleVal;
+            promises.push(window.ForgeDB.updateVaultTracker(id, { role: roleVal }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        showToast(`Role set to ${roleVal} for ${promises.length} items`, 'success');
+        await renderCurrentTab();
+        return;
+      }
+
+      // Inline role select
+      if (t.matches('.mc-role-select') && t.dataset.store === 'vault') {
+        const comp = state.allComponents.find(c => c.id === t.dataset.id);
+        if (comp) {
+          if (!comp.tracker) comp.tracker = window.ForgeDB.defaultTracker();
+          comp.tracker.role = t.value || '';
+          
+          const row = t.closest('.mc-row');
+          if (row) {
+            const roleTd = row.children[3];
+            if (roleTd) roleTd.innerHTML = roleBadge(t.value);
+          }
+
+          window.ForgeDB.updateVaultTracker(t.dataset.id, { role: t.value });
+        }
         return;
       }
 

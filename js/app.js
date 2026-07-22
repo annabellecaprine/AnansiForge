@@ -577,6 +577,12 @@
         compIsTemplateCheck.checked = comp.isTemplate === true;
         btnCreateVariant.style.display = comp.isTemplate ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
+        
+        const roleEl = document.getElementById('comp-role');
+        if (roleEl) roleEl.value = comp.tracker?.role || '';
+        const factionEl = document.getElementById('comp-faction');
+        if (factionEl) factionEl.value = comp.tracker?.faction || '';
+
         updateTokenCount();
 
         // Load Dependency Map (projects referencing this component)
@@ -700,6 +706,9 @@
       .map(s => s.trim())
       .filter(Boolean);
 
+    const roleVal = document.getElementById('comp-role')?.value || '';
+    const factionVal = document.getElementById('comp-faction')?.value || '';
+
     const record = {
       id: editingComponentId,
       name,
@@ -708,7 +717,11 @@
       lineage: compLineageInput.value.trim(),
       scenarios,
       isTemplate: compIsTemplateCheck.checked,
-      tags
+      tags,
+      tracker: {
+        role: roleVal,
+        faction: factionVal
+      }
     };
 
     try {

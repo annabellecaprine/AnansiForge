@@ -399,6 +399,21 @@
               </select>
             </div>
             <div class="form-group">
+              <label for="comp-role">Character Role</label>
+              <select id="comp-role">
+                <option value="">Role (Unspecified)</option>
+                <option value="Hero">🦸 Hero</option>
+                <option value="Villain">🦹 Villain</option>
+                <option value="AntiHero">⚡ AntiHero</option>
+                <option value="Support">🤝 Support</option>
+                <option value="Other">❓ Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="comp-faction">Faction / Affiliation</label>
+              <input type="text" id="comp-faction" placeholder="e.g., X-Men, Avengers, Sinister Six">
+            </div>
+            <div class="form-group">
               <label for="comp-lineage">Lineage (Character Identity Group)</label>
               <input type="text" id="comp-lineage" placeholder="e.g., Dick Grayson, Bruce Wayne" list="lineage-suggestions" autocomplete="off">
               <datalist id="lineage-suggestions"></datalist>
@@ -794,15 +809,15 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
-  <script src="js/db.js?v=3.0"></script>
-  <script src="js/png-handler.js?v=3.0"></script>
-  <script src="js/breakout.js?v=3.0"></script>
-  <script src="js/llm.js?v=3.0"></script>
-  <script src="js/parlor.js?v=3.0"></script>
-  <script src="js/assembler.js?v=3.0"></script>
-  <script src="js/sandbox.js?v=3.0"></script>
-  <script src="js/omni-search.js?v=3.0"></script>
-  <script src="js/app.js?v=3.0"></script>
-  <script src="js/mission-control.js?v=3.0"></script>
+  <script src="js/db.js?v=3.1"></script>
+  <script src="js/png-handler.js?v=3.1"></script>
+  <script src="js/breakout.js?v=3.1"></script>
+  <script src="js/llm.js?v=3.1"></script>
+  <script src="js/parlor.js?v=3.1"></script>
+  <script src="js/assembler.js?v=3.1"></script>
+  <script src="js/sandbox.js?v=3.1"></script>
+  <script src="js/omni-search.js?v=3.1"></script>
+  <script src="js/app.js?v=3.1"></script>
+  <script src="js/mission-control.js?v=3.1"></script>
 </body>
 </html>
