@@ -250,7 +250,7 @@
         }
       }
 
-      // Render
+      // Render in chunks of 60 items for 500+ scale performance
       sidebarList.innerHTML = '';
       
       if (filtered.length === 0) {
@@ -262,7 +262,10 @@
         return;
       }
 
-      filtered.forEach(comp => {
+      const limit = window.vaultSidebarLimit || 60;
+      const chunk = filtered.slice(0, limit);
+
+      chunk.forEach(comp => {
         const item = document.createElement('div');
         item.className = 'vault-item';
         
@@ -312,6 +315,18 @@
 
         sidebarList.appendChild(item);
       });
+
+      if (filtered.length > limit) {
+        const loadMore = document.createElement('button');
+        loadMore.className = 'btn btn-secondary btn-sm';
+        loadMore.style.cssText = 'width:100%; margin:12px 0 20px 0; border-radius:6px; font-size:0.8rem;';
+        loadMore.textContent = `Load More (${filtered.length - limit} remaining)…`;
+        loadMore.addEventListener('click', () => {
+          window.vaultSidebarLimit = (window.vaultSidebarLimit || 60) + 60;
+          refreshVaultList();
+        });
+        sidebarList.appendChild(loadMore);
+      }
 
     } catch (err) {
       console.error('Failed to load components list:', err);

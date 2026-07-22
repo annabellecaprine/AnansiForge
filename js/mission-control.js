@@ -45,6 +45,10 @@
     allComponents: [],             // vault_components cache
     allTrackerRecords: [],         // tracker_records cache
     allProjects: [],               // projects cache
+    compMap: new Map(),            // O(1) id lookup
+    recordMap: new Map(),          // O(1) id lookup
+    pageSize: 50,                  // 50, 100, 250, or 'all'
+    currentPage: 1,
     sortDir: 'desc',               // 'desc' = most ready first
     groupByPriority: false,
     filters: { search: '', universe: 'all', priority: 'all', tag: '' },
@@ -134,6 +138,8 @@
     state.allComponents = comps;
     state.allTrackerRecords = records;
     state.allProjects = projects || [];
+    state.compMap = new Map(comps.map(c => [c.id, c]));
+    state.recordMap = new Map(records.map(r => [r.id, r]));
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -376,6 +382,32 @@
     </div>`;
   }
 
+  // ─── Pagination ───────────────────────────────────────────────────────────────
+
+  function paginationHTML(totalItems) {
+    if (state.pageSize === 'all' && totalItems <= 50) return '';
+    const pageSize = state.pageSize === 'all' ? totalItems : state.pageSize;
+    const totalPages = Math.ceil(totalItems / Math.max(pageSize, 1)) || 1;
+    const curPage = Math.min(state.currentPage, totalPages);
+    const startItem = totalItems === 0 ? 0 : (curPage - 1) * pageSize + 1;
+    const endItem = Math.min(curPage * pageSize, totalItems);
+
+    return `<div class="mc-pagination">
+      <div class="mc-pag-info">Showing ${startItem}–${endItem} of ${totalItems} items</div>
+      <div class="mc-pag-controls">
+        <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-pag-prev" ${curPage <= 1 ? 'disabled' : ''}>← Prev</button>
+        <span class="mc-pag-page">Page ${curPage} of ${totalPages}</span>
+        <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-pag-next" ${curPage >= totalPages ? 'disabled' : ''}>Next →</button>
+        <select id="mc-pag-size-select" class="mc-filter-select" style="padding:3px 6px; font-size:0.75rem;">
+          <option value="50" ${state.pageSize === 50 ? 'selected' : ''}>50 per page</option>
+          <option value="100" ${state.pageSize === 100 ? 'selected' : ''}>100 per page</option>
+          <option value="250" ${state.pageSize === 250 ? 'selected' : ''}>250 per page</option>
+          <option value="all" ${state.pageSize === 'all' ? 'selected' : ''}>Show All</option>
+        </select>
+      </div>
+    </div>`;
+  }
+
   // ─── Asset Tab (vault_components) ────────────────────────────────────────────
 
   function renderAssetTab(category) {
@@ -398,11 +430,19 @@
     const lastStep = steps[steps.length - 1];
     const publishedPct = total ? Math.round((stageCounts[lastStep]||0)/total*100) : 0;
 
+    // Pagination slicing
+    const pageSize = state.pageSize === 'all' ? total : state.pageSize;
+    const totalPages = Math.ceil(total / Math.max(pageSize, 1)) || 1;
+    if (state.currentPage > totalPages) state.currentPage = totalPages;
+    if (state.currentPage < 1) state.currentPage = 1;
+
+    const displayItems = state.pageSize === 'all' ? items : items.slice((state.currentPage - 1) * pageSize, state.currentPage * pageSize);
+
     // Group by priority if enabled
     let rows = '';
     if (state.groupByPriority) {
       ['P1','P2','P3','P4', null].forEach(prio => {
-        const group = items.filter(c => (c.tracker?.priority || null) === prio);
+        const group = displayItems.filter(c => (c.tracker?.priority || null) === prio);
         if (!group.length) return;
         rows += `<tr class="mc-group-header"><td colspan="${steps.length + 7}">
           ${prio ? priorityBadge(prio) : '<span class="mc-badge" style="background:#6b728022;color:var(--text-muted);border:1px solid #6b728044;">No Priority</span>'}
@@ -411,11 +451,12 @@
         rows += group.map(c => assetRow(c, steps)).join('');
       });
     } else {
-      rows = items.map(c => assetRow(c, steps)).join('');
+      rows = displayItems.map(c => assetRow(c, steps)).join('');
     }
 
     // Concept stub rows at top (greyed)
     const stubRows = stubs.map(stub => stubRow(stub, steps)).join('');
+    const pagHTML = paginationHTML(total);
 
     return `
       <div class="mc-stage-summary">
@@ -452,7 +493,8 @@
             ${rows || `<tr><td colspan="${steps.length+8}" class="mc-empty-state">No ${CATEGORY_LABELS[category]||category} tracked yet. Add a Concept to start.</td></tr>`}
           </tbody>
         </table>
-      </div>`;
+      </div>
+      ${pagHTML}`;
   }
 
   function assetRow(comp, steps) {
@@ -1260,6 +1302,18 @@ Write-Host "Done! tracker-import.json created."</pre>
         return;
       }
 
+      // Pagination buttons
+      if (t.id === 'mc-pag-prev' && state.currentPage > 1) {
+        state.currentPage--;
+        await renderCurrentTab();
+        return;
+      }
+      if (t.id === 'mc-pag-next') {
+        state.currentPage++;
+        await renderCurrentTab();
+        return;
+      }
+
       // Add concept stub
       if (t.id === 'mc-add-stub') { openStubModal(); return; }
 
@@ -1326,6 +1380,14 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     container.addEventListener('change', async (e) => {
       const t = e.target;
+
+      // Pagination size select
+      if (t.id === 'mc-pag-size-select') {
+        state.pageSize = t.value === 'all' ? 'all' : parseInt(t.value, 10);
+        state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
 
       // Filter dropdowns
       if (t.id === 'mc-filter-universe') { state.filters.universe = t.value; await renderCurrentTab(); return; }

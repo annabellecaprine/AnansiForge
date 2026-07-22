@@ -2430,3 +2430,31 @@ textarea.mc-modal-input { resize: vertical; }
   text-align: center;
   white-space: nowrap;
 }
+
+/* Pagination Bar */
+.mc-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.mc-pag-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mc-pag-info {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.mc-pag-page {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
