@@ -65,6 +65,7 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
   let chatHistory = [];
   let currentDraft = { name: '', content: '' };
   let isGenerating = false;
+  let anchoredItems = []; // Array of { id, name, type: 'component'|'project', category, role, universe, lineage, content }
 
   // DOM Elements
   const parlorView = document.getElementById('parlor-view');
@@ -97,6 +98,135 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
       }
     });
     btnSaveAll.addEventListener('click', saveAssetToVault);
+
+    // Attachment buttons
+    document.getElementById('btn-attach-component')?.addEventListener('click', () => openAttachModal('component'));
+    document.getElementById('btn-attach-project')?.addEventListener('click', () => openAttachModal('project'));
+
+    // Task Recipe buttons
+    document.getElementById('recipe-draft-bio')?.addEventListener('click', () => runRecipe('bio'));
+    document.getElementById('recipe-draft-greeting')?.addEventListener('click', () => runRecipe('initial_message'));
+    document.getElementById('recipe-create-nemesis')?.addEventListener('click', () => runRecipe('nemesis'));
+    document.getElementById('recipe-generate-scenario')?.addEventListener('click', () => runRecipe('scenario'));
+  }
+
+  // ─── Anchored Context Dock Functions ──────────────────────────────────────────
+
+  function renderContextChips() {
+    const container = document.getElementById('parlor-context-chips');
+    const countEl = document.getElementById('context-chip-count');
+    const recipeBar = document.getElementById('parlor-recipe-bar');
+    if (!container) return;
+
+    if (countEl) countEl.textContent = anchoredItems.length;
+
+    if (anchoredItems.length === 0) {
+      container.innerHTML = `<span class="context-empty-hint">No context anchored. Attach reference components/projects to ground the AI.</span>`;
+      if (recipeBar) recipeBar.style.display = 'none';
+      return;
+    }
+
+    if (recipeBar && inputContainer.style.display !== 'none') recipeBar.style.display = 'flex';
+
+    container.innerHTML = anchoredItems.map(item => `
+      <div class="context-chip">
+        <span>${item.type === 'project' ? '🤖' : item.role === 'Hero' ? '🦸' : item.role === 'Villain' ? '🦹' : '🧩'} ${escapeHTML(item.name)}</span>
+        <button class="context-chip-remove" data-id="${item.id}" title="Detach context">✕</button>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.context-chip-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.dataset.id;
+        anchoredItems = anchoredItems.filter(i => i.id !== id);
+        renderContextChips();
+      });
+    });
+  }
+
+  async function openAttachModal(type) {
+    const modal = document.getElementById('parlor-attach-modal');
+    const title = document.getElementById('parlor-attach-modal-title');
+    const list = document.getElementById('parlor-attach-list');
+    const searchInput = document.getElementById('parlor-attach-search');
+    if (!modal || !list) return;
+
+    title.textContent = type === 'project' ? 'Anchor Project Context' : 'Anchor Vault Component Context';
+    searchInput.value = '';
+    modal.classList.remove('hidden');
+
+    let items = [];
+    if (type === 'project') {
+      items = (await window.ForgeDB.getAllProjects()).map(p => ({
+        id: p.id, type: 'project', name: p.name, meta: `${(p.componentIds||[]).length} components`, item: p
+      }));
+    } else {
+      items = (await window.ForgeDB.getAllComponents()).map(c => ({
+        id: c.id, type: 'component', name: c.name, category: c.category, role: c.tracker?.role, universe: c.tracker?.universe, lineage: c.lineage, meta: `${c.category}${c.tracker?.role ? ' · ' + c.tracker.role : ''}`, item: c
+      }));
+    }
+
+    const renderList = (filterText = '') => {
+      const q = filterText.toLowerCase();
+      const matched = items.filter(i => i.name.toLowerCase().includes(q) || (i.meta||'').toLowerCase().includes(q));
+      
+      if (matched.length === 0) {
+        list.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-muted);">No matching items found.</div>`;
+        return;
+      }
+
+      list.innerHTML = matched.map(i => {
+        const isAttached = anchoredItems.some(a => a.id === i.id);
+        return `
+          <div class="parlor-attach-item" data-id="${i.id}">
+            <div>
+              <div class="parlor-attach-item-name">${i.type === 'project' ? '🤖' : '🧩'} ${escapeHTML(i.name)}</div>
+              <div class="parlor-attach-item-meta">${escapeHTML(i.meta)}</div>
+            </div>
+            <button class="btn ${isAttached ? 'btn-ghost' : 'btn-accent'} btn-sm btn-do-attach" data-id="${i.id}">
+              ${isAttached ? 'Attached ✓' : 'Anchor Context'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      list.querySelectorAll('.btn-do-attach').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = e.currentTarget.dataset.id;
+          const target = items.find(i => i.id === id);
+          if (!target) return;
+
+          if (anchoredItems.some(a => a.id === id)) {
+            anchoredItems = anchoredItems.filter(a => a.id !== id);
+          } else {
+            anchoredItems.push({
+              id: target.id,
+              type: target.type,
+              name: target.name,
+              category: target.category,
+              role: target.role,
+              universe: target.universe,
+              lineage: target.lineage,
+              content: target.item.content || JSON.stringify(target.item)
+            });
+          }
+          renderContextChips();
+          renderList(searchInput.value);
+        });
+      });
+    };
+
+    renderList();
+    searchInput.oninput = () => renderList(searchInput.value);
+  }
+
+  function buildAnchoredContextPrompt() {
+    if (anchoredItems.length === 0) return '';
+    let text = `\n\n## ANCHORED CONTEXT / CANON REFERENCE MATERIAL:\nThe user has explicitly anchored the following existing records as canonical reference material for this session. Maintain strict narrative, tone, relationship, and trait consistency with these anchored assets:\n`;
+    anchoredItems.forEach(item => {
+      text += `\n### [${item.type.toUpperCase()}] "${item.name}"${item.universe ? ` (Universe: ${item.universe})` : ''}${item.role ? ` (Role: ${item.role})` : ''}:\n${(item.content || '').substring(0, 1500)}\n`;
+    });
+    return text;
   }
 
   function startParlorWizard() {
@@ -170,6 +300,8 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
     inputContainer.style.display = 'flex';
     textInput.placeholder = 'Discuss the design with the Forge...';
     textInput.focus();
+
+    renderContextChips();
 
     if (seed) {
       addUserBubble(`Seed Concept: "${seed}"`);
@@ -300,7 +432,7 @@ ${CATEGORY_GUIDANCE[assetCategory] || ''}
   "readyToSave": false
 }
 
-Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed and well-formatted markdown. Do not include markdown codeblock tags (\`\`\`json) in your raw output.`;
+Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed and well-formatted markdown. Do not include markdown codeblock tags (\`\`\`json) in your raw output.${buildAnchoredContextPrompt()}`;
 
     try {
       let responseText = "";
@@ -407,6 +539,40 @@ Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed an
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
+  function runRecipe(recipeType) {
+    if (isGenerating) return;
+
+    if (recipeType === 'bio') {
+      assetCategory = 'bio';
+      outputCategory.value = 'bio';
+      const promptText = 'Draft a rich, sensory narrative Bio based on our anchored context.';
+      addUserBubble(promptText);
+      chatHistory.push({ role: 'user', content: promptText });
+      executeForgeTurn();
+    } else if (recipeType === 'initial_message') {
+      assetCategory = 'initial_message';
+      outputCategory.value = 'initial_message';
+      const promptText = 'Draft 3 opening dialogue hook options for an Initial Message based on our anchored context.';
+      addUserBubble(promptText);
+      chatHistory.push({ role: 'user', content: promptText });
+      executeForgeTurn();
+    } else if (recipeType === 'nemesis') {
+      assetCategory = 'character';
+      outputCategory.value = 'character';
+      const promptText = 'Design a compelling Villain or AntiHero component whose personality traits, abilities, and worldview directly clash with our anchored hero.';
+      addUserBubble(promptText);
+      chatHistory.push({ role: 'user', content: promptText });
+      executeForgeTurn();
+    } else if (recipeType === 'scenario') {
+      assetCategory = 'setting';
+      outputCategory.value = 'setting';
+      const promptText = 'Generate a detailed Scenario setting tailored specifically around the conflict points and dynamics of our anchored characters.';
+      addUserBubble(promptText);
+      chatHistory.push({ role: 'user', content: promptText });
+      executeForgeTurn();
+    }
+  }
+
   async function saveAssetToVault() {
     const name = outputName.value.trim();
     const content = outputContent.value.trim();
@@ -418,30 +584,33 @@ Always keep the "draft" object up-to-date. Ensure "draft.content" is detailed an
       return;
     }
 
-    const component = {
-      name,
-      category,
-      lineage,
-      content,
-      tags: ['forge', category]
-    };
+    // Infer role & universe from anchored context if present
+    const firstHero = anchoredItems.find(i => i.role === 'Hero');
+    const firstVillain = anchoredItems.find(i => i.role === 'Villain');
+    const firstUni = anchoredItems.find(i => i.universe)?.universe || '';
 
-    try {
+    let inheritedRole = '';
+    if (category === 'character') {
+      inheritedRole = firstHero ? 'Villain' : firstVillain ? 'Hero' : '';
+    }
+
+    // Open Vault Editor pre-filled for final user review
+    if (window.ForgeAppBridge && window.ForgeAppBridge.openEditorNew) {
+      window.ForgeAppBridge.openEditorNew({
+        name,
+        category,
+        content,
+        lineage,
+        tags: ['forge', category],
+        role: inheritedRole,
+        universe: firstUni
+      });
+      if (window.showToast) window.showToast(`Opened "${name}" in Vault Editor for review!`, 'success');
+    } else {
+      // Fallback save directly
+      const component = { name, category, lineage, content, tags: ['forge', category] };
       await window.ForgeDB.saveComponent(component);
-      if (window.showToast) {
-        window.showToast(`Saved "${name}" to Vault successfully!`, 'success');
-      }
-
-      // Exit back to library
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.getElementById('welcome-view').classList.add('active');
-
-      if (window.refreshVaultList) {
-        window.refreshVaultList();
-      }
-    } catch (err) {
-      console.error('Failed to save Forge asset:', err);
-      if (window.showToast) window.showToast('Failed to save asset.', 'error');
+      if (window.showToast) window.showToast(`Saved "${name}" to Vault successfully!`, 'success');
     }
   }
 

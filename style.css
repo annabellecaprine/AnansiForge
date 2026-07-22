@@ -2656,3 +2656,116 @@ textarea.mc-modal-input { resize: vertical; }
   margin: 0;
   white-space: pre-wrap;
 }
+
+/* ─── AI Forge v2 Styles ─────────────────────────────────────────────────── */
+
+.parlor-context-dock {
+  padding: 10px 14px;
+  background: rgba(18, 20, 28, 0.85);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
+}
+.context-dock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.context-dock-actions {
+  display: flex;
+  gap: 6px;
+}
+.context-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 26px;
+}
+.context-empty-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 12px;
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.context-chip-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.context-chip-remove:hover {
+  color: var(--danger);
+}
+.parlor-recipe-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+.recipe-bar-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.recipe-btn {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  white-space: nowrap;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  transition: all var(--transition-fast);
+}
+.recipe-btn:hover {
+  border-color: var(--accent);
+  background: var(--bg-surface-hover);
+  color: var(--accent);
+}
+.parlor-attach-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.parlor-attach-item:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+.parlor-attach-item-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.parlor-attach-item-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}

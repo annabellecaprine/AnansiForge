@@ -202,11 +202,35 @@
         <div class="view-content parlor-grid">
           <!-- Forge Chat interface -->
           <div class="parlor-chat-panel">
+            <!-- Anchored Context Dock -->
+            <div id="parlor-context-dock" class="parlor-context-dock">
+              <div class="context-dock-header">
+                <span>⚓ Anchored Context (<span id="context-chip-count">0</span>)</span>
+                <div class="context-dock-actions">
+                  <button id="btn-attach-component" class="btn btn-ghost btn-sm" title="Attach Vault Component">+ Component</button>
+                  <button id="btn-attach-project" class="btn btn-ghost btn-sm" title="Attach Compiled Project">+ Project</button>
+                </div>
+              </div>
+              <div id="parlor-context-chips" class="context-chips-container">
+                <span class="context-empty-hint">No context anchored. Attach reference components/projects to ground the AI.</span>
+              </div>
+            </div>
+
             <div id="parlor-chat-log" class="parlor-chat-log">
               <!-- Setup form or chat bubbles -->
             </div>
             <div id="parlor-controls" class="parlor-controls">
               <div id="parlor-options-container" class="parlor-options"></div>
+              
+              <!-- Task Recipes Bar -->
+              <div id="parlor-recipe-bar" class="parlor-recipe-bar" style="display:none;">
+                <span class="recipe-bar-label">⚡ Task Recipes:</span>
+                <button id="recipe-draft-bio" class="btn btn-ghost btn-sm recipe-btn" title="Draft character bio based on anchored context">📝 Draft Bio</button>
+                <button id="recipe-draft-greeting" class="btn btn-ghost btn-sm recipe-btn" title="Draft initial message hook">💬 Draft Greeting Hook</button>
+                <button id="recipe-create-nemesis" class="btn btn-ghost btn-sm recipe-btn" title="Create a clashing nemesis component">🦹 Create Nemesis</button>
+                <button id="recipe-generate-scenario" class="btn btn-ghost btn-sm recipe-btn" title="Generate scenario tailored for anchored characters">🎭 Generate Scenario</button>
+              </div>
+
               <div id="parlor-input-container" class="parlor-input-row" style="display:none;">
                 <textarea id="parlor-input" placeholder="Discuss the design with the Forge..."></textarea>
                 <button id="btn-parlor-send" class="btn btn-accent">Send</button>
@@ -737,6 +761,25 @@
     </div>
   </div>
 
+  <!-- PARLOR CONTEXT ATTACHMENT MODAL -->
+  <div id="parlor-attach-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 540px; width: 90%;">
+      <div class="modal-header">
+        <h3 id="parlor-attach-modal-title">Anchor Context to AI Forge</h3>
+        <button onclick="document.getElementById('parlor-attach-modal').classList.add('hidden')" class="btn btn-ghost btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom:12px;">
+          <input type="text" id="parlor-attach-search" class="mc-search" placeholder="Search items to attach…" style="width:100%;">
+        </div>
+        <div id="parlor-attach-list" class="parlor-attach-list" style="max-height: 320px; overflow-y: auto; display:flex; flex-direction:column; gap:6px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="document.getElementById('parlor-attach-modal').classList.add('hidden')" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- COMPONENT TWEAK MODAL -->
   <div id="tweak-modal-overlay" class="modal-overlay hidden">
     <div class="modal" style="max-width: 600px; width: 90%;">
@@ -809,15 +852,15 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
-  <script src="js/db.js?v=3.4"></script>
-  <script src="js/png-handler.js?v=3.4"></script>
-  <script src="js/breakout.js?v=3.4"></script>
-  <script src="js/llm.js?v=3.4"></script>
-  <script src="js/parlor.js?v=3.4"></script>
-  <script src="js/assembler.js?v=3.4"></script>
-  <script src="js/sandbox.js?v=3.4"></script>
-  <script src="js/omni-search.js?v=3.4"></script>
-  <script src="js/app.js?v=3.4"></script>
-  <script src="js/mission-control.js?v=3.4"></script>
+  <script src="js/db.js?v=3.5"></script>
+  <script src="js/png-handler.js?v=3.5"></script>
+  <script src="js/breakout.js?v=3.5"></script>
+  <script src="js/llm.js?v=3.5"></script>
+  <script src="js/parlor.js?v=3.5"></script>
+  <script src="js/assembler.js?v=3.5"></script>
+  <script src="js/sandbox.js?v=3.5"></script>
+  <script src="js/omni-search.js?v=3.5"></script>
+  <script src="js/app.js?v=3.5"></script>
+  <script src="js/mission-control.js?v=3.5"></script>
 </body>
 </html>
