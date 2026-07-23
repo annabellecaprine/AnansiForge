@@ -506,7 +506,35 @@
       return `${Math.floor(diffSec/86400)}d ago`;
     };
 
-    const actionIcons = { created: '✨', edited: '✏️', deleted: '🗑️', tracker_updated: '🔧', record_saved: '📝', project_compiled: '🤖' };
+    const actionIcons = {
+      created: '🟢',
+      updated: '🟡',
+      tracker_updated: '🟡',
+      edited: '🟡',
+      scheduled: '🚀',
+      metrics_updated: '📈',
+      metrics: '📈',
+      published: '✅',
+      released: '✅',
+      deleted: '🗑️',
+      record_saved: '📝',
+      project_compiled: '🤖'
+    };
+
+    const actionLabels = {
+      created: 'created',
+      updated: 'updated',
+      tracker_updated: 'updated',
+      edited: 'updated',
+      scheduled: 'scheduled',
+      metrics_updated: 'metrics updated',
+      metrics: 'metrics updated',
+      published: 'published',
+      released: 'published',
+      deleted: 'deleted',
+      record_saved: 'saved',
+      project_compiled: 'compiled'
+    };
 
     return `<div class="mc-overview">
       <div class="mc-kpi-grid">
@@ -668,10 +696,10 @@
               ? '<p class="mc-empty-state">No recent activity logged yet.</p>'
               : activityLogs.map(log => `
                 <div class="mc-activity-entry">
-                  <span class="mc-activity-icon">${actionIcons[log.action] || '📌'}</span>
+                  <span class="mc-activity-icon">${actionIcons[log.action] || '🟡'}</span>
                   <div class="mc-activity-details">
                     <span class="mc-activity-target">${esc(log.targetName || 'Item')}</span>
-                    <span class="mc-activity-action">${esc(log.action.replace('_', ' '))} ${log.details ? `(${esc(log.details)})` : ''}</span>
+                    <span class="mc-activity-action">${actionLabels[log.action] || esc(log.action.replace('_', ' '))} ${log.details ? `(${esc(log.details)})` : ''}</span>
                   </div>
                   <span class="mc-activity-time">${formatTimeAgo(log.timestamp)}</span>
                 </div>`).join('')
@@ -1294,7 +1322,23 @@ Write-Host "Done! tracker-import.json created."</pre>
       };
     }
 
+    const isNew = !r.id;
     await window.ForgeDB.saveTrackerRecord(updated);
+
+    if (window.ForgeDB?.logActivity) {
+      let act = isNew ? 'created' : 'updated';
+      if (updated.metrics?.messages > 0 || updated.metrics?.uniqueChats > 0) act = 'metrics_updated';
+      if (updated.scheduledDate && updated.scheduledDate !== r.scheduledDate) act = 'scheduled';
+      if (isReleasePublished(updated)) act = 'published';
+
+      window.ForgeDB.logActivity({
+        action: act,
+        targetType: r.assetType || 'record',
+        targetId: updated.id,
+        targetName: updated.name
+      }).catch(e => console.error(e));
+    }
+
     await loadAll();
     closeModal();
     renderCurrentTab();
@@ -2066,7 +2110,20 @@ Write-Host "Done! tracker-import.json created."</pre>
       // Date input
       if (t.matches('.mc-date-input')) {
         const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
-        if (rec) { await window.ForgeDB.saveTrackerRecord({ ...rec, scheduledDate: t.value || null }); await loadAll(); }
+        if (rec) {
+          await window.ForgeDB.saveTrackerRecord({ ...rec, scheduledDate: t.value || null });
+          if (window.ForgeDB?.logActivity) {
+            const isPub = isReleasePublished({ ...rec, scheduledDate: t.value || null });
+            window.ForgeDB.logActivity({
+              action: isPub ? 'published' : 'scheduled',
+              targetType: 'release',
+              targetId: rec.id,
+              targetName: rec.name,
+              details: t.value || 'cleared'
+            }).catch(e => console.error(e));
+          }
+          await loadAll();
+        }
         return;
       }
 
