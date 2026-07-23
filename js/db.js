@@ -751,13 +751,15 @@
   // --- Snapshots ---
   async function captureSnapshot() {
     const components = await getAllComponents();
-    let publishedCount = 0;
+    const records = await getAllTrackerRecords();
+
+    let publishedVault = 0;
     const byCategory = {};
     const universes = {};
     
     components.forEach(c => {
       if (c.tracker && c.tracker.pipeline && c.tracker.pipeline.published) {
-        publishedCount++;
+        publishedVault++;
       }
       const cat = c.category || 'character';
       if (!byCategory[cat]) byCategory[cat] = { total: 0, published: 0 };
@@ -771,7 +773,23 @@
       }
     });
 
-    const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    const releases = records.filter(r => r.assetType === 'release');
+    const isReleased = (r) => {
+      if (r.pipeline?.released || r.pipeline?.published) return true;
+      if (r.scheduledDate && r.scheduledDate <= dateStr) return true;
+      return false;
+    };
+    const publishedReleases = releases.filter(isReleased).length;
+
+    const totalItems = components.length + releases.length;
+    const publishedCount = publishedVault + publishedReleases;
+
     const db = dbInstance || await initDB();
     
     // Check if snapshot for today exists
@@ -783,14 +801,16 @@
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
-    
-    if (existing) return existing;
 
     const snapshot = {
-      id: generateId(),
+      id: existing ? existing.id : generateId(),
       date: dateStr,
-      totalItems: components.length,
+      totalItems,
       publishedCount,
+      publishedVault,
+      publishedReleases,
+      totalVault: components.length,
+      totalReleases: releases.length,
       byCategory,
       universes,
       timestamp: new Date().toISOString()

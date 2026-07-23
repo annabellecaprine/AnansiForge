@@ -425,8 +425,32 @@
       catCount[catName] = (catCount[catName] || 0) + 1;
     });
 
-    // Priority queue: P1 items not yet complete
-    const p1Incomplete = comps.filter(c => c.tracker?.priority === 'P1' && !c.tracker?.pipeline?.complete);
+    // Priority queue: P1 items not yet complete across Vault components and Tracker Records
+    const p1VaultIncomplete = comps.filter(c => {
+      const prio = c.tracker?.priority || c.priority;
+      const isDone = c.tracker?.pipeline?.complete || c.tracker?.pipeline?.published;
+      return prio === 'P1' && !isDone;
+    }).map(c => ({
+      id: c.id,
+      name: c.name,
+      universe: c.tracker?.universe || c.universe,
+      isVault: true,
+      comp: c
+    }));
+
+    const p1RecordIncomplete = records.filter(r => {
+      const prio = r.priority || r.tracker?.priority;
+      const isDone = r.pipeline?.complete || r.pipeline?.published || isReleasePublished(r);
+      return prio === 'P1' && !isDone;
+    }).map(r => ({
+      id: r.id,
+      name: r.name,
+      universe: r.universe,
+      isVault: false,
+      rec: r
+    }));
+
+    const p1Incomplete = [...p1VaultIncomplete, ...p1RecordIncomplete];
 
     // Fetch real activity log from IndexedDB
     let activityLogs = [];
@@ -481,20 +505,23 @@
 
       <!-- Pipeline Burndown Progress Chart -->
       <div class="mc-overview-panel mc-burndown-panel" style="margin-bottom:1.25rem;">
-        <h3 class="mc-panel-title">📈 Pipeline Burndown — Progress History</h3>
+        <h3 class="mc-panel-title">📈 Pipeline Burndown — Vault & Release Publication History</h3>
+        <p class="card-desc" style="margin-bottom:10px; font-size:0.75rem; color:var(--text-muted);">
+          Tracks daily publication progress across all Vault components and Bot Releases over time.
+        </p>
         ${snapshots.length === 0
           ? '<p class="mc-empty-state">Snapshot history recording active. Returns snapshots on future visits!</p>'
           : `<div class="mc-burndown-chart">
               ${snapshots.map(s => {
-                const tot = s.data?.totalItems || 1;
-                const pub = s.data?.publishedCount || 0;
-                const pct = Math.round(pub / tot * 100);
+                const tot = s.totalItems || s.data?.totalItems || 1;
+                const pub = s.publishedCount ?? s.data?.publishedCount ?? 0;
+                const pct = Math.round(pub / Math.max(tot, 1) * 100);
                 return `<div class="mc-burndown-row">
                   <span class="mc-burndown-date">${s.date || 'Today'}</span>
                   <div class="mc-burndown-bar-wrap">
                     <div class="mc-burndown-bar" style="width:${pct}%"></div>
                   </div>
-                  <span class="mc-burndown-pct">${pct}% (${pub}/${tot})</span>
+                  <span class="mc-burndown-pct">${pct}% (${pub}/${tot} published)</span>
                 </div>`;
               }).join('')}
             </div>`
@@ -561,12 +588,15 @@
           ${p1Incomplete.length === 0
             ? '<p class="mc-empty-state">All P1 items complete! 🎉</p>'
             : `<div class="mc-priority-list">
-                ${p1Incomplete.slice(0,8).map(c => `
-                  <div class="mc-priority-row">
-                    <span class="mc-priority-name">${esc(c.name)}</span>
-                    ${universeBadge(c.tracker?.universe)}
-                    <div class="mc-priority-bar">${readinessBar(calcReadinessForVault(c), true)}</div>
-                  </div>`).join('')}
+                ${p1Incomplete.slice(0,8).map(item => {
+                  const score = item.isVault ? calcReadinessForVault(item.comp) : calcReadinessForRecord(item.rec);
+                  return `
+                    <div class="mc-priority-row">
+                      <span class="mc-priority-name">${esc(item.name)}</span>
+                      ${universeBadge(item.universe)}
+                      <div class="mc-priority-bar">${readinessBar(score, true)}</div>
+                    </div>`;
+                }).join('')}
               </div>`
           }
         </div>
