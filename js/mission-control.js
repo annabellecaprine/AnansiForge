@@ -54,6 +54,7 @@
     sortDir: 'desc',               // 'desc' = most ready first
     groupByPriority: false,
     filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
+    overviewFilters: { universeCat: 'all', roleMode: 'role' },
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -404,18 +405,32 @@
       return steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r);
     });
 
-    // Universe distribution across characters
+    // Dynamic Universe Category distribution
+    const selectedUniCat = state.overviewFilters?.universeCat || 'all';
+    const targetUniComps = selectedUniCat === 'all'
+      ? comps
+      : comps.filter(c => c.category === selectedUniCat);
+    
     const universeCount = {};
-    chars.forEach(c => {
-      const u = c.tracker?.universe || 'Other';
+    targetUniComps.forEach(c => {
+      const u = c.tracker?.universe || c.universe || 'Other';
       universeCount[u] = (universeCount[u] || 0) + 1;
     });
 
-    // Role distribution across characters
+    // Dynamic Role & Faction distribution
+    const selectedRoleMode = state.overviewFilters?.roleMode || 'role';
     const roleCount = { Hero: 0, Villain: 0, AntiHero: 0, Support: 0, Other: 0 };
     chars.forEach(c => {
       const r = c.tracker?.role || 'Other';
       roleCount[r] = (roleCount[r] || 0) + 1;
+    });
+
+    const factionCount = {};
+    comps.forEach(c => {
+      const f = (c.tracker?.faction || c.faction || '').trim();
+      if (f) {
+        factionCount[f] = (factionCount[f] || 0) + 1;
+      }
     });
 
     // Category distribution across vault components
@@ -531,38 +546,69 @@
       <div class="mc-overview-grid">
         <!-- Universe Split Panel -->
         <div class="mc-overview-panel">
-          <h3 class="mc-panel-title">🌌 Universe Split — Characters</h3>
+          <div class="mc-card-header-with-pills">
+            <h3 class="mc-panel-title">🌌 Universe Split</h3>
+            <div class="mc-pill-group">
+              <button class="mc-overview-uni-pill${selectedUniCat === 'all' ? ' active' : ''}" data-cat="all">All</button>
+              <button class="mc-overview-uni-pill${selectedUniCat === 'character' ? ' active' : ''}" data-cat="character">Chars</button>
+              <button class="mc-overview-uni-pill${selectedUniCat === 'organization' ? ' active' : ''}" data-cat="organization">Orgs</button>
+              <button class="mc-overview-uni-pill${selectedUniCat === 'scenario' ? ' active' : ''}" data-cat="scenario">Scenarios</button>
+              <button class="mc-overview-uni-pill${selectedUniCat === 'initial_message' ? ' active' : ''}" data-cat="initial_message">Init</button>
+            </div>
+          </div>
           <div class="mc-universe-bars">
-            ${Object.entries(universeCount).sort((a,b)=>b[1]-a[1]).map(([u,n])=>{
-              const pct = Math.round(n/Math.max(chars.length,1)*100);
-              const col = UNIVERSE_COLORS[u] || '#6b7280';
-              return `<div class="mc-uni-row">
-                <span class="mc-uni-label" style="color:${col}">${u}</span>
-                <div class="mc-uni-bar-wrap">
-                  <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
-                </div>
-                <span class="mc-uni-count">${n}</span>
-              </div>`;
-            }).join('')}
+            ${Object.keys(universeCount).length === 0
+              ? '<p class="mc-empty-state">No items in this category.</p>'
+              : Object.entries(universeCount).sort((a,b)=>b[1]-a[1]).map(([u,n])=>{
+                const pct = Math.round(n/Math.max(targetUniComps.length,1)*100);
+                const col = (state.universeColorMap && state.universeColorMap[u]) || UNIVERSE_COLORS[u] || '#6b7280';
+                return `<div class="mc-uni-row">
+                  <span class="mc-uni-label" style="color:${col}">${esc(u)}</span>
+                  <div class="mc-uni-bar-wrap">
+                    <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
+                  </div>
+                  <span class="mc-uni-count">${n}</span>
+                </div>`;
+              }).join('')}
           </div>
         </div>
 
-        <!-- Role Split Panel -->
+        <!-- Role & Faction Breakdown Panel -->
         <div class="mc-overview-panel">
-          <h3 class="mc-panel-title">🎭 Role Breakdown — Characters</h3>
+          <div class="mc-card-header-with-pills">
+            <h3 class="mc-panel-title">🎭 ${selectedRoleMode === 'faction' ? 'Faction Concentration' : 'Role Breakdown'}</h3>
+            <div class="mc-pill-group">
+              <button class="mc-overview-role-pill${selectedRoleMode === 'role' ? ' active' : ''}" data-mode="role">Roles</button>
+              <button class="mc-overview-role-pill${selectedRoleMode === 'faction' ? ' active' : ''}" data-mode="faction">Factions</button>
+            </div>
+          </div>
           <div class="mc-universe-bars">
-            ${Object.entries(roleCount).filter(([_, n]) => n > 0).sort((a,b)=>b[1]-a[1]).map(([r,n])=>{
-              const pct = Math.round(n/Math.max(chars.length,1)*100);
-              const col = ROLE_COLORS[r] || '#6b7280';
-              const icon = ROLE_ICONS[r] || '❓';
-              return `<div class="mc-uni-row">
-                <span class="mc-uni-label" style="color:${col}">${icon} ${r}</span>
-                <div class="mc-uni-bar-wrap">
-                  <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
-                </div>
-                <span class="mc-uni-count">${n}</span>
-              </div>`;
-            }).join('')}
+            ${selectedRoleMode === 'faction'
+              ? (Object.keys(factionCount).length === 0
+                  ? '<p class="mc-empty-state">No factions set on components yet.</p>'
+                  : Object.entries(factionCount).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([f,n])=>{
+                      const pct = Math.round(n/Math.max(comps.length,1)*100);
+                      return `<div class="mc-uni-row">
+                        <span class="mc-uni-label" style="color:var(--text-secondary); min-width:85px;">${esc(f)}</span>
+                        <div class="mc-uni-bar-wrap">
+                          <div class="mc-uni-bar" style="width:${pct}%;background:var(--accent);"></div>
+                        </div>
+                        <span class="mc-uni-count">${n}</span>
+                      </div>`;
+                    }).join(''))
+              : Object.entries(roleCount).filter(([_, n]) => n > 0).sort((a,b)=>b[1]-a[1]).map(([r,n])=>{
+                  const pct = Math.round(n/Math.max(chars.length,1)*100);
+                  const col = ROLE_COLORS[r] || '#6b7280';
+                  const icon = ROLE_ICONS[r] || '❓';
+                  return `<div class="mc-uni-row">
+                    <span class="mc-uni-label" style="color:${col}">${icon} ${r}</span>
+                    <div class="mc-uni-bar-wrap">
+                      <div class="mc-uni-bar" style="width:${pct}%;background:${col};"></div>
+                    </div>
+                    <span class="mc-uni-count">${n}</span>
+                  </div>`;
+                }).join('')
+            }
           </div>
         </div>
 
@@ -1553,6 +1599,24 @@ Write-Host "Done! tracker-import.json created."</pre>
         state.activeTagFilter = '';
         state.selectedIds.clear();
         state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Overview Universe Category filter pill
+      const uniPill = t.closest('.mc-overview-uni-pill');
+      if (uniPill) {
+        if (!state.overviewFilters) state.overviewFilters = {};
+        state.overviewFilters.universeCat = uniPill.dataset.cat;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Overview Role / Faction mode pill
+      const rolePill = t.closest('.mc-overview-role-pill');
+      if (rolePill) {
+        if (!state.overviewFilters) state.overviewFilters = {};
+        state.overviewFilters.roleMode = rolePill.dataset.mode;
         await renderCurrentTab();
         return;
       }
