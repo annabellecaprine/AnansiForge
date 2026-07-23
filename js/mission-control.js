@@ -2099,8 +2099,11 @@ Write-Host "Done! tracker-import.json created."</pre>
     const view = document.getElementById('mission-control-view');
     if (!view) return;
 
-    const contentEl = document.getElementById('mc-content');
-    if (!contentEl) return;
+    let contentEl = document.getElementById('mc-content');
+    if (!contentEl) {
+      await init();
+      return;
+    }
 
     // Re-render subtab bar
     const subtabEl = document.getElementById('mc-subtab-bar');

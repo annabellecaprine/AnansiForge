@@ -1442,8 +1442,14 @@
         const mcView = document.getElementById('mission-control-view');
         if (mcView) {
           mcView.style.display = 'block';
-          await window.MissionControl.loadAll();
-          await window.MissionControl.renderCurrentTab();
+          if (window.MissionControl) {
+            if (!document.getElementById('mc-content')) {
+              await window.MissionControl.init();
+            } else {
+              await window.MissionControl.loadAll();
+              await window.MissionControl.renderCurrentTab();
+            }
+          }
         }
       });
     }
