@@ -218,7 +218,7 @@
   }
 
   function universeSelectOptionsHTML(selectedVal, defaultLabel = 'Select Universe') {
-    const list = state.allUniverses || [];
+    const list = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
     const groups = {};
     list.forEach(u => {
       const g = u.genre || 'General';
@@ -241,7 +241,7 @@
 
   function universeFilterOptionsHTML(selectedVal) {
     let html = `<option value="all" ${selectedVal === 'all' ? 'selected' : ''}>All Universes</option>`;
-    const list = state.allUniverses || [];
+    const list = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
     const groups = {};
     list.forEach(u => {
       const g = u.genre || 'General';
@@ -1242,7 +1242,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     overlay.style.background = 'rgba(0, 0, 0, 0.8)';
     overlay.style.backdropFilter = 'blur(6px)';
 
-    const list = state.allUniverses || [];
+    const list = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
     const groups = {};
     list.forEach(u => {
       const g = u.genre || 'General';

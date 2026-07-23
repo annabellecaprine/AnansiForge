@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v8
+ * Database: "anansi-forge" v9
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 8;
+  const DB_VERSION = 9;
   
   let dbInstance = null;
 
@@ -586,25 +586,17 @@
     }
     const tx = db.transaction('universes', 'readonly');
     const store = tx.objectStore('universes');
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const req = store.getAll();
-      req.onsuccess = async () => {
+      req.onsuccess = () => {
         let list = req.result || [];
         if (list.length === 0) {
-          try {
-            const seedTx = db.transaction('universes', 'readwrite');
-            const seedStore = seedTx.objectStore('universes');
-            for (const u of DEFAULT_UNIVERSES) {
-              seedStore.put(u);
-            }
-            await new Promise((r) => { seedTx.oncomplete = r; });
-          } catch(e) { console.warn('Could not seed universes:', e); }
           resolve(DEFAULT_UNIVERSES);
         } else {
           resolve(list);
         }
       };
-      req.onerror = () => reject(req.error);
+      req.onerror = () => resolve(DEFAULT_UNIVERSES);
     });
   }
 
