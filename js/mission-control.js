@@ -1213,6 +1213,147 @@ Write-Host "Done! tracker-import.json created."</pre>
     state.editingRecord = null;
   }
 
+  // ─── Universe & Genre Manager Modal ───────────────────────────────────────
+
+  async function openUniverseManagerModal() {
+    state.allUniverses = (await window.ForgeDB.getAllUniverses()) || [];
+    renderUniverseManagerModal();
+  }
+
+  function renderUniverseManagerModal() {
+    let overlay = document.getElementById('mc-uni-modal-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'mc-uni-modal-overlay';
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
+    }
+
+    const list = state.allUniverses || [];
+    const groups = {};
+    list.forEach(u => {
+      const g = u.genre || 'General';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(u);
+    });
+
+    const genreOptions = ['Comics', 'Sci-Fi & Space Opera', 'Urban Fantasy', 'Fantasy', 'Adventure / Pulp', 'Detective', 'General', 'Custom...'];
+
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:680px; width:94%; max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal-header">
+          <h3>⚙️ Manage Universes & Genres</h3>
+          <button id="mc-uni-modal-close" class="btn btn-ghost btn-icon">&times;</button>
+        </div>
+        <div class="modal-body" style="flex:1; overflow-y:auto; padding:16px;">
+          <div class="mc-uni-add-card" style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.2); border-radius:var(--radius-md); padding:14px; margin-bottom:20px;">
+            <h4 style="font-size:0.85rem; font-weight:600; color:var(--accent); margin-bottom:10px;">➕ Add New Universe</h4>
+            <div class="mc-form-row" style="grid-template-columns: 1.2fr 1fr 60px auto; gap:8px; align-items:center;">
+              <input type="text" id="mc-new-uni-name" class="mc-modal-input" placeholder="Universe Name (e.g. Invincible)">
+              <select id="mc-new-uni-genre" class="mc-modal-input">
+                ${genreOptions.map(g => `<option value="${g}">${g}</option>`).join('')}
+              </select>
+              <input type="color" id="mc-new-uni-color" value="#6366f1" style="height:34px; width:100%; border:1px solid var(--border-color); border-radius:var(--radius-sm); cursor:pointer; background:none; padding:2px;">
+              <button id="mc-btn-add-universe" class="mc-btn mc-btn-primary mc-btn-sm">Add</button>
+            </div>
+            <div id="mc-new-uni-custom-genre-wrap" style="display:none; margin-top:8px;">
+              <input type="text" id="mc-new-uni-custom-genre" class="mc-modal-input" placeholder="Type custom genre name...">
+            </div>
+          </div>
+
+          <div class="mc-uni-list-container">
+            ${Object.keys(groups).sort().map(genre => `
+              <div class="mc-genre-section" style="margin-bottom:16px;">
+                <div style="font-size:0.8rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid var(--border-color); padding-bottom:4px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                  <span>📁 ${esc(genre)}</span>
+                  <span style="font-size:0.7rem; color:var(--text-muted);">${groups[genre].length} items</span>
+                </div>
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:8px;">
+                  ${groups[genre].map(u => `
+                    <div class="mc-uni-item-card" style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--radius-sm);">
+                      <input type="color" class="mc-uni-edit-color" data-id="${u.id}" value="${u.color || '#6b7280'}" style="width:24px; height:24px; border:none; background:none; cursor:pointer; padding:0;" title="Change badge color">
+                      <span style="font-size:0.82rem; font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(u.name)}">${esc(u.name)}</span>
+                      <button class="mc-action-btn mc-uni-delete-btn" data-id="${u.id}" data-name="${esc(u.name)}" title="Delete Universe" style="padding:2px 6px; font-size:0.75rem;">🗑</button>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="mc-uni-modal-done" class="btn btn-primary">Done</button>
+        </div>
+      </div>
+    `;
+
+    overlay.classList.remove('hidden');
+    overlay.style.display = 'flex';
+
+    // Bind event listeners for Universe Modal
+    const selectGenre = overlay.querySelector('#mc-new-uni-genre');
+    const customWrap  = overlay.querySelector('#mc-new-uni-custom-genre-wrap');
+    if (selectGenre) {
+      selectGenre.addEventListener('change', () => {
+        customWrap.style.display = selectGenre.value === 'Custom...' ? 'block' : 'none';
+      });
+    }
+
+    overlay.querySelector('#mc-btn-add-universe')?.addEventListener('click', async () => {
+      const nameInput = overlay.querySelector('#mc-new-uni-name');
+      const name = nameInput ? nameInput.value.trim() : '';
+      if (!name) return alert('Please enter a universe name.');
+
+      let genre = selectGenre ? selectGenre.value : 'General';
+      if (genre === 'Custom...') {
+        const customInput = overlay.querySelector('#mc-new-uni-custom-genre');
+        genre = customInput ? customInput.value.trim() : 'General';
+      }
+
+      const colorInput = overlay.querySelector('#mc-new-uni-color');
+      const color = colorInput ? colorInput.value : '#6366f1';
+
+      await window.ForgeDB.saveUniverse({ name, genre, color, isCustom: true });
+      await loadAll();
+      renderUniverseManagerModal();
+      await renderCurrentTab();
+    });
+
+    overlay.querySelectorAll('.mc-uni-edit-color').forEach(input => {
+      input.addEventListener('change', async (e) => {
+        const id = e.target.dataset.id;
+        const color = e.target.value;
+        const uni = state.allUniverses.find(u => u.id === id);
+        if (uni) {
+          uni.color = color;
+          await window.ForgeDB.saveUniverse(uni);
+          await loadAll();
+          await renderCurrentTab();
+        }
+      });
+    });
+
+    overlay.querySelectorAll('.mc-uni-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+        if (confirm(`Delete universe "${name}"? Existing items set to this universe will keep their text value.`)) {
+          await window.ForgeDB.deleteUniverse(id);
+          await loadAll();
+          renderUniverseManagerModal();
+          await renderCurrentTab();
+        }
+      });
+    });
+
+    const closeHandler = () => {
+      overlay.style.display = 'none';
+      overlay.classList.add('hidden');
+    };
+    overlay.querySelector('#mc-uni-modal-close')?.addEventListener('click', closeHandler);
+    overlay.querySelector('#mc-uni-modal-done')?.addEventListener('click', closeHandler);
+  }
+
   // ─── Promote Stub → Vault ─────────────────────────────────────────────────────
 
   async function promoteStub(stubId) {
