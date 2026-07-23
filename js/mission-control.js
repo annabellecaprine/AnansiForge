@@ -315,7 +315,7 @@
         ${state.activeTagFilter ? `<button class="mc-tag-chip active" id="mc-clear-tag">✕ #${esc(state.activeTagFilter)}</button>` : ''}
         ${showAddStub ? `<button class="mc-btn mc-btn-primary" id="mc-add-stub">+ Concept</button>` : ''}
         ${showAddRecord ? `<button class="mc-btn mc-btn-primary" id="mc-add-record" data-type="${recordType}">+ Add ${recordType === 'story' ? 'Story' : 'Release'}</button>` : ''}
-        <button class="mc-btn mc-btn-ghost" id="btn-mc-manage-universes" title="Manage Universes & Genres">⚙️ Universes</button>
+        <button class="mc-btn mc-btn-ghost" id="btn-mc-manage-universes" onclick="if(window.MissionControl && window.MissionControl.openUniverseManagerModal) window.MissionControl.openUniverseManagerModal();" title="Manage Universes & Genres">⚙️ Universes</button>
       </div>
     </div>`;
   }
@@ -1216,8 +1216,15 @@ Write-Host "Done! tracker-import.json created."</pre>
   // ─── Universe & Genre Manager Modal ───────────────────────────────────────
 
   async function openUniverseManagerModal() {
-    state.allUniverses = (await window.ForgeDB.getAllUniverses()) || [];
-    renderUniverseManagerModal();
+    try {
+      if (window.ForgeDB && window.ForgeDB.getAllUniverses) {
+        state.allUniverses = (await window.ForgeDB.getAllUniverses()) || [];
+      }
+      renderUniverseManagerModal();
+    } catch (err) {
+      console.error('Failed to open Universe Manager Modal:', err);
+      alert('Error opening Universe Manager: ' + (err.message || err));
+    }
   }
 
   function renderUniverseManagerModal() {
@@ -1228,6 +1235,14 @@ Write-Host "Done! tracker-import.json created."</pre>
       overlay.className = 'modal-overlay';
       document.body.appendChild(overlay);
     }
+    overlay.style.zIndex = '10000';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(0, 0, 0, 0.8)';
+    overlay.style.backdropFilter = 'blur(6px)';
 
     const list = state.allUniverses || [];
     const groups = {};
@@ -2208,6 +2223,6 @@ Write-Host "Done! tracker-import.json created."</pre>
 
   // ─── Public API ───────────────────────────────────────────────────────────────
 
-  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject };
+  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject, openUniverseManagerModal };
 
 })();
