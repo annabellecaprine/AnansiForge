@@ -1323,19 +1323,36 @@ Write-Host "Done! tracker-import.json created."</pre>
     }
 
     const isNew = !r.id;
+    const wasPublished = isReleasePublished(r);
+    const isNowPublished = isReleasePublished(updated);
+
+    const metricsChanged = updated.metrics && (
+      updated.metrics.messages !== (r.metrics?.messages || 0) ||
+      updated.metrics.uniqueChats !== (r.metrics?.uniqueChats || 0) ||
+      updated.metrics.date !== r.metrics?.date
+    );
+
+    const dateChanged = updated.scheduledDate !== r.scheduledDate;
+
     await window.ForgeDB.saveTrackerRecord(updated);
 
     if (window.ForgeDB?.logActivity) {
       let act = isNew ? 'created' : 'updated';
-      if (updated.metrics?.messages > 0 || updated.metrics?.uniqueChats > 0) act = 'metrics_updated';
-      if (updated.scheduledDate && updated.scheduledDate !== r.scheduledDate) act = 'scheduled';
-      if (isReleasePublished(updated)) act = 'published';
+
+      if (metricsChanged) {
+        act = 'metrics_updated';
+      } else if (!wasPublished && isNowPublished) {
+        act = 'published';
+      } else if (dateChanged && updated.scheduledDate) {
+        act = 'scheduled';
+      }
 
       window.ForgeDB.logActivity({
         action: act,
         targetType: r.assetType || 'record',
         targetId: updated.id,
-        targetName: updated.name
+        targetName: updated.name,
+        details: act === 'metrics_updated' ? `${updated.metrics?.messages || 0} msgs` : ''
       }).catch(e => console.error(e));
     }
 
