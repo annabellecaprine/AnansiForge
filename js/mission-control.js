@@ -315,6 +315,7 @@
         ${state.activeTagFilter ? `<button class="mc-tag-chip active" id="mc-clear-tag">✕ #${esc(state.activeTagFilter)}</button>` : ''}
         ${showAddStub ? `<button class="mc-btn mc-btn-primary" id="mc-add-stub">+ Concept</button>` : ''}
         ${showAddRecord ? `<button class="mc-btn mc-btn-primary" id="mc-add-record" data-type="${recordType}">+ Add ${recordType === 'story' ? 'Story' : 'Release'}</button>` : ''}
+        <button class="mc-btn mc-btn-ghost" id="btn-mc-manage-universes" title="Manage Universes & Genres">⚙️ Universes</button>
       </div>
     </div>`;
   }
@@ -1334,6 +1335,12 @@ Write-Host "Done! tracker-import.json created."</pre>
   function bindEvents(container) {
     container.addEventListener('click', async (e) => {
       const t = e.target;
+
+      // Manage Universes
+      if (t.id === 'btn-mc-manage-universes' || t.closest('#btn-mc-manage-universes')) {
+        openUniverseManagerModal();
+        return;
+      }
 
       // Sub-tab switching
       const subtabBtn = t.closest('.mc-subtab');
