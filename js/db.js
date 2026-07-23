@@ -532,6 +532,127 @@
     return comp;
   }
 
+  // --- Universes & Genres Registry CRUD ---
+
+  const DEFAULT_UNIVERSES = [
+    // Comics
+    { id: 'dc', name: 'DC', genre: 'Comics', color: '#2563eb' },
+    { id: 'marvel', name: 'Marvel', genre: 'Comics', color: '#dc2626' },
+    { id: 'hellboy', name: 'Hellboy', genre: 'Comics', color: '#b91c1c' },
+    { id: 'invincible', name: 'Invincible', genre: 'Comics', color: '#f59e0b' },
+    { id: 'oc', name: 'OC', genre: 'Comics', color: '#7c3aed' },
+    { id: 'mixed', name: 'Mixed', genre: 'Comics', color: '#d97706' },
+    // Sci-Fi & Space Opera
+    { id: 'star_wars', name: 'Star Wars', genre: 'Sci-Fi & Space Opera', color: '#0284c7' },
+    { id: 'star_trek', name: 'Star Trek', genre: 'Sci-Fi & Space Opera', color: '#0369a1' },
+    { id: 'firefly', name: 'Firefly', genre: 'Sci-Fi & Space Opera', color: '#ea580c' },
+    { id: 'stargate', name: 'Stargate', genre: 'Sci-Fi & Space Opera', color: '#0891b2' },
+    { id: 'mass_effect', name: 'Mass Effect', genre: 'Sci-Fi & Space Opera', color: '#2563eb' },
+    { id: 'babylon_5', name: 'Babylon 5', genre: 'Sci-Fi & Space Opera', color: '#4f46e5' },
+    // Urban Fantasy
+    { id: 'supernatural', name: 'Supernatural', genre: 'Urban Fantasy', color: '#78350f' },
+    { id: 'buffy', name: 'Buffy', genre: 'Urban Fantasy', color: '#9333ea' },
+    { id: 'angel', name: 'Angel', genre: 'Urban Fantasy', color: '#6b21a8' },
+    { id: 'dresden_files', name: 'Dresden Files', genre: 'Urban Fantasy', color: '#1e293b' },
+    { id: 'grimm', name: 'Grimm', genre: 'Urban Fantasy', color: '#15803d' },
+    { id: 'constantine', name: 'Constantine', genre: 'Urban Fantasy', color: '#ca8a04' },
+    { id: 'daniel_faust', name: 'Daniel Faust', genre: 'Urban Fantasy', color: '#881337' },
+    // Fantasy
+    { id: 'lotr', name: 'LotR', genre: 'Fantasy', color: '#15803d' },
+    { id: 'dragon_age', name: 'Dragon Age', genre: 'Fantasy', color: '#991b1b' },
+    { id: 'elder_scrolls', name: 'Elder Scrolls', genre: 'Fantasy', color: '#854d0e' },
+    { id: 'dnd', name: 'D&D', genre: 'Fantasy', color: '#dc2626' },
+    { id: 'witcher', name: 'Witcher', genre: 'Fantasy', color: '#374151' },
+    // Adventure / Pulp
+    { id: 'indiana_jones', name: 'Indiana Jones', genre: 'Adventure / Pulp', color: '#d97706' },
+    { id: 'the_shadow', name: 'The Shadow', genre: 'Adventure / Pulp', color: '#111827' },
+    { id: 'the_phantom', name: 'The Phantom', genre: 'Adventure / Pulp', color: '#7c3aed' },
+    { id: 'doc_savage', name: 'Doc Savage', genre: 'Adventure / Pulp', color: '#ca8a04' },
+    { id: 'zorro', name: 'Zorro', genre: 'Adventure / Pulp', color: '#991b1b' },
+    { id: 'dick_tracy', name: 'Dick Tracy', genre: 'Adventure / Pulp', color: '#f59e0b' },
+    { id: 'the_rocketeer', name: 'The Rocketeer', genre: 'Adventure / Pulp', color: '#b91c1c' },
+    // Detective
+    { id: 'sherlock', name: 'Sherlock', genre: 'Detective', color: '#475569' },
+    { id: 'lupin', name: 'Lupin', genre: 'Detective', color: '#c026d3' },
+    { id: 'columbo', name: 'Columbo', genre: 'Detective', color: '#854d0e' },
+    // General
+    { id: 'other', name: 'Other', genre: 'General', color: '#6b7280' }
+  ];
+
+  async function getAllUniverses() {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) {
+      return DEFAULT_UNIVERSES;
+    }
+    const tx = db.transaction('universes', 'readonly');
+    const store = tx.objectStore('universes');
+    return new Promise((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = async () => {
+        let list = req.result || [];
+        if (list.length === 0) {
+          try {
+            const seedTx = db.transaction('universes', 'readwrite');
+            const seedStore = seedTx.objectStore('universes');
+            for (const u of DEFAULT_UNIVERSES) {
+              seedStore.put(u);
+            }
+            await new Promise((r) => { seedTx.oncomplete = r; });
+          } catch(e) { console.warn('Could not seed universes:', e); }
+          resolve(DEFAULT_UNIVERSES);
+        } else {
+          resolve(list);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function getUniverse(id) {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) return null;
+    const tx = db.transaction('universes', 'readonly');
+    const store = tx.objectStore('universes');
+    return promisify(store.get(id));
+  }
+
+  async function saveUniverse(uni) {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) return null;
+    const name = (uni.name || 'Universe').trim();
+    const id = uni.id || name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const record = {
+      id,
+      name,
+      genre: (uni.genre || 'General').trim(),
+      color: uni.color || '#6b7280',
+      isCustom: uni.isCustom !== undefined ? uni.isCustom : true,
+      updatedAt: new Date().toISOString()
+    };
+    const tx = db.transaction('universes', 'readwrite');
+    const store = tx.objectStore('universes');
+    await promisify(store.put(record));
+    return record;
+  }
+
+  async function deleteUniverse(id) {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) return;
+    const tx = db.transaction('universes', 'readwrite');
+    const store = tx.objectStore('universes');
+    return promisify(store.delete(id));
+  }
+
+  async function getUniverseColorMap() {
+    const list = await getAllUniverses();
+    const map = {};
+    list.forEach(u => {
+      if (u.name) map[u.name] = u.color || '#6b7280';
+      if (u.id) map[u.id] = u.color || '#6b7280';
+    });
+    return map;
+  }
+
   // --- Version History ---
   async function saveComponentVersion(componentId, snapshot) {
     const db = dbInstance || await initDB();

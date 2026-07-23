@@ -133,16 +133,26 @@
   // ─── Data Loaders ─────────────────────────────────────────────────────────────
 
   async function loadAll() {
-    const [comps, records, projects] = await Promise.all([
+    const [comps, records, projects, universes] = await Promise.all([
       window.ForgeDB.getAllComponents(),
       window.ForgeDB.getAllTrackerRecords(),
-      window.ForgeDB.getAllProjects()
+      window.ForgeDB.getAllProjects(),
+      window.ForgeDB.getAllUniverses ? window.ForgeDB.getAllUniverses() : Promise.resolve([])
     ]);
     state.allComponents = comps;
     state.allTrackerRecords = records;
     state.allProjects = projects || [];
+    state.allUniverses = universes || [];
     state.compMap = new Map(comps.map(c => [c.id, c]));
     state.recordMap = new Map(records.map(r => [r.id, r]));
+
+    // Build color map
+    const colorMap = {};
+    (state.allUniverses || []).forEach(u => {
+      if (u.name) colorMap[u.name] = u.color || '#6b7280';
+      if (u.id) colorMap[u.id] = u.color || '#6b7280';
+    });
+    state.universeColorMap = colorMap;
 
     // Auto-capture daily burndown snapshot when Mission Control is loaded
     if (window.ForgeDB?.captureSnapshot) {
@@ -203,8 +213,52 @@
 
   function universeBadge(u) {
     if (!u) return '';
-    const c = UNIVERSE_COLORS[u] || '#6b7280';
+    const c = (state.universeColorMap && state.universeColorMap[u]) || UNIVERSE_COLORS[u] || '#6b7280';
     return `<span class="mc-badge" style="background:${c}22; color:${c}; border:1px solid ${c}44;">${esc(u)}</span>`;
+  }
+
+  function universeSelectOptionsHTML(selectedVal, defaultLabel = 'Select Universe') {
+    const list = state.allUniverses || [];
+    const groups = {};
+    list.forEach(u => {
+      const g = u.genre || 'General';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(u);
+    });
+
+    let html = defaultLabel ? `<option value="">${esc(defaultLabel)}</option>` : '';
+    const sortedGenres = Object.keys(groups).sort();
+    sortedGenres.forEach(g => {
+      html += `<optgroup label="${esc(g)}">`;
+      groups[g].forEach(u => {
+        const isSel = (selectedVal === u.name || selectedVal === u.id);
+        html += `<option value="${esc(u.name)}" ${isSel ? 'selected' : ''}>${esc(u.name)}</option>`;
+      });
+      html += `</optgroup>`;
+    });
+    return html;
+  }
+
+  function universeFilterOptionsHTML(selectedVal) {
+    let html = `<option value="all" ${selectedVal === 'all' ? 'selected' : ''}>All Universes</option>`;
+    const list = state.allUniverses || [];
+    const groups = {};
+    list.forEach(u => {
+      const g = u.genre || 'General';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(u);
+    });
+
+    const sortedGenres = Object.keys(groups).sort();
+    sortedGenres.forEach(g => {
+      html += `<optgroup label="${esc(g)}">`;
+      groups[g].forEach(u => {
+        const isSel = (selectedVal === u.name || selectedVal === u.id);
+        html += `<option value="${esc(u.name)}" ${isSel ? 'selected' : ''}>${esc(u.name)}</option>`;
+      });
+      html += `</optgroup>`;
+    });
+    return html;
   }
 
   function tagChip(tag, active = false) {
@@ -234,15 +288,13 @@
   }
 
   function toolbarHTML(showAddStub = true, showAddRecord = false, recordType = '') {
-    const universes = ['DC','Marvel','OC','Mixed','Other'];
     const priorities = ['P1','P2','P3','P4'];
     const roles = ['Hero','Villain','AntiHero','Support','Other'];
     return `<div class="mc-toolbar">
       <div class="mc-toolbar-left">
         <input type="text" id="mc-search" class="mc-search" placeholder="Search…" value="${esc(state.filters.search)}">
         <select id="mc-filter-universe" class="mc-filter-select">
-          <option value="all">All Universes</option>
-          ${universes.map(u => `<option value="${u}" ${state.filters.universe===u?'selected':''}>${u}</option>`).join('')}
+          ${universeFilterOptionsHTML(state.filters.universe)}
         </select>
         <select id="mc-filter-role" class="mc-filter-select">
           <option value="all">All Roles</option>

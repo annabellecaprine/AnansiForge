@@ -2769,3 +2769,23 @@ textarea.mc-modal-input { resize: vertical; }
   font-size: 0.72rem;
   color: var(--text-muted);
 }
+
+/* --- Universe & Genre Manager Styles ----------------------------------------- */
+.mc-uni-item-card {
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.mc-uni-item-card:hover {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+.mc-filter-select optgroup, .mc-modal-input optgroup {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-style: normal;
+}
+.mc-filter-select option, .mc-modal-input option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: normal;
+}
