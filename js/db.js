@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v9
+ * Database: "anansi-forge" v10
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 9;
+  const DB_VERSION = 10;
   
   let dbInstance = null;
 
@@ -196,6 +196,19 @@
         if (!db.objectStoreNames.contains('auto_backups')) {
           const backupStore = db.createObjectStore('auto_backups', { keyPath: 'id' });
           backupStore.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+
+        // 11. Universes & Genres Store
+        if (!db.objectStoreNames.contains('universes')) {
+          const uniStore = db.createObjectStore('universes', { keyPath: 'id' });
+          uniStore.createIndex('name', 'name', { unique: true });
+          uniStore.createIndex('genre', 'genre', { unique: false });
+          DEFAULT_UNIVERSES.forEach(u => uniStore.put(u));
+        } else {
+          try {
+            const uniTx = event.target.transaction.objectStore('universes');
+            DEFAULT_UNIVERSES.forEach(u => uniTx.put(u));
+          } catch(e) {}
         }
       };
 
@@ -975,6 +988,12 @@
     getTrackerRecord,
     saveTrackerRecord,
     deleteTrackerRecord,
+    getAllUniverses,
+    getUniverse,
+    saveUniverse,
+    deleteUniverse,
+    getUniverseColorMap,
+    DEFAULT_UNIVERSES,
     updateVaultTracker,
     defaultTrackerPipeline,
     exportVault,
