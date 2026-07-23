@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v7
+ * Database: "anansi-forge" v8
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 7;
+  const DB_VERSION = 8;
   
   let dbInstance = null;
 

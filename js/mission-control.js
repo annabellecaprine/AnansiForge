@@ -350,7 +350,7 @@
       <div class="mc-bulk-actions">
         <select id="mc-bulk-universe" class="mc-filter-select mc-bulk-select">
           <option value="">Set Universe…</option>
-          ${['DC','Marvel','OC','Mixed','Other'].map(u => `<option value="${u}">${u}</option>`).join('')}
+          ${universeSelectOptionsHTML(tracker ? tracker.universe : '', 'Universe')}
         </select>
         <select id="mc-bulk-role" class="mc-filter-select mc-bulk-select">
           <option value="">Set Role…</option>
@@ -744,7 +744,7 @@
         </select>
         <select class="mc-universe-select" data-id="${comp.id}" data-store="vault" title="Set universe">
           <option value="">Universe</option>
-          ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}" ${tracker.universe===u?'selected':''}>${u}</option>`).join('')}
+          ${universeSelectOptionsHTML(tracker ? tracker.universe : '', 'Universe')}
         </select>
       </td>
     </tr>`;
@@ -1042,8 +1042,7 @@ Write-Host "Done! tracker-import.json created."</pre>
       <div class="mc-form-row">
         <div class="form-group"><label>Universe</label>
           <select id="mc-rec-universe" class="mc-modal-input">
-            <option value="">—</option>
-            ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}" ${r.universe===u?'selected':''}>${u}</option>`).join('')}
+            ${universeSelectOptionsHTML(r.universe, 'Select Universe')}
           </select>
         </div>
         <div class="form-group"><label>Priority</label>
@@ -1128,8 +1127,7 @@ Write-Host "Done! tracker-import.json created."</pre>
         </div>
         <div class="form-group"><label>Universe</label>
           <select id="mc-rec-universe" class="mc-modal-input">
-            <option value="">—</option>
-            ${['DC','Marvel','OC','Mixed','Other'].map(u=>`<option value="${u}">${u}</option>`).join('')}
+            ${universeSelectOptionsHTML('', 'Select Universe')}
           </select>
         </div>
         <div class="form-group"><label>Priority</label>
@@ -1328,10 +1326,11 @@ Write-Host "Done! tracker-import.json created."</pre>
       const colorInput = overlay.querySelector('#mc-new-uni-color');
       const color = colorInput ? colorInput.value : '#6366f1';
 
-      await window.ForgeDB.saveUniverse({ name, genre, color, isCustom: true });
+      const saved = await window.ForgeDB.saveUniverse({ name, genre, color, isCustom: true });
       await loadAll();
       renderUniverseManagerModal();
       await renderCurrentTab();
+      if (typeof showToast === 'function') showToast(`Universe "${name}" saved under ${genre}.`, 'success');
     });
 
     overlay.querySelectorAll('.mc-uni-edit-color').forEach(input => {
