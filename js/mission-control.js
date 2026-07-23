@@ -270,6 +270,24 @@
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  function getTodayDateStr() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function isReleasePublished(r) {
+    if (!r) return false;
+    if (r.pipeline?.released || r.pipeline?.published) return true;
+    if (r.scheduledDate) {
+      const todayStr = getTodayDateStr();
+      if (r.scheduledDate <= todayStr) return true;
+    }
+    return false;
+  }
+
   // ─── Pipeline Checkbox Cell ───────────────────────────────────────────────────
 
   function pipelineCheckboxes(pipeline, steps, recordId, isVault) {
@@ -380,9 +398,10 @@
     const stubs = records.filter(r => r.assetType === 'concept_stub' && !r.promotedToVaultId);
     const stories = records.filter(r => r.assetType === 'story');
     const releases = records.filter(r => r.assetType === 'release');
+    const publishedReleases = releases.filter(isReleasePublished);
     const readyToLaunch = releases.filter(r => {
       const steps = PIPELINE_STEPS.release;
-      return steps.every(s => r.pipeline?.[s]) && !r.pipeline?.released;
+      return steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r);
     });
 
     // Universe distribution across characters
@@ -456,7 +475,7 @@
         ${kpiCard('✅', 'Published', totalPublished, `${Math.round(totalPublished/Math.max(totalVault,1)*100)}% of vault`, 'var(--success)')}
         ${kpiCard('🔄', 'In Progress', totalInProgress, `${totalComplete} complete, pending publish`, 'var(--warning)')}
         ${kpiCard('💡', 'Concept Stubs', stubs.length, 'items queued to build', 'var(--text-muted)')}
-        ${kpiCard('🚀', 'Ready to Launch', readyToLaunch.length, 'releases fully pre-checked', '#f59e0b')}
+        ${kpiCard('🚀', 'Ready to Launch', readyToLaunch.length, `${publishedReleases.length} launched · ${readyToLaunch.length} pending`, '#f59e0b')}
         ${kpiCard('📖', 'Stories', stories.length, `${stories.filter(s=>s.pipeline?.published).length} published`)}
       </div>
 
@@ -825,9 +844,9 @@
     let releases = filterTrackerRecords(state.allTrackerRecords.filter(r => r.assetType === 'release'));
     releases = sortByReadiness(releases, calcReadinessForRecord, r => r.priority, state.sortDir);
 
-    const readyItems = releases.filter(r => steps.every(s => r.pipeline?.[s]) && !r.pipeline?.released);
-    const inProgress = releases.filter(r => !steps.every(s => r.pipeline?.[s]));
-    const released   = releases.filter(r => r.pipeline?.released);
+    const readyItems = releases.filter(r => steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r));
+    const inProgress = releases.filter(r => !steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r));
+    const released   = releases.filter(isReleasePublished);
 
     const releaseSection = (title, items, showReady = false) => {
       if (!items.length && !showReady) return '';
@@ -874,7 +893,7 @@
     const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)' };
     const linkedProj = state.allProjects.find(p => p.id === rec.projectId);
 
-    return `<tr class="mc-row${rec.pipeline?.released?' mc-row--released':''}" data-record-id="${rec.id}">
+    return `<tr class="mc-row${isReleasePublished(rec)?' mc-row--released':''}" data-record-id="${rec.id}">
       <td class="mc-cell-name">
         <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
         ${linkedProj ? `<div class="mc-linked-proj-tag" title="Linked to compiled project: ${esc(linkedProj.name)}">🤖 ${esc(linkedProj.name)} (${(linkedProj.componentIds||[]).length} items)</div>` : ''}
@@ -1983,7 +2002,7 @@ Write-Host "Done! tracker-import.json created."</pre>
   function renderMetrics() {
     const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
     const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0);
-    const noMetrics   = releases.filter(r => !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0));
+    const noMetrics   = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0));
 
     // Sort by messages descending by default
     const sorted = [...withMetrics].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0));
