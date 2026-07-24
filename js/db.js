@@ -583,6 +583,7 @@
       // release-specific
       releaseSource: releaseSource || 'manual',
       sourceStoryId: rec.sourceStoryId || null,
+      iterationLabel: rec.iterationLabel || '',
       previousMetrics: previousMetrics,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,

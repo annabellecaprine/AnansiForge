@@ -440,7 +440,46 @@
     assemblerView.classList.add('active');
   }
 
+  async function populateLinkTargets() {
+    const select = document.getElementById('assembler-link-target');
+    if (!select || !window.ForgeDB?.getAllTrackerRecords) return;
+    try {
+      const records = await window.ForgeDB.getAllTrackerRecords();
+      const stories = records.filter(r => r.assetType === 'story');
+      const releases = records.filter(r => r.assetType === 'release');
+
+      let html = '<option value="">— Link to Story / Release —</option>';
+      if (stories.length > 0) {
+        html += '<optgroup label="📖 Link to Story">';
+        stories.forEach(s => { html += `<option value="story:${s.id}">📖 ${s.name}</option>`; });
+        html += '</optgroup>';
+      }
+      if (releases.length > 0) {
+        html += '<optgroup label="🚀 Link to Release">';
+        releases.forEach(r => { html += `<option value="release:${r.id}">🚀 ${r.name}</option>`; });
+        html += '</optgroup>';
+      }
+      select.innerHTML = html;
+    } catch(e) { console.error('Failed to populate Assembler link targets:', e); }
+  }
+
+  async function linkProjectToTargetRecord(projectId) {
+    const select = document.getElementById('assembler-link-target');
+    if (!select || !select.value || !projectId) return;
+
+    const [type, id] = select.value.split(':');
+    const rec = await window.ForgeDB.getTrackerRecord(id);
+    if (rec) {
+      rec.projectId = projectId;
+      await window.ForgeDB.saveTrackerRecord(rec);
+      if (typeof showToast === 'function') {
+        showToast(`🔗 Project linked to ${type === 'story' ? 'Story' : 'Release'} "${rec.name}"!`, 'success');
+      }
+    }
+  }
+
   async function renderAssemblerScreen() {
+    populateLinkTargets();
     stagedCountBadge.textContent = stagedIds.length;
     stagedListCanvas.innerHTML = '';
     mappingsContainer.innerHTML = '';

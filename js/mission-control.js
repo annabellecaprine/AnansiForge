@@ -952,6 +952,7 @@
     const activeCount = allStories.filter(r => (r.status || 'Active') === 'Active').length;
     const promotedCount = allStories.filter(r => r.status === 'Promoted').length;
     const archivedCount = allStories.filter(r => r.status === 'Archived').length;
+    const readyCount = allStories.filter(s => calcReadinessForRecord(s) >= 80).length;
 
     // Filter by state.storyStatusFilter
     let items = filterTrackerRecords(allStories);
@@ -969,11 +970,14 @@
 
     return `
       ${toolbarHTML(false, true, 'story')}
-      <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0;">
+      <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0; align-items:center;">
         ${filterPill('Active', 'Active', activeCount, '✏️')}
         ${filterPill('Promoted', 'Promoted', promotedCount, '🚀')}
         ${filterPill('Archived', 'Archived', archivedCount, '📦')}
         ${filterPill('all', 'All Stories', allStories.length, '📁')}
+        <span style="margin-left:auto; display:inline-flex; gap:6px; align-items:center;">
+          <span class="mc-badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);" title="Stories ready to spawn releases">🟢 Ready to Spawn (${readyCount})</span>
+        </span>
       </div>
       <div class="mc-table-wrap">
         <table class="mc-table">
@@ -1006,6 +1010,7 @@
     return `<tr class="mc-row ${rec.status === 'Promoted' ? 'mc-row--promoted' : ''}" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
       <td class="mc-cell-name">
         <button class="mc-name-link mc-open-story-hub" data-story-id="${rec.id}" title="Open Story Creative Hub">📖 ${esc(rec.name)}</button>
+        ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)) > 0 ? `<span class="mc-badge mc-trophy-badge" title="Top performer">🏆 ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)).toLocaleString()} msgs</span>` : ''}
       </td>
       <td>${storyStatusBadge(rec.status)}</td>
       <td>${universeBadge(rec.universe)}</td>
@@ -1653,7 +1658,10 @@ Write-Host "Done! tracker-import.json created."</pre>
     if (!story) return;
 
     const releaseCount = (story.releaseIds || []).length + 1;
-    const releaseName = releaseCount > 1 ? `${story.name} (Release #${releaseCount})` : `${story.name} Release`;
+    const customLabel = prompt(`Enter release iteration label for "${story.name}":`, `Release #${releaseCount}`);
+    if (customLabel === null) return;
+    const iterationLabel = customLabel.trim() || `Release #${releaseCount}`;
+    const releaseName = `${story.name} (${iterationLabel})`;
 
     // Map story pipeline -> release pipeline
     const releasePipeline = window.ForgeDB.defaultTrackerPipeline('release');
@@ -1664,6 +1672,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     const newRelease = {
       assetType: 'release',
       name: releaseName,
+      iterationLabel: iterationLabel,
       universe: story.universe || '',
       project: story.project || '',
       priority: story.priority || null,
@@ -1866,6 +1875,108 @@ Write-Host "Done! tracker-import.json created."</pre>
     modal.classList.remove('hidden');
   }
 
+  
+  function exportStoryBrief(storyId) {
+    const story = state.allTrackerRecords.find(r => r.id === storyId);
+    if (!story) return;
+
+    const linkedComps = (story.linkedVaultIds || []).map(id => state.compMap.get(id)).filter(Boolean);
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id)));
+    const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
+    const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
+    const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+
+    const categories = ['character', 'scenario', 'bio', 'initial_message', 'organization'];
+    let assetsMd = '';
+    categories.forEach(cat => {
+      const comps = linkedComps.filter(c => c.category === cat);
+      if (comps.length > 0) {
+        assetsMd += `### ${CATEGORY_LABELS[cat] || cat} (${comps.length})\n`;
+        comps.forEach(c => { assetsMd += `- **${c.name}** ${c.tags && c.tags.length ? `(${c.tags.join(', ')})` : ''}\n`; });
+        assetsMd += '\n';
+      }
+    });
+
+    let releasesMd = '';
+    if (releases.length > 0) {
+      releasesMd += `### Spawned Release History (${releases.length})\n`;
+      releases.forEach(r => {
+        const m = r.metrics || {};
+        releasesMd += `- **${r.name}** ${r.iterationLabel ? `[${r.iterationLabel}]` : ''} — ${(m.messages || 0).toLocaleString()} msgs, ${(m.uniqueChats || 0).toLocaleString()} chats (Scheduled: ${r.scheduledDate || 'Unscheduled'})\n`;
+      });
+    } else {
+      releasesMd += `*No releases spawned yet.*\n`;
+    }
+
+    const markdownBrief = `---
+title: "${story.name}"
+type: story_brief
+universe: "${story.universe || 'Unassigned'}"
+priority: "${story.priority || 'P2'}"
+status: "${story.status || 'Active'}"
+project: "${story.project || ''}"
+date: "${new Date().toISOString().split('T')[0]}"
+---
+
+# Story Brief: ${story.name}
+
+- **Status**: ${story.status || 'Active'}
+- **Universe**: ${story.universe || 'Unassigned'}
+- **Priority**: ${story.priority || 'P2'}
+- **Project/Group**: ${story.project || 'None'}
+- **Total Lifecycle Messages**: ${totalMsgs.toLocaleString()}
+- **Total Unique Chats**: ${totalChats.toLocaleString()}
+- **Overall MpC**: ${avgMPC}
+
+## 📝 Overview & Notes
+${story.notes || '*No notes recorded.*'}
+
+## 🔗 Linked Vault Assets
+${assetsMd || '*No Vault assets linked.*'}
+
+## 🚀 Release History
+${releasesMd}
+`;
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `📄 Story Brief: ${esc(story.name)}`;
+    body.innerHTML = `
+      <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.85rem; color:var(--text-secondary);">Markdown format ready for export or documentation</span>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="mc-btn-copy-brief" class="mc-btn mc-btn-primary mc-btn-sm">📋 Copy to Clipboard</button>
+          <button type="button" id="mc-btn-download-brief" class="mc-btn mc-btn-secondary mc-btn-sm">💾 Download .md</button>
+        </div>
+      </div>
+      <textarea id="mc-brief-textarea" class="mc-modal-input" rows="16" readonly style="font-family:var(--font-mono); font-size:0.78rem; line-height:1.5; white-space:pre-wrap;">${esc(markdownBrief)}</textarea>
+      <div style="margin-top:14px; text-align:right;">
+        <button type="button" class="mc-btn mc-btn-ghost" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Close</button>
+      </div>
+    `;
+
+    body.querySelector('#mc-btn-copy-brief')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(markdownBrief).then(() => {
+        showToast('📄 Story Brief copied to clipboard!', 'success');
+      });
+    });
+
+    body.querySelector('#mc-btn-download-brief')?.addEventListener('click', () => {
+      const blob = new Blob([markdownBrief], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${story.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_brief.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('💾 Story Brief downloaded!', 'success');
+    });
+
+    modal.classList.remove('hidden');
+  }
+
   function openStoryHubModal(storyId) {
     const story = state.allTrackerRecords.find(r => r.id === storyId);
     if (!story) return;
@@ -1920,6 +2031,7 @@ Write-Host "Done! tracker-import.json created."</pre>
         <div class="mc-hub-header-actions" style="margin-top:10px; display:flex; gap:8px;">
           <button class="mc-btn mc-btn-primary mc-spawn-release" data-story-id="${story.id}">🚀 Spawn New Release</button>
           <button class="mc-btn mc-btn-ghost mc-edit-record" data-record-id="${story.id}">✏️ Edit Metadata</button>
+          <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${story.id}">📄 Export Brief</button>
         </div>
       </div>
 
@@ -2163,6 +2275,13 @@ Write-Host "Done! tracker-import.json created."</pre>
         return;
       }
 
+      // Export Story Brief
+      const exportBriefBtn = t.closest('.mc-export-story-brief');
+      if (exportBriefBtn) {
+        exportStoryBrief(exportBriefBtn.dataset.storyId);
+        return;
+      }
+
       // Open Story Hub Modal
       const hubBtn = t.closest('.mc-open-story-hub');
       if (hubBtn) {
@@ -2224,6 +2343,25 @@ Write-Host "Done! tracker-import.json created."</pre>
         if (!state.overviewFilters) state.overviewFilters = {};
         state.overviewFilters.universeCat = uniPill.dataset.cat;
         await renderCurrentTab();
+        return;
+      }
+
+      // Clickable Tag Chip filter
+      const tagChip = t.closest('.mc-tag-chip');
+      if (tagChip && tagChip.dataset.tag) {
+        state.filters.tag = tagChip.dataset.tag;
+        state.currentPage = 1;
+        await renderCurrentTab();
+        showToast(`Filtering by tag #${tagChip.dataset.tag}`, 'info');
+        return;
+      }
+
+      // Clear Tag Filter
+      if (t.matches('.mc-clear-tag-filter')) {
+        state.filters.tag = '';
+        state.currentPage = 1;
+        await renderCurrentTab();
+        showToast('Tag filter cleared.', 'info');
         return;
       }
 

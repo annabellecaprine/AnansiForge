@@ -3527,3 +3527,28 @@ select.mc-vis-select:focus, input.mc-date-input:focus, select.mc-universe-select
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #fca5a5;
 }
+
+/* Trophy & Iteration Badges */
+.mc-trophy-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-weight: 700;
+  margin-left: 6px;
+}
+.mc-iteration-badge {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  font-size: 0.72rem;
+  margin-left: 4px;
+}
+.mc-tag-chip {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.mc-tag-chip:hover {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--accent) !important;
+}

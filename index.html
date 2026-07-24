@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=11.0">
+  <link rel="stylesheet" href="style.css?v=12.0">
 </head>
 
 <body>
@@ -639,9 +639,17 @@
         </div>
         <div class="view-content assembler-grid">
           <div class="assembler-main">
-            <div class="form-group">
-              <label for="proj-name">Project / Bot Name</label>
-              <input type="text" id="proj-name" placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off">
+            <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label for="proj-name">Project / Bot Name</label>
+                <input type="text" id="proj-name" placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off">
+              </div>
+              <div>
+                <label for="assembler-link-target">Link to Story / Release</label>
+                <select id="assembler-link-target" class="mc-modal-input" style="height:38px;" title="Auto-link compiled project to Story or Release">
+                  <option value="">— Link to Story / Release —</option>
+                </select>
+              </div>
             </div>
 
             <!-- Staged components settings mapping -->
@@ -987,16 +995,16 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
-  <script src="js/db.js?v=11.0"></script>
-  <script src="js/png-handler.js?v=11.0"></script>
-  <script src="js/breakout.js?v=11.0"></script>
-  <script src="js/llm.js?v=11.0"></script>
-  <script src="js/parlor.js?v=11.0"></script>
-  <script src="js/assembler.js?v=11.0"></script>
-  <script src="js/sandbox.js?v=11.0"></script>
-  <script src="js/omni-search.js?v=11.0"></script>
-  <script src="js/mission-control.js?v=11.0"></script>
-  <script src="js/app.js?v=11.0"></script>
+  <script src="js/db.js?v=12.0"></script>
+  <script src="js/png-handler.js?v=12.0"></script>
+  <script src="js/breakout.js?v=12.0"></script>
+  <script src="js/llm.js?v=12.0"></script>
+  <script src="js/parlor.js?v=12.0"></script>
+  <script src="js/assembler.js?v=12.0"></script>
+  <script src="js/sandbox.js?v=12.0"></script>
+  <script src="js/omni-search.js?v=12.0"></script>
+  <script src="js/mission-control.js?v=12.0"></script>
+  <script src="js/app.js?v=12.0"></script>
 </body>
 
 </html>
