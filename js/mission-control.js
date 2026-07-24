@@ -78,6 +78,7 @@
     groupByPriority: false,
     filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
     overviewFilters: { universeCat: 'all', roleMode: 'role' },
+    leaderboardSort: 'messages',
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -2066,6 +2067,14 @@ Write-Host "Done! tracker-import.json created."</pre>
         return;
       }
 
+      // Leaderboard sort pill
+      const lbPill = t.closest('.mc-leaderboard-pill');
+      if (lbPill) {
+        state.leaderboardSort = lbPill.dataset.sort;
+        await renderCurrentTab();
+        return;
+      }
+
       // Overview Role / Faction mode pill
       const rolePill = t.closest('.mc-overview-role-pill');
       if (rolePill) {
@@ -2583,8 +2592,17 @@ Write-Host "Done! tracker-import.json created."</pre>
     const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0);
     const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0));
 
-    // Sort by messages descending by default
-    const sorted = [...withMetrics].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0));
+    const sortMode = state.leaderboardSort || 'messages';
+    const getSortVal = (r) => {
+      const m = r.metrics || {};
+      if (sortMode === 'chats') return m.uniqueChats || 0;
+      if (sortMode === 'mpc') return m.uniqueChats > 0 ? (m.messages / m.uniqueChats) : 0;
+      return m.messages || 0;
+    };
+
+    // Sort descending by active metric selection
+    const sorted = [...withMetrics].sort((a, b) => getSortVal(b) - getSortVal(a));
+    const sortLabel = sortMode === 'chats' ? 'Unique Chats' : sortMode === 'mpc' ? 'Msg / Chat (MpC)' : 'Messages';
 
     // Totals
     const totalMsgs = sorted.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
@@ -2604,8 +2622,9 @@ Write-Host "Done! tracker-import.json created."</pre>
     const metricRow = (rec, rank) => {
       const m = rec.metrics || {};
       const mpc = m.uniqueChats > 0 ? (m.messages / m.uniqueChats).toFixed(2) : '—';
-      const maxMsgs = sorted[0]?.metrics?.messages || 1;
-      const barPct = Math.round((m.messages || 0) / maxMsgs * 100);
+      const maxVal = sorted.length > 0 ? getSortVal(sorted[0]) : 1;
+      const val = getSortVal(rec);
+      const barPct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
       return `<tr class="mc-row">
         <td class="mc-metrics-rank">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</td>
         <td class="mc-cell-name">
@@ -2637,7 +2656,14 @@ Write-Host "Done! tracker-import.json created."</pre>
       </div>
 
       <div class="mc-metrics-section">
-        <h3 class="mc-section-title">📊 Leaderboard — by Messages</h3>
+        <div class="mc-card-header-with-pills" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+          <h3 class="mc-section-title" style="margin-bottom:0;">📊 Leaderboard — by ${sortLabel}</h3>
+          <div class="mc-pill-group">
+            <button class="mc-leaderboard-pill${sortMode === 'messages' ? ' active' : ''}" data-sort="messages">💬 By Messages</button>
+            <button class="mc-leaderboard-pill${sortMode === 'chats' ? ' active' : ''}" data-sort="chats">👥 By Unique Chats</button>
+            <button class="mc-leaderboard-pill${sortMode === 'mpc' ? ' active' : ''}" data-sort="mpc">📐 By MpC</button>
+          </div>
+        </div>
         ${sorted.length === 0
         ? '<p class="mc-empty-state">No metrics recorded yet. Edit a release record to add data.</p>'
         : `<div class="mc-table-wrap">

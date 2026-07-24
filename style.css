@@ -3476,3 +3476,25 @@ select.mc-vis-select, input.mc-date-input, select.mc-universe-select {
 select.mc-vis-select:focus, input.mc-date-input:focus, select.mc-universe-select:focus {
   border-color: var(--accent);
 }
+
+/* Leaderboard Pill Styles */
+.mc-leaderboard-pill {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  font-family: inherit;
+}
+.mc-leaderboard-pill:hover {
+  color: var(--text-primary);
+}
+.mc-leaderboard-pill.active {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
