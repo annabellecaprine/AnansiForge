@@ -1294,6 +1294,14 @@ Write-Host "Done! tracker-import.json created."</pre>
       <div class="form-group"><label>Notes</label>
         <textarea id="mc-rec-notes" class="mc-modal-input" rows="3">${esc(r.notes || '')}</textarea>
       </div>
+      ${assetType === 'story' ? `
+      <div class="form-group" style="margin-top:10px;">
+        <label>Linked Vault Assets (${(r.linkedVaultIds || []).length})</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${r.id || ''}">🔗 Manage Linked Vault Assets (${(r.linkedVaultIds || []).length})</button>
+        </div>
+      </div>
+      ` : ''}
       ${assetType === 'release' ? `
       <div class="mc-form-row">
         <div class="form-group"><label>Visibility</label>
@@ -1732,6 +1740,132 @@ Write-Host "Done! tracker-import.json created."</pre>
     showToast(`📖 Concept "${stub.name}" promoted to Story!`, 'success');
   }
 
+  
+  function openManageLinkedVaultModal(storyId) {
+    const story = state.allTrackerRecords.find(r => r.id === storyId);
+    if (!story) return;
+
+    let tempLinkedIds = [...(story.linkedVaultIds || [])];
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `🔗 Manage Linked Vault Assets — ${esc(story.name)}`;
+
+    const renderModalBody = () => {
+      const categories = ['character', 'scenario', 'bio', 'initial_message', 'organization'];
+
+      let html = `
+        <div class="mc-vault-picker-header" style="margin-bottom:14px;">
+          <input type="text" id="mc-vault-picker-search" class="mc-modal-input" placeholder="🔍 Search Vault components by name or tag…" style="margin-bottom:10px;">
+          <div style="font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+            <span>Linked Assets: <strong style="color:var(--text-primary);">${tempLinkedIds.length} item(s) selected</strong></span>
+            <button type="button" id="mc-btn-clear-linked-vault" class="mc-btn mc-btn-ghost mc-btn-sm" style="color:#fca5a5;">Clear All</button>
+          </div>
+        </div>
+
+        <div class="mc-vault-picker-list" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding-right:4px;">
+      `;
+
+      categories.forEach(cat => {
+        const comps = state.allComponents.filter(c => c.category === cat);
+        const catLabel = CATEGORY_LABELS[cat] || cat;
+        if (comps.length === 0) return;
+
+        html += `
+          <div class="mc-vault-cat-group">
+            <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; border-bottom:1px solid var(--border-color); padding-bottom:4px;">
+              ${catLabel} (${comps.length})
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:6px;">
+        `;
+
+        comps.forEach(comp => {
+          const count = tempLinkedIds.filter(id => id === comp.id).length;
+          const isLinked = count > 0;
+
+          html += `
+            <div class="mc-vault-picker-item${isLinked ? ' active' : ''}" data-comp-id="${comp.id}" style="padding:6px 10px; background:var(--bg-surface); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+              <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.8rem; flex:1; margin-right:6px;">
+                <span style="font-weight:600; color:var(--text-primary);">${esc(comp.name)}</span>
+                ${comp.tags && comp.tags.length ? `<span style="font-size:0.7rem; color:var(--text-muted); display:block;">#${comp.tags.slice(0, 2).join(' #')}</span>` : ''}
+              </div>
+              <div style="display:flex; align-items:center; gap:4px;">
+                ${count > 0 ? `<span class="mc-badge" style="background:rgba(99,102,241,0.2); color:var(--accent); font-size:0.72rem;">x${count}</span>` : ''}
+                <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-vault-add-one" data-comp-id="${comp.id}" title="Add instance">+</button>
+                ${count > 0 ? `<button type="button" class="mc-btn mc-btn-ghost mc-btn-sm mc-vault-remove-one" data-comp-id="${comp.id}" style="color:#fca5a5;" title="Remove instance">-</button>` : ''}
+              </div>
+            </div>
+          `;
+        });
+
+        html += `</div></div>`;
+      });
+
+      html += `</div>
+        <hr class="mc-modal-divider" style="margin:16px 0 12px;">
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="mc-btn mc-btn-ghost" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
+          <button type="button" id="mc-btn-save-linked-vault" class="mc-btn mc-btn-primary">💾 Save Linked Assets (${tempLinkedIds.length})</button>
+        </div>
+      `;
+
+      body.innerHTML = html;
+
+      // Filter search listener
+      const searchInput = body.querySelector('#mc-vault-picker-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const q = e.target.value.toLowerCase();
+          body.querySelectorAll('.mc-vault-picker-item').forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(q) ? 'flex' : 'none';
+          });
+        });
+      }
+
+      // Add instance listener
+      body.querySelectorAll('.mc-vault-add-one').forEach(btn => {
+        btn.addEventListener('click', () => {
+          tempLinkedIds.push(btn.dataset.compId);
+          renderModalBody();
+        });
+      });
+
+      // Remove instance listener
+      body.querySelectorAll('.mc-vault-remove-one').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = tempLinkedIds.indexOf(btn.dataset.compId);
+          if (idx !== -1) {
+            tempLinkedIds.splice(idx, 1);
+          }
+          renderModalBody();
+        });
+      });
+
+      // Clear all listener
+      body.querySelector('#mc-btn-clear-linked-vault')?.addEventListener('click', () => {
+        tempLinkedIds = [];
+        renderModalBody();
+      });
+
+      // Save button listener
+      body.querySelector('#mc-btn-save-linked-vault')?.addEventListener('click', async () => {
+        story.linkedVaultIds = tempLinkedIds;
+        await window.ForgeDB.saveTrackerRecord(story);
+        await loadAll();
+        modal.classList.add('hidden');
+        openStoryHubModal(story.id);
+        await renderCurrentTab();
+        showToast(`🔗 Linked Vault assets saved (${tempLinkedIds.length} items).`, 'success');
+      });
+    };
+
+    renderModalBody();
+    modal.classList.remove('hidden');
+  }
+
   function openStoryHubModal(storyId) {
     const story = state.allTrackerRecords.find(r => r.id === storyId);
     if (!story) return;
@@ -1796,11 +1930,8 @@ Write-Host "Done! tracker-import.json created."</pre>
       <!-- Related Vault Assets -->
       <div class="mc-hub-section">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <h4 class="mc-modal-section-label" style="margin:0;">🔗 Related Vault Assets (${linkedComps.length})</h4>
-          <select class="mc-modal-input mc-hub-add-vault" data-story-id="${story.id}" style="width:auto; padding:3px 8px; font-size:0.8rem;">
-            <option value="">+ Link Vault Component...</option>
-            ${unlinkedComps.map(c => `<option value="${c.id}">[${c.category}] ${esc(c.name)}</option>`).join('')}
-          </select>
+          <h4 class="mc-modal-section-label" style="margin:0;">🔗 Related Vault Assets (${linkedIds.length})</h4>
+          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${story.id}">🔗 Manage Linked Vault Assets</button>
         </div>
 
         ${missingIds.length > 0 ? `
@@ -1813,8 +1944,8 @@ Write-Host "Done! tracker-import.json created."</pre>
             <span class="mc-hub-group-title">👤 Characters (${chars.length})</span>
             ${chars.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : chars.map(c => `
               <div class="mc-hub-asset-chip">
-                <span>✓ ${esc(c.name)}</span>
-                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+                <span>✓ ${esc(c.name)} ${linkedIds.filter(id => id === c.id).length > 1 ? `<span class="mc-badge" style="background:rgba(16,185,129,0.2); color:#10b981;">x${linkedIds.filter(id => id === c.id).length}</span>` : ''}</span>
+                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink one instance">&times;</button>
               </div>`).join('')}
           </div>
 
