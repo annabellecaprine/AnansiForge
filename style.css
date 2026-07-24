@@ -3498,3 +3498,32 @@ select.mc-vis-select:focus, input.mc-date-input:focus, select.mc-universe-select
   color: #ffffff;
   font-weight: 600;
 }
+
+/* Delta Metrics Growth Styles */
+.mc-delta-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.mc-delta-up {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.mc-delta-neutral {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+/* Missing Asset Warning Styling */
+.mc-hub-missing-asset {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}

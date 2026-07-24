@@ -53,6 +53,17 @@
     experiment: '#f59e0b'
   };
 
+  
+  const STORY_TO_RELEASE_STEP_MAP = {
+    concept: 'staged',
+    notesReady: 'bio',
+    bio: 'bio',
+    initialMessage: 'initialMessage',
+    testing: 'initialTest',
+    complete: 'ready',
+    published: 'released'
+  };
+
   const STORY_STATUS_COLORS = {
     Active: '#10b981',
     Promoted: '#8b5cf6',
@@ -79,6 +90,7 @@
     filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
     overviewFilters: { universeCat: 'all', roleMode: 'role' },
     leaderboardSort: 'messages',
+    isSpawningRelease: false,
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -1730,23 +1742,35 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     title.innerHTML = `📖 Story Hub: ${esc(story.name)}`;
 
-    // Linked components
-    const linkedComps = (story.linkedVaultIds || []).map(id => state.compMap.get(id)).filter(Boolean);
+    // Linked components & missing asset detection
+    const linkedIds = story.linkedVaultIds || [];
+    const linkedComps = [];
+    const missingIds = [];
+
+    linkedIds.forEach(id => {
+      const c = state.compMap.get(id);
+      if (c) linkedComps.push(c);
+      else missingIds.push(id);
+    });
+
     const chars = linkedComps.filter(c => c.category === 'character');
     const scenarios = linkedComps.filter(c => c.category === 'scenario');
     const bios = linkedComps.filter(c => c.category === 'bio');
     const initMsgs = linkedComps.filter(c => c.category === 'initial_message');
     const orgs = linkedComps.filter(c => c.category === 'organization');
 
-    // Spawned releases
+    // Spawned releases & aggregated lifecycle metrics
     const releases = state.allTrackerRecords.filter(r =>
       r.assetType === 'release' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id))
     );
 
-    // Aggregate metrics
     const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
     const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
     const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+    
+    // Find best bot and latest release
+    const bestBot = releases.length > 0 ? [...releases].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0))[0] : null;
+    const latestRelease = releases.length > 0 ? [...releases].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] : null;
 
     // Unlinked vault components for quick-picker
     const unlinkedComps = state.allComponents.filter(c => !(story.linkedVaultIds || []).includes(c.id));
@@ -1779,6 +1803,11 @@ Write-Host "Done! tracker-import.json created."</pre>
           </select>
         </div>
 
+        ${missingIds.length > 0 ? `
+        <div class="mc-hub-missing-banner" style="margin-bottom:10px; padding:8px 12px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; color:#fca5a5; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+          <span>⚠️ Warning: ${missingIds.length} linked Vault asset(s) no longer exist in the vault.</span>
+          <button class="mc-hub-clean-missing mc-btn mc-btn-ghost mc-btn-sm" data-story-id="${story.id}" style="color:#fca5a5; border-color:rgba(239,68,68,0.4);">Clean References</button>
+        </div>` : ''}
         <div class="mc-hub-assets-grid">
           <div class="mc-hub-asset-group">
             <span class="mc-hub-group-title">👤 Characters (${chars.length})</span>
@@ -2621,10 +2650,30 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     const metricRow = (rec, rank) => {
       const m = rec.metrics || {};
-      const mpc = m.uniqueChats > 0 ? (m.messages / m.uniqueChats).toFixed(2) : '—';
+      const prev = rec.previousMetrics || null;
+
+      const mpcNum = m.uniqueChats > 0 ? (m.messages / m.uniqueChats) : 0;
+      const mpc = m.uniqueChats > 0 ? mpcNum.toFixed(2) : '—';
       const maxVal = sorted.length > 0 ? getSortVal(sorted[0]) : 1;
       const val = getSortVal(rec);
       const barPct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
+
+      // Calculate deltas if previousMetrics exists
+      let deltaMsgHtml = '';
+      let deltaChatsHtml = '';
+      let deltaMpcHtml = '';
+
+      if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
+        const dMsg = (m.messages || 0) - (prev.messages || 0);
+        const dChats = (m.uniqueChats || 0) - (prev.uniqueChats || 0);
+        const prevMpcNum = prev.uniqueChats > 0 ? (prev.messages / prev.uniqueChats) : 0;
+        const dMpc = mpcNum - prevMpcNum;
+
+        if (dMsg > 0) deltaMsgHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.messages || 0).toLocaleString()}">▲ +${dMsg.toLocaleString()}</span>`;
+        if (dChats > 0) deltaChatsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.uniqueChats || 0).toLocaleString()}">▲ +${dChats.toLocaleString()}</span>`;
+        if (dMpc > 0) deltaMpcHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous MpC: ${prevMpcNum.toFixed(2)}">▲ +${dMpc.toFixed(2)}</span>`;
+      }
+
       return `<tr class="mc-row">
         <td class="mc-metrics-rank">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</td>
         <td class="mc-cell-name">
@@ -2637,9 +2686,16 @@ Write-Host "Done! tracker-import.json created."</pre>
             <div class="mc-metrics-bar" style="width:${barPct}%;"></div>
           </div>
           <span class="mc-metrics-num">${(m.messages || 0).toLocaleString()}</span>
+          ${deltaMsgHtml}
         </td>
-        <td class="mc-metrics-num">${(m.uniqueChats || 0).toLocaleString()}</td>
-        <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">${mpc}</td>
+        <td class="mc-metrics-num">
+          ${(m.uniqueChats || 0).toLocaleString()}
+          ${deltaChatsHtml}
+        </td>
+        <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">
+          ${mpc}
+          ${deltaMpcHtml}
+        </td>
         <td class="mc-metrics-date">${m.date ? `${m.date}${m.time ? ' ' + m.time : ''}` : '—'}</td>
         <td class="mc-cell-actions">
           <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit metrics">✏️</button>

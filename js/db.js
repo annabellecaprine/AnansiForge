@@ -546,6 +546,25 @@
       releaseSource = VALID_RELEASE_SOURCES.has(releaseSource) ? releaseSource : (rec.sourceStoryId ? 'story' : 'manual');
     }
 
+    // Delta metric tracking: if updating metrics, snapshot previous values
+    let previousMetrics = rec.previousMetrics || null;
+    if (rec.id) {
+      const existing = await getTrackerRecord(rec.id);
+      if (existing && existing.metrics && rec.metrics) {
+        const oldM = existing.metrics.messages || 0;
+        const oldC = existing.metrics.uniqueChats || 0;
+        const newM = rec.metrics.messages || 0;
+        const newC = rec.metrics.uniqueChats || 0;
+        if (oldM !== newM || oldC !== newC) {
+          previousMetrics = {
+            messages: oldM,
+            uniqueChats: oldC,
+            updatedAt: existing.updatedAt || now
+          };
+        }
+      }
+    }
+
     const record = {
       ...rec,
       id: rec.id || generateId(),
@@ -564,10 +583,11 @@
       // release-specific
       releaseSource: releaseSource || 'manual',
       sourceStoryId: rec.sourceStoryId || null,
+      previousMetrics: previousMetrics,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
-      metrics: rec.metrics || { messages: 0, chats: 0 },
+      metrics: rec.metrics || { messages: 0, uniqueChats: 0 },
       // stub-specific
       intendedCategory: rec.intendedCategory || 'character',
       promotedToVaultId: rec.promotedToVaultId || null,
@@ -1059,7 +1079,45 @@
     }
   }
 
-  // Expose APIs globally
+  
+  // --- Relationship Integrity Helpers ---
+
+  async function linkReleaseToStory(storyId, releaseId) {
+    if (!storyId || !releaseId) return;
+    const story = await getTrackerRecord(storyId);
+    const release = await getTrackerRecord(releaseId);
+    if (!story || !release) return;
+
+    const updatedReleaseIds = Array.from(new Set([...(story.releaseIds || []), releaseId]));
+    await saveTrackerRecord({ ...story, status: 'Promoted', releaseIds: updatedReleaseIds });
+    await saveTrackerRecord({ ...release, sourceStoryId: storyId, releaseSource: 'story' });
+  }
+
+  async function unlinkReleaseFromStory(storyId, releaseId) {
+    if (!storyId || !releaseId) return;
+    const story = await getTrackerRecord(storyId);
+    const release = await getTrackerRecord(releaseId);
+
+    if (story) {
+      const updatedReleaseIds = (story.releaseIds || []).filter(id => id !== releaseId);
+      await saveTrackerRecord({ ...story, releaseIds: updatedReleaseIds });
+    }
+
+    if (release && release.sourceStoryId === storyId) {
+      await saveTrackerRecord({ ...release, sourceStoryId: null });
+    }
+  }
+
+  async function reconcileStoryReleaseLinks(storyId) {
+    const story = await getTrackerRecord(storyId);
+    if (!story) return;
+    const allRecords = await getAllTrackerRecords();
+    const actualReleases = allRecords.filter(r => r.assetType === 'release' && r.sourceStoryId === storyId);
+    const actualIds = actualReleases.map(r => r.id);
+    await saveTrackerRecord({ ...story, releaseIds: actualIds });
+  }
+
+// Expose APIs globally
   window.ForgeDB = {
     generateId,
     initDB,
@@ -1085,6 +1143,9 @@
     getTrackerRecord,
     saveTrackerRecord,
     deleteTrackerRecord,
+    linkReleaseToStory,
+    unlinkReleaseFromStory,
+    reconcileStoryReleaseLinks,
     getAllUniverses,
     getUniverse,
     saveUniverse,
