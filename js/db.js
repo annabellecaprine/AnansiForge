@@ -470,18 +470,62 @@
 
   // --- Tracker Records CRUD ---
 
+  const VALID_STORY_STATUSES = new Set(['Active', 'Promoted', 'Archived']);
+  const VALID_RELEASE_SOURCES = new Set(['story', 'existing_bot', 'legacy_import', 'manual', 'experiment']);
+
+  /**
+   * Normalizes a tracker record on read so legacy/uninitialized records never break UI state
+   */
+  function normalizeTrackerRecord(rec) {
+    if (!rec) return rec;
+    const aType = rec.assetType || 'concept_stub';
+
+    // Normalize Story specific fields
+    if (aType === 'story') {
+      if (!rec.status || !VALID_STORY_STATUSES.has(rec.status)) {
+        rec.status = 'Active';
+      }
+      if (!Array.isArray(rec.releaseIds)) {
+        rec.releaseIds = rec.promotedToReleaseId ? [rec.promotedToReleaseId] : [];
+      }
+      if (!Array.isArray(rec.linkedVaultIds)) {
+        rec.linkedVaultIds = [];
+      }
+    }
+
+    // Normalize Release specific fields
+    if (aType === 'release') {
+      if (!rec.releaseSource || !VALID_RELEASE_SOURCES.has(rec.releaseSource)) {
+        rec.releaseSource = rec.sourceStoryId ? 'story' : 'manual';
+      }
+      if (rec.sourceStoryId === undefined) {
+        rec.sourceStoryId = null;
+      }
+    }
+
+    // Common defaults
+    if (!Array.isArray(rec.tags)) rec.tags = [];
+    if (!Array.isArray(rec.linkedVaultIds)) rec.linkedVaultIds = [];
+    if (!rec.notes) rec.notes = '';
+    if (!rec.pipeline) rec.pipeline = defaultTrackerPipeline(aType);
+
+    return rec;
+  }
+
   async function getAllTrackerRecords() {
     const db = dbInstance || await initDB();
     const tx = db.transaction('tracker_records', 'readonly');
     const store = tx.objectStore('tracker_records');
-    return promisify(store.getAll());
+    const records = await promisify(store.getAll());
+    return (records || []).map(normalizeTrackerRecord);
   }
 
   async function getTrackerRecord(id) {
     const db = dbInstance || await initDB();
     const tx = db.transaction('tracker_records', 'readonly');
     const store = tx.objectStore('tracker_records');
-    return promisify(store.get(id));
+    const record = await promisify(store.get(id));
+    return normalizeTrackerRecord(record);
   }
 
   async function saveTrackerRecord(rec) {
@@ -490,6 +534,18 @@
     const store = tx.objectStore('tracker_records');
     const now = new Date().toISOString();
     const aType = rec.assetType || 'concept_stub';
+
+    // Save-time validation & default enforcement
+    let status = rec.status;
+    if (aType === 'story') {
+      status = VALID_STORY_STATUSES.has(status) ? status : 'Active';
+    }
+
+    let releaseSource = rec.releaseSource;
+    if (aType === 'release') {
+      releaseSource = VALID_RELEASE_SOURCES.has(releaseSource) ? releaseSource : (rec.sourceStoryId ? 'story' : 'manual');
+    }
+
     const record = {
       ...rec,
       id: rec.id || generateId(),
@@ -502,19 +558,24 @@
       notes: rec.notes || '',
       linkedVaultIds: Array.isArray(rec.linkedVaultIds) ? rec.linkedVaultIds : [],
       pipeline: rec.pipeline || defaultTrackerPipeline(aType),
-      // release-only
+      // story-specific
+      status: status || 'Active',
+      releaseIds: Array.isArray(rec.releaseIds) ? rec.releaseIds : (rec.promotedToReleaseId ? [rec.promotedToReleaseId] : []),
+      // release-specific
+      releaseSource: releaseSource || 'manual',
+      sourceStoryId: rec.sourceStoryId || null,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
       metrics: rec.metrics || { messages: 0, chats: 0 },
-      // stub-only
+      // stub-specific
       intendedCategory: rec.intendedCategory || 'character',
       promotedToVaultId: rec.promotedToVaultId || null,
       createdAt: rec.createdAt || now,
       updatedAt: now
     };
     await promisify(store.put(record));
-    return record;
+    return normalizeTrackerRecord(record);
   }
 
   async function deleteTrackerRecord(id) {
@@ -524,12 +585,14 @@
     return promisify(store.delete(id));
   }
 
-  async function updateVaultTracker(id, trackerPatch) {
+  async function updateVaultTracker(id, trackerPatch, updateModifiedAt = true) {
     const db = dbInstance || await initDB();
     const comp = await getComponent(id);
     if (!comp) throw new Error('Component not found: ' + id);
     comp.tracker = { ...(comp.tracker || defaultTracker()), ...trackerPatch };
-    comp.modifiedAt = new Date().toISOString();
+    if (updateModifiedAt) {
+      comp.modifiedAt = new Date().toISOString();
+    }
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
     await promisify(store.put(comp));
@@ -728,23 +791,37 @@
     });
   }
 
+  let lastPruneTime = 0;
   async function pruneActivityLog(keepCount = 500) {
-    const db = dbInstance || await initDB();
-    const txRead = db.transaction('activity_log', 'readonly');
-    const storeRead = txRead.objectStore('activity_log');
-    const index = storeRead.index('timestamp');
-    const entries = await new Promise((resolve, reject) => {
-      const req = index.getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    if (entries.length <= keepCount) return;
-    const toDelete = entries.slice(keepCount);
-    const txDelete = db.transaction('activity_log', 'readwrite');
-    const storeDelete = txDelete.objectStore('activity_log');
-    for (const entry of toDelete) {
-      storeDelete.delete(entry.id);
+    const now = Date.now();
+    if (now - lastPruneTime < 30000) return; // Throttle to run at most once per 30 seconds
+    lastPruneTime = now;
+
+    try {
+      const db = dbInstance || await initDB();
+      const txRead = db.transaction('activity_log', 'readonly');
+      const storeRead = txRead.objectStore('activity_log');
+      
+      const count = await promisify(storeRead.count());
+      if (count <= keepCount) return;
+
+      const index = storeRead.index('timestamp');
+      const entries = await new Promise((resolve, reject) => {
+        const req = index.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      if (entries.length <= keepCount) return;
+      
+      const toDelete = entries.slice(keepCount);
+      const txDelete = db.transaction('activity_log', 'readwrite');
+      const storeDelete = txDelete.objectStore('activity_log');
+      for (const entry of toDelete) {
+        storeDelete.delete(entry.id);
+      }
+    } catch (e) {
+      console.warn('Prune activity log skipped:', e);
     }
   }
 
