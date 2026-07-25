@@ -3150,12 +3150,19 @@ ${releasesMd}
     const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
     const mpc = totalChats > 0 ? curMpc.toFixed(2) : '—';
 
-    // Determine launch / creation timestamp
+    // Determine actual release / launch date (Scheduled Date takes first priority)
     let launchDate = null;
-    if (rec.createdAt) launchDate = new Date(rec.createdAt);
-    else if (rec.scheduledDate) launchDate = new Date(rec.scheduledDate);
-    else if (rec.modifiedAt) launchDate = new Date(rec.modifiedAt);
-    else launchDate = new Date();
+    if (rec.scheduledDate && !isNaN(new Date(rec.scheduledDate).getTime())) {
+      launchDate = new Date(rec.scheduledDate);
+    } else if (rec.publishedDate && !isNaN(new Date(rec.publishedDate).getTime())) {
+      launchDate = new Date(rec.publishedDate);
+    } else if (rec.createdAt && !isNaN(new Date(rec.createdAt).getTime())) {
+      launchDate = new Date(rec.createdAt);
+    } else if (rec.modifiedAt && !isNaN(new Date(rec.modifiedAt).getTime())) {
+      launchDate = new Date(rec.modifiedAt);
+    } else {
+      launchDate = new Date();
+    }
 
     const now = new Date();
     const daysActive = Math.max(0, Math.floor((now - launchDate) / (1000 * 60 * 60 * 24)));
@@ -3169,7 +3176,7 @@ ${releasesMd}
     };
 
     if (daysActive <= 30) {
-      // Recent release (launched within the last 30 days): plot actual launch/snapshot dates in monotonic order
+      // Recent release (launched within the last 30 days): plot actual launch & snapshot dates
       const snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
       const latestDate = snapDate > launchDate ? snapDate : new Date(launchDate.getTime() + 86400000);
 
@@ -3182,17 +3189,13 @@ ${releasesMd}
         const prevChats = prev.uniqueChats || 0;
         const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : 0;
 
-        // Ensure prevDate is strictly between launchDate and latestDate
-        let prevDate = prev.updatedAt ? new Date(prev.updatedAt) : null;
-        if (!prevDate || prevDate >= latestDate || prevDate <= launchDate) {
-          prevDate = new Date(launchDate.getTime() + (latestDate.getTime() - launchDate.getTime()) * 0.5);
+        // Include prevDate ONLY if it represents a distinct real date strictly between launchDate and latestDate
+        let prevDate = (prev.updatedAt && !isNaN(new Date(prev.updatedAt).getTime())) ? new Date(prev.updatedAt) : null;
+        if (prevDate && prevDate > launchDate && prevDate < latestDate) {
+          const prevValClamped = Math.min(prevMsgs, totalMsgs);
+          dataPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevValClamped });
+          mpcPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMpcVal });
         }
-
-        // Cap prevVal to ensure cumulative trajectory never drops
-        const prevValClamped = Math.min(prevMsgs, totalMsgs);
-
-        dataPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevValClamped });
-        mpcPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMpcVal });
       }
 
       dataPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: totalMsgs });
