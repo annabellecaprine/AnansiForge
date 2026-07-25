@@ -141,7 +141,7 @@
         (c.tracker?.project || '').toLowerCase().includes(q)
       );
     }
-    if (universe !== 'all') items = items.filter(c => (c.tracker?.universe || '') === universe);
+    if (universe !== 'all') items = items.filter(c => isMatchingUniverse(c.tracker?.universe || c.universe, universe));
     if (priority !== 'all') items = items.filter(c => (c.tracker?.priority || null) === priority);
     if (role !== 'all') items = items.filter(c => (c.tracker?.role || '') === role);
     if (activeTag) {
@@ -162,7 +162,7 @@
       const q = search.toLowerCase();
       items = items.filter(r => r.name.toLowerCase().includes(q) || (r.project || '').toLowerCase().includes(q));
     }
-    if (universe !== 'all') items = items.filter(r => (r.universe || '') === universe);
+    if (universe !== 'all') items = items.filter(r => isMatchingUniverse(r.universe || r.tracker?.universe, universe));
     if (priority !== 'all') items = items.filter(r => (r.priority || null) === priority);
     if (activeTag) items = items.filter(r => (r.tags || []).includes(activeTag));
     return items;
@@ -268,8 +268,81 @@
     return `<span class="mc-badge mc-badge--status" style="background:${c}18; color:${c}; border:1px solid ${c}44;">${esc(s)}</span>`;
   }
 
+  function isMatchingUniverse(itemUniRaw, targetUniRaw) {
+    if (!targetUniRaw || targetUniRaw === 'all') return true;
+    if (!itemUniRaw) return false;
+
+    const itemStr = (typeof itemUniRaw === 'string' ? itemUniRaw : (itemUniRaw.name || itemUniRaw.id || '')).trim().toLowerCase();
+    const targetStr = (typeof targetUniRaw === 'string' ? targetUniRaw : (targetUniRaw.name || targetUniRaw.id || '')).trim().toLowerCase();
+
+    if (!itemStr || !targetStr) return false;
+
+    if (itemStr === targetStr) return true;
+
+    const itemClean = itemStr.replace(/[^a-z0-9]/g, '');
+    const targetClean = targetStr.replace(/[^a-z0-9]/g, '');
+    if (itemClean && targetClean && itemClean === targetClean) return true;
+
+    const list = [
+      ...(state.allUniverses || []),
+      ...(window.ForgeDB?.DEFAULT_UNIVERSES || [])
+    ];
+
+    for (const u of list) {
+      if (!u) continue;
+      const uName = (u.name || '').trim().toLowerCase();
+      const uId = (u.id || '').trim().toLowerCase();
+      const uCleanName = uName.replace(/[^a-z0-9]/g, '');
+      const uCleanId = uId.replace(/[^a-z0-9]/g, '');
+
+      const targetMatches = (targetStr === uName || targetStr === uId || (targetClean && (targetClean === uCleanName || targetClean === uCleanId)));
+      if (targetMatches) {
+        const itemMatches = (itemStr === uName || itemStr === uId || (itemClean && (itemClean === uCleanName || itemClean === uCleanId)));
+        if (itemMatches) return true;
+      }
+    }
+
+    return false;
+  }
+
+  function matchUniverse(compUniRaw, selectedUniRaw) {
+    return isMatchingUniverse(compUniRaw, selectedUniRaw);
+  }
+
+  function getEffectiveUniversesList() {
+    const registry = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
+    const uniMap = new Map();
+    const list = [];
+
+    registry.forEach(u => {
+      if (u && u.name) {
+        const key = u.name.toLowerCase();
+        if (!uniMap.has(key)) {
+          uniMap.set(key, u);
+          if (u.id) uniMap.set(u.id.toLowerCase(), u);
+          list.push(u);
+        }
+      }
+    });
+
+    const compUnis = (state.allComponents || []).map(c => c.tracker?.universe || c.universe).filter(Boolean);
+    const recUnis = (state.allTrackerRecords || []).map(r => r.universe || r.tracker?.universe).filter(Boolean);
+    const uniqueRaw = [...new Set([...compUnis, ...recUnis])];
+
+    uniqueRaw.forEach(rawVal => {
+      const trimmed = String(rawVal).trim();
+      if (trimmed && !uniMap.has(trimmed.toLowerCase())) {
+        const customObj = { id: trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: trimmed, genre: 'Custom / Other', color: '#6b7280' };
+        uniMap.set(trimmed.toLowerCase(), customObj);
+        list.push(customObj);
+      }
+    });
+
+    return list;
+  }
+
   function universeSelectOptionsHTML(selectedVal, defaultLabel = 'Select Universe') {
-    const list = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
+    const list = getEffectiveUniversesList();
     const groups = {};
     list.forEach(u => {
       const g = u.genre || 'General';
@@ -282,7 +355,7 @@
     sortedGenres.forEach(g => {
       html += `<optgroup label="${esc(g)}">`;
       groups[g].forEach(u => {
-        const isSel = (selectedVal === u.name || selectedVal === u.id);
+        const isSel = matchUniverse(selectedVal, u.name) || matchUniverse(selectedVal, u.id);
         html += `<option value="${esc(u.name)}" ${isSel ? 'selected' : ''}>${esc(u.name)}</option>`;
       });
       html += `</optgroup>`;
@@ -292,7 +365,7 @@
 
   function universeFilterOptionsHTML(selectedVal) {
     let html = `<option value="all" ${selectedVal === 'all' ? 'selected' : ''}>All Universes</option>`;
-    const list = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
+    const list = getEffectiveUniversesList();
     const groups = {};
     list.forEach(u => {
       const g = u.genre || 'General';
@@ -304,7 +377,7 @@
     sortedGenres.forEach(g => {
       html += `<optgroup label="${esc(g)}">`;
       groups[g].forEach(u => {
-        const isSel = (selectedVal === u.name || selectedVal === u.id);
+        const isSel = matchUniverse(selectedVal, u.name) || matchUniverse(selectedVal, u.id);
         html += `<option value="${esc(u.name)}" ${isSel ? 'selected' : ''}>${esc(u.name)}</option>`;
       });
       html += `</optgroup>`;
@@ -2844,8 +2917,15 @@ ${releasesMd}
         return;
       }
 
-      // Filter dropdowns
-      if (t.id === 'mc-filter-role') { state.filters.role = t.value; await renderCurrentTab(); return; }
+      // Filter dropdowns (handling optgroup event targeting)
+      const uniSelect = t.id === 'mc-filter-universe' ? t : t.closest('#mc-filter-universe');
+      if (uniSelect) { state.filters.universe = uniSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
+
+      const prioSelect = t.id === 'mc-filter-priority' ? t : t.closest('#mc-filter-priority');
+      if (prioSelect) { state.filters.priority = prioSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
+
+      const roleSelect = t.id === 'mc-filter-role' ? t : t.closest('#mc-filter-role');
+      if (roleSelect) { state.filters.role = roleSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
 
       // Bulk role set
       if (t.id === 'mc-bulk-role') {
@@ -2905,8 +2985,9 @@ ${releasesMd}
 
           const row = t.closest('.mc-row');
           if (row) {
-            const uniTd = row.children[1];
+            const uniTd = row.children[2];
             if (uniTd) uniTd.innerHTML = universeBadge(t.value);
+            row.dataset.universe = esc(t.value || '');
           }
 
           window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
