@@ -3218,75 +3218,66 @@ ${releasesMd}
             }
           }
         });
-        
-        const sMsgs = Math.min(snap.messages, totalMsgs);
-        const sMpc = snap.uniqueChats > 0 ? parseFloat((sMsgs / snap.uniqueChats).toFixed(2)) : 0;
-        const sLabel = formatLabel(sDate, useTimeLabels);
-
-        // Deduplicate by timestamp and value (allowing multiple intraday snapshots!)
-        const isDupe = dataPoints.some(dp => Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 60000 || dp.value === sMsgs);
-        if (!isDupe) {
-          dataPoints.push({ dateObj: sDate, label: sLabel, value: sMsgs });
-          mpcPoints.push({ dateObj: sDate, label: sLabel, value: sMpc });
-        }
-      });
-
-      const latestLabel = formatLabel(latestDate, useTimeLabels);
-      dataPoints.push({ dateObj: latestDate, label: latestLabel, value: totalMsgs });
-      mpcPoints.push({ dateObj: latestDate, label: latestLabel, value: curMpc });
-
-      // Sort chronologically ascending by timestamp
-      dataPoints.sort((a, b) => a.dateObj - b.dateObj);
-      mpcPoints.sort((a, b) => a.dateObj - b.dateObj);
-
-      // Disambiguate labels if snapshot dates land on the same calendar day
-      const fixLabels = (pts) => {
-        for (let i = 1; i < pts.length; i++) {
-          if (pts[i].label === pts[i - 1].label) {
-            if (i === pts.length - 1) pts[i].label = 'Latest';
-            else pts[i].label = pts[i].label + ' (Snap ' + i + ')';
-          }
-        }
-      };
-      fixLabels(dataPoints);
-      fixLabels(mpcPoints);
-
-    } else {
-      // Older bot (> 30 days old): plot monthly trajectory starting strictly from actual launch month
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const startMonth = launchDate.getMonth();
-      const startYear = launchDate.getFullYear();
-      const endMonth = now.getMonth();
-      const endYear = now.getFullYear();
-
-      const monthsCount = Math.min(6, Math.max(2, (endYear - startYear) * 12 + (endMonth - startMonth) + 1));
-      
-      const prevMsgs = prev ? (prev.messages || Math.round(totalMsgs * 0.8)) : Math.round(totalMsgs * 0.8);
-      const prevChats = prev ? (prev.uniqueChats || Math.round(totalChats * 0.8)) : Math.round(totalChats * 0.8);
-      const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : Math.max(curMpc - 1, 0);
-
-      for (let i = monthsCount - 1; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const label = monthNames[d.getMonth()];
-
-        let val = 0;
-        let mpcVal = 0;
-        if (i === 0) {
-          val = totalMsgs;
-          mpcVal = curMpc;
-        } else if (i === 1) {
-          val = prevMsgs;
-          mpcVal = prevMpcVal;
-        } else {
-          const ratio = (monthsCount - 1 - i) / (monthsCount - 1);
-          val = Math.round(totalMsgs * ratio);
-          mpcVal = parseFloat((curMpc * ratio).toFixed(2));
-        }
-
-        dataPoints.push({ label, value: val });
-        mpcPoints.push({ label, value: mpcVal });
+      } catch(e) {
+        console.warn('Could not query activity_log for historical metrics:', e);
       }
     }
+
+    if (Array.isArray(rec.metricsHistory)) {
+      rec.metricsHistory.forEach(h => {
+        if (h && (h.messages > 0 || h.uniqueChats > 0)) {
+          let dt = parseDateTime(h.date, h.time) || (h.updatedAt ? new Date(h.updatedAt) : null);
+          if (dt) rawList.push({ dateObj: dt, messages: h.messages || 0, uniqueChats: h.uniqueChats || 0 });
+        }
+      });
+    }
+
+    if (prev && (prev.messages > 0 || prev.uniqueChats > 0)) {
+      let dt = prev.updatedAt ? new Date(prev.updatedAt) : null;
+      if (dt) rawList.push({ dateObj: dt, messages: prev.messages || 0, uniqueChats: prev.uniqueChats || 0 });
+    }
+
+    // Add current snapshot
+    rawList.push({ dateObj: snapDate, messages: totalMsgs, uniqueChats: totalChats });
+
+    // Sort all raw snapshots by timestamp ascending
+    rawList.sort((a, b) => a.dateObj - b.dateObj);
+
+    // Check for multiple intraday snapshots
+    const allDates = [launchDate, ...rawList.map(s => s.dateObj)].filter(Boolean);
+    const dayCounts = {};
+    allDates.forEach(d => { const k = d.toDateString(); dayCounts[k] = (dayCounts[k] || 0) + 1; });
+    const useTimeLabels = Object.values(dayCounts).some(c => c > 1);
+
+    // Build initial Launch point
+    const launchLabel = `Launch (${formatLabel(launchDate, useTimeLabels)})`;
+    dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+    mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+
+    // Clean & deduplicate snapshots sequentially
+    rawList.forEach(snap => {
+      let sDate = snap.dateObj;
+      if (!sDate || sDate <= launchDate) sDate = new Date(launchDate.getTime() + 60000);
+
+      const sMsgs = snap.messages;
+      const sMpc = snap.uniqueChats > 0 ? parseFloat((sMsgs / snap.uniqueChats).toFixed(2)) : 0;
+      const sLabel = formatLabel(sDate, useTimeLabels);
+
+      // Deduplicate snapshots that occur within 2 minutes of each other or have duplicate message values
+      const isDupe = dataPoints.some(dp => 
+        Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 120000 || 
+        (dp.value === sMsgs && Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 86400000)
+      );
+
+      if (!isDupe) {
+        dataPoints.push({ dateObj: sDate, label: sLabel, value: sMsgs });
+        mpcPoints.push({ dateObj: sDate, label: sLabel, value: sMpc });
+      }
+    });
+
+    // Sort chronologically ascending by timestamp
+    dataPoints.sort((a, b) => a.dateObj - b.dateObj);
+    mpcPoints.sort((a, b) => a.dateObj - b.dateObj);
 
     const modal = document.getElementById('mc-modal-overlay');
     const body = document.getElementById('mc-modal-body');
