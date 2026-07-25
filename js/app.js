@@ -35,7 +35,6 @@
   
   // Vault filters / actions rows
   const filterCat = document.getElementById('vault-category-filter');
-  const filterUniverse = document.getElementById('vault-universe-filter');
   const filterLineage = document.getElementById('vault-lineage-filter');
   const filterScenario = document.getElementById('vault-scenario-filter');
   const btnTemplatesOnly = document.getElementById('btn-templates-only');
@@ -170,50 +169,6 @@
     try {
       const components = await window.ForgeDB.getAllComponents();
       
-      // Update Universe Filter dropdown options
-      if (filterUniverse) {
-        const activeUniFilter = filterUniverse.value;
-        const registry = (window.MissionControl?.state?.allUniverses && window.MissionControl.state.allUniverses.length > 0)
-          ? window.MissionControl.state.allUniverses
-          : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
-        const uniMap = new Map();
-        const list = [];
-        registry.forEach(u => {
-          if (u && u.name) {
-            const key = u.name.toLowerCase();
-            if (!uniMap.has(key)) { uniMap.set(key, u); list.push(u); }
-          }
-        });
-        const compUnis = components.map(c => c.tracker?.universe || c.universe).filter(Boolean);
-        [...new Set(compUnis)].forEach(raw => {
-          const trimmed = String(raw).trim();
-          if (trimmed && !uniMap.has(trimmed.toLowerCase())) {
-            const customObj = { name: trimmed, genre: 'Custom / Other' };
-            uniMap.set(trimmed.toLowerCase(), customObj);
-            list.push(customObj);
-          }
-        });
-        const groups = {};
-        list.forEach(u => {
-          const g = u.genre || 'General';
-          if (!groups[g]) groups[g] = [];
-          groups[g].push(u);
-        });
-        filterUniverse.innerHTML = '<option value="all">All</option>';
-        Object.keys(groups).sort().forEach(g => {
-          const optgroup = document.createElement('optgroup');
-          optgroup.label = g;
-          groups[g].forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.name;
-            opt.textContent = u.name;
-            if (u.name === activeUniFilter) opt.selected = true;
-            optgroup.appendChild(opt);
-          });
-          filterUniverse.appendChild(optgroup);
-        });
-      }
-
       // Update Lineage Filter dropdown options
       const activeLineageFilter = filterLineage.value;
       const activeCat = filterCat.value;
@@ -256,7 +211,6 @@
       // Filter
       const search = searchInput.value.toLowerCase().trim();
       const cat = filterCat.value;
-      const uniVal = filterUniverse ? filterUniverse.value : 'all';
       const lineageVal = filterLineage.value;
       const scenarioVal = filterScenario.value;
 
@@ -265,12 +219,11 @@
                               (comp.content || '').toLowerCase().includes(search) ||
                               (comp.tags || []).some(t => t.toLowerCase().includes(search));
         const matchesCat = cat === 'all' || comp.category === cat;
-        const matchesUni = uniVal === 'all' || (comp.tracker?.universe || comp.universe || '').toLowerCase() === uniVal.toLowerCase();
         const matchesLineage = lineageVal === 'all' || comp.lineage === lineageVal;
         const matchesScenario = scenarioVal === 'all' || (comp.scenarios || []).includes(scenarioVal);
         const matchesTemplate = !showTemplatesOnly || comp.isTemplate === true;
 
-        return matchesSearch && matchesCat && matchesUni && matchesLineage && matchesScenario && matchesTemplate;
+        return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate;
       });
 
       // Apply Sorting (Pinned components first)
@@ -355,7 +308,7 @@
         item.querySelector('.btn-pin-toggle').addEventListener('click', async (e) => {
           e.stopPropagation();
           const newVal = !isPinned;
-          await window.ForgeDB.updateVaultTracker(comp.id, { pinned: newVal }, false);
+          await window.ForgeDB.updateVaultTracker(comp.id, { pinned: newVal });
           refreshVaultList();
         });
 
@@ -428,10 +381,7 @@
         return;
       }
 
-      const limit = window.projectsSidebarLimit || 60;
-      const chunk = filtered.slice(0, limit);
-
-      chunk.forEach(proj => {
+      filtered.forEach(proj => {
         const item = document.createElement('div');
         item.className = 'vault-item';
         
@@ -480,18 +430,6 @@
 
         sidebarList.appendChild(item);
       });
-
-      if (filtered.length > limit) {
-        const loadMore = document.createElement('button');
-        loadMore.className = 'btn btn-secondary btn-sm';
-        loadMore.style.cssText = 'width:100%; margin:12px 0 20px 0; border-radius:6px; font-size:0.8rem;';
-        loadMore.textContent = `Load More (${filtered.length - limit} remaining)…`;
-        loadMore.addEventListener('click', () => {
-          window.projectsSidebarLimit = (window.projectsSidebarLimit || 60) + 60;
-          refreshProjectsList();
-        });
-        sidebarList.appendChild(loadMore);
-      }
     } catch (err) {
       console.error('Failed to load projects list:', err);
     }
@@ -1411,13 +1349,10 @@
 
     // Sidebar search and filters
     searchInput.addEventListener('input', () => {
-      window.vaultSidebarLimit = 60;
-      window.projectsSidebarLimit = 60;
       if (activeSidebarTab === 'vault') refreshVaultList();
       else refreshProjectsList();
     });
     filterCat.addEventListener('change', refreshVaultList);
-    if (filterUniverse) filterUniverse.addEventListener('change', refreshVaultList);
     filterLineage.addEventListener('change', refreshVaultList);
     filterScenario.addEventListener('change', refreshVaultList);
     filterSort.addEventListener('change', refreshVaultList);

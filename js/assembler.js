@@ -79,7 +79,9 @@
     // Wire assembly exports
     document.getElementById('btn-assembler-export-json').addEventListener('click', exportAsJSON);
     document.getElementById('btn-assembler-export-png').addEventListener('click', exportAsPNG);
+    document.getElementById('btn-assembler-export-lorebook').addEventListener('click', exportAsLorebook);
     document.getElementById('btn-assembler-playtest').addEventListener('click', launchSandbox);
+    document.getElementById('btn-assembler-schedule-release')?.addEventListener('click', scheduleReleaseFromAssembler);
 
     // Sidebar staged count click triggers drawer toggle
     document.getElementById('project-drawer-header').addEventListener('click', toggleDrawer);
@@ -438,7 +440,46 @@
     assemblerView.classList.add('active');
   }
 
+  async function populateLinkTargets() {
+    const select = document.getElementById('assembler-link-target');
+    if (!select || !window.ForgeDB?.getAllTrackerRecords) return;
+    try {
+      const records = await window.ForgeDB.getAllTrackerRecords();
+      const stories = records.filter(r => r.assetType === 'story');
+      const releases = records.filter(r => r.assetType === 'release');
+
+      let html = '<option value="">— Link to Story / Release —</option>';
+      if (stories.length > 0) {
+        html += '<optgroup label="📖 Link to Story">';
+        stories.forEach(s => { html += `<option value="story:${s.id}">📖 ${s.name}</option>`; });
+        html += '</optgroup>';
+      }
+      if (releases.length > 0) {
+        html += '<optgroup label="🚀 Link to Release">';
+        releases.forEach(r => { html += `<option value="release:${r.id}">🚀 ${r.name}</option>`; });
+        html += '</optgroup>';
+      }
+      select.innerHTML = html;
+    } catch(e) { console.error('Failed to populate Assembler link targets:', e); }
+  }
+
+  async function linkProjectToTargetRecord(projectId) {
+    const select = document.getElementById('assembler-link-target');
+    if (!select || !select.value || !projectId) return;
+
+    const [type, id] = select.value.split(':');
+    const rec = await window.ForgeDB.getTrackerRecord(id);
+    if (rec) {
+      rec.projectId = projectId;
+      await window.ForgeDB.saveTrackerRecord(rec);
+      if (typeof showToast === 'function') {
+        showToast(`🔗 Project linked to ${type === 'story' ? 'Story' : 'Release'} "${rec.name}"!`, 'success');
+      }
+    }
+  }
+
   async function renderAssemblerScreen() {
+    populateLinkTargets();
     stagedCountBadge.textContent = stagedIds.length;
     stagedListCanvas.innerHTML = '';
     mappingsContainer.innerHTML = '';
@@ -864,6 +905,128 @@
 
   // --- Actions / Exports ---
 
+  /**
+   * Builds a SillyTavern-compatible lorebook entries array from all staged
+   * character and organization components.
+   */
+  async function compileLoreBookData() {
+    const entries = [];
+    let priority = 1;
+    let insertionOrder = 100;
+
+    for (const id of stagedIds) {
+      const comp = await window.ForgeDB.getComponent(id);
+      if (!comp) continue;
+
+      // Only character and organization components go into the lorebook
+      if (comp.category !== 'character' && comp.category !== 'organization') continue;
+
+      // Skip components the user chose to ignore in the mapping
+      if (mappings[id] === 'ignore') continue;
+
+      // Final content respects any project-level tweak overrides
+      const finalContent = contentOverrides[id] !== undefined
+        ? contentOverrides[id]
+        : (comp.content || '');
+
+      // Keywords: split the component name into individual words as placeholder triggers
+      const keyWords = comp.name
+        .split(/[\s/\\,]+/)
+        .map(w => w.trim())
+        .filter(w => w.length > 0);
+
+      const keysRaw = keyWords.join(', ');
+
+      // Lorebook category: 'general' for characters, 'other' for organizations
+      const lorebookCategory = comp.category === 'character' ? 'general' : 'other';
+
+      entries.push({
+        activationMode: 'standard',
+        activationScript: '',
+        case_sensitive: true,
+        category: lorebookCategory,
+        comment: '',
+        constant: false,
+        content: finalContent,
+        enabled: true,
+        extensions: {},
+        groupWeight: 100,
+        id: id,
+        inclusionGroupRaw: '',
+        insertion_order: insertionOrder,
+        key: keyWords,
+        keyMatchPriority: false,
+        keysecondary: [],
+        keysecondaryRaw: '',
+        keysRaw: keysRaw,
+        matchWholeWords: true,
+        minMessages: 0,
+        name: comp.name,
+        prioritizeInclusion: false,
+        priority: priority,
+        probability: 100,
+        selectiveLogic: 0,
+        tags: [comp.category],
+        keywordsRaw: keysRaw
+      });
+
+      priority++;
+      insertionOrder += 100;
+    }
+
+    return entries;
+  }
+
+  async function exportAsLorebook() {
+    try {
+      const entries = await compileLoreBookData();
+
+      if (entries.length === 0) {
+        if (window.showToast) window.showToast('No character or organization components are staged — nothing to export.', 'info');
+        return;
+      }
+
+      // Save the project record so it persists alongside the other exports
+      const card = await compileCardData();
+      const projectRecord = {
+        id: activeProjectId || window.ForgeDB.generateId(),
+        name: card.data.name,
+        componentIds: stagedIds,
+        mappings: mappings,
+        relationships: relationships,
+        contentOverrides: contentOverrides,
+        compiledCard: card
+      };
+      const savedProj = await window.ForgeDB.saveProject(projectRecord);
+      activeProjectId = savedProj.id;
+
+      if (coverDataUrl) {
+        await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
+      }
+
+      if (window.refreshProjectsList) window.refreshProjectsList();
+
+      const projName = projNameInput.value.trim() || 'lorebook';
+      const fileName = `${projName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_lorebook.json`;
+
+      const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      if (window.showToast) window.showToast(`Lorebook exported — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} downloaded.`, 'success');
+    } catch (err) {
+      console.error(err);
+      if (window.showToast) window.showToast('Lorebook export failed: ' + err.message, 'error');
+    }
+  }
+
   async function exportAsJSON() {
     try {
       const card = await compileCardData();
@@ -1050,6 +1213,41 @@
     } catch (err) {
       console.error(err);
       if (window.showToast) window.showToast('Playtest launch failed', 'error');
+    }
+  }
+
+  async function scheduleReleaseFromAssembler() {
+    try {
+      if (!activeProjectId) {
+        const card = await compileCardData();
+        const projectRecord = {
+          name: projNameInput.value.trim() || 'New Assembled Bot',
+          componentIds: [...stagedIds],
+          mappings: { ...mappings },
+          relationships: [...relationships],
+          contentOverrides: { ...contentOverrides },
+          compiledCard: card
+        };
+        const savedProj = await window.ForgeDB.saveProject(projectRecord);
+        activeProjectId = savedProj.id;
+        if (coverDataUrl) {
+          await window.ForgeDB.saveCover(savedProj.id, coverDataUrl);
+        }
+        if (window.refreshProjectsList) window.refreshProjectsList();
+      }
+
+      const proj = await window.ForgeDB.getProject(activeProjectId);
+      if (!proj) return;
+
+      const btnMC = document.getElementById('btn-mission-control');
+      if (btnMC) btnMC.click();
+
+      if (window.MissionControl?.openNewReleaseForProject) {
+        await window.MissionControl.openNewReleaseForProject(proj);
+      }
+    } catch (err) {
+      console.error('Failed to schedule release from assembler:', err);
+      if (window.showToast) window.showToast('Schedule release failed: ' + err.message, 'error');
     }
   }
 

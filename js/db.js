@@ -530,8 +530,6 @@
 
   async function saveTrackerRecord(rec) {
     const db = dbInstance || await initDB();
-    const tx = db.transaction('tracker_records', 'readwrite');
-    const store = tx.objectStore('tracker_records');
     const now = new Date().toISOString();
     const aType = rec.assetType || 'concept_stub';
 
@@ -545,6 +543,33 @@
     if (aType === 'release') {
       releaseSource = VALID_RELEASE_SOURCES.has(releaseSource) ? releaseSource : (rec.sourceStoryId ? 'story' : 'manual');
     }
+
+    // Delta metric tracking: fetch existing record BEFORE opening readwrite transaction!
+    let previousMetrics = rec.previousMetrics || null;
+    if (rec.id) {
+      try {
+        const existing = await getTrackerRecord(rec.id);
+        if (existing && existing.metrics && rec.metrics) {
+          const oldM = existing.metrics.messages || 0;
+          const oldC = existing.metrics.uniqueChats || 0;
+          const newM = rec.metrics.messages || 0;
+          const newC = rec.metrics.uniqueChats || 0;
+          if (oldM !== newM || oldC !== newC) {
+            previousMetrics = {
+              messages: oldM,
+              uniqueChats: oldC,
+              updatedAt: existing.updatedAt || now
+            };
+          }
+        }
+      } catch(e) {
+        console.warn('Could not fetch existing record for delta metrics:', e);
+      }
+    }
+
+    // Open readwrite transaction synchronously right before put()
+    const tx = db.transaction('tracker_records', 'readwrite');
+    const store = tx.objectStore('tracker_records');
 
     const record = {
       ...rec,
@@ -564,10 +589,12 @@
       // release-specific
       releaseSource: releaseSource || 'manual',
       sourceStoryId: rec.sourceStoryId || null,
+      iterationLabel: rec.iterationLabel || '',
+      previousMetrics: previousMetrics,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
-      metrics: rec.metrics || { messages: 0, chats: 0 },
+      metrics: rec.metrics || { messages: 0, uniqueChats: 0 },
       // stub-specific
       intendedCategory: rec.intendedCategory || 'character',
       promotedToVaultId: rec.promotedToVaultId || null,
@@ -1059,7 +1086,45 @@
     }
   }
 
-  // Expose APIs globally
+  
+  // --- Relationship Integrity Helpers ---
+
+  async function linkReleaseToStory(storyId, releaseId) {
+    if (!storyId || !releaseId) return;
+    const story = await getTrackerRecord(storyId);
+    const release = await getTrackerRecord(releaseId);
+    if (!story || !release) return;
+
+    const updatedReleaseIds = Array.from(new Set([...(story.releaseIds || []), releaseId]));
+    await saveTrackerRecord({ ...story, status: 'Promoted', releaseIds: updatedReleaseIds });
+    await saveTrackerRecord({ ...release, sourceStoryId: storyId, releaseSource: 'story' });
+  }
+
+  async function unlinkReleaseFromStory(storyId, releaseId) {
+    if (!storyId || !releaseId) return;
+    const story = await getTrackerRecord(storyId);
+    const release = await getTrackerRecord(releaseId);
+
+    if (story) {
+      const updatedReleaseIds = (story.releaseIds || []).filter(id => id !== releaseId);
+      await saveTrackerRecord({ ...story, releaseIds: updatedReleaseIds });
+    }
+
+    if (release && release.sourceStoryId === storyId) {
+      await saveTrackerRecord({ ...release, sourceStoryId: null });
+    }
+  }
+
+  async function reconcileStoryReleaseLinks(storyId) {
+    const story = await getTrackerRecord(storyId);
+    if (!story) return;
+    const allRecords = await getAllTrackerRecords();
+    const actualReleases = allRecords.filter(r => r.assetType === 'release' && r.sourceStoryId === storyId);
+    const actualIds = actualReleases.map(r => r.id);
+    await saveTrackerRecord({ ...story, releaseIds: actualIds });
+  }
+
+// Expose APIs globally
   window.ForgeDB = {
     generateId,
     initDB,
@@ -1085,6 +1150,9 @@
     getTrackerRecord,
     saveTrackerRecord,
     deleteTrackerRecord,
+    linkReleaseToStory,
+    unlinkReleaseFromStory,
+    reconcileStoryReleaseLinks,
     getAllUniverses,
     getUniverse,
     saveUniverse,

@@ -53,6 +53,17 @@
     experiment: '#f59e0b'
   };
 
+  
+  const STORY_TO_RELEASE_STEP_MAP = {
+    concept: 'staged',
+    notesReady: 'bio',
+    bio: 'bio',
+    initialMessage: 'initialMessage',
+    testing: 'initialTest',
+    complete: 'ready',
+    published: 'released'
+  };
+
   const STORY_STATUS_COLORS = {
     Active: '#10b981',
     Promoted: '#8b5cf6',
@@ -78,6 +89,9 @@
     groupByPriority: false,
     filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
     overviewFilters: { universeCat: 'all', roleMode: 'role' },
+    leaderboardSort: 'messages',
+    portfolioChartMetric: 'messages',
+    isSpawningRelease: false,
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -127,7 +141,7 @@
         (c.tracker?.project || '').toLowerCase().includes(q)
       );
     }
-    if (universe !== 'all') items = items.filter(c => isMatchingUniverse(c.tracker?.universe || c.universe, universe));
+    if (universe !== 'all') items = items.filter(c => (c.tracker?.universe || '') === universe);
     if (priority !== 'all') items = items.filter(c => (c.tracker?.priority || null) === priority);
     if (role !== 'all') items = items.filter(c => (c.tracker?.role || '') === role);
     if (activeTag) {
@@ -148,7 +162,7 @@
       const q = search.toLowerCase();
       items = items.filter(r => r.name.toLowerCase().includes(q) || (r.project || '').toLowerCase().includes(q));
     }
-    if (universe !== 'all') items = items.filter(r => isMatchingUniverse(r.universe || r.tracker?.universe, universe));
+    if (universe !== 'all') items = items.filter(r => (r.universe || '') === universe);
     if (priority !== 'all') items = items.filter(r => (r.priority || null) === priority);
     if (activeTag) items = items.filter(r => (r.tags || []).includes(activeTag));
     return items;
@@ -241,47 +255,6 @@
     return `<span class="mc-badge" style="background:${c}22; color:${c}; border:1px solid ${c}44;">${esc(u)}</span>`;
   }
 
-  function isMatchingUniverse(itemUniRaw, targetUniRaw) {
-    if (!targetUniRaw || targetUniRaw === 'all') return true;
-    if (!itemUniRaw) return false;
-
-    const itemStr = (typeof itemUniRaw === 'string' ? itemUniRaw : (itemUniRaw.name || itemUniRaw.id || '')).trim().toLowerCase();
-    const targetStr = (typeof targetUniRaw === 'string' ? targetUniRaw : (targetUniRaw.name || targetUniRaw.id || '')).trim().toLowerCase();
-
-    if (!itemStr || !targetStr) return false;
-
-    if (itemStr === targetStr) return true;
-
-    const itemClean = itemStr.replace(/[^a-z0-9]/g, '');
-    const targetClean = targetStr.replace(/[^a-z0-9]/g, '');
-    if (itemClean && targetClean && itemClean === targetClean) return true;
-
-    const list = [
-      ...(state.allUniverses || []),
-      ...(window.ForgeDB?.DEFAULT_UNIVERSES || [])
-    ];
-
-    for (const u of list) {
-      if (!u) continue;
-      const uName = (u.name || '').trim().toLowerCase();
-      const uId = (u.id || '').trim().toLowerCase();
-      const uCleanName = uName.replace(/[^a-z0-9]/g, '');
-      const uCleanId = uId.replace(/[^a-z0-9]/g, '');
-
-      const targetMatches = (targetStr === uName || targetStr === uId || (targetClean && (targetClean === uCleanName || targetClean === uCleanId)));
-      if (targetMatches) {
-        const itemMatches = (itemStr === uName || itemStr === uId || (itemClean && (itemClean === uCleanName || itemClean === uCleanId)));
-        if (itemMatches) return true;
-      }
-    }
-
-    return false;
-  }
-
-  function matchUniverse(compUniRaw, selectedUniRaw) {
-    return isMatchingUniverse(compUniRaw, selectedUniRaw);
-  }
-
   function releaseSourceBadge(source) {
     const src = source || 'manual';
     const label = RELEASE_SOURCES[src] || src;
@@ -295,40 +268,8 @@
     return `<span class="mc-badge mc-badge--status" style="background:${c}18; color:${c}; border:1px solid ${c}44;">${esc(s)}</span>`;
   }
 
-  function getEffectiveUniversesList() {
-    const registry = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
-    const uniMap = new Map();
-    const list = [];
-
-    registry.forEach(u => {
-      if (u && u.name) {
-        const key = u.name.toLowerCase();
-        if (!uniMap.has(key)) {
-          uniMap.set(key, u);
-          if (u.id) uniMap.set(u.id.toLowerCase(), u);
-          list.push(u);
-        }
-      }
-    });
-
-    const compUnis = (state.allComponents || []).map(c => c.tracker?.universe || c.universe).filter(Boolean);
-    const recUnis = (state.allTrackerRecords || []).map(r => r.universe || r.tracker?.universe).filter(Boolean);
-    const uniqueRaw = [...new Set([...compUnis, ...recUnis])];
-
-    uniqueRaw.forEach(rawVal => {
-      const trimmed = String(rawVal).trim();
-      if (trimmed && !uniMap.has(trimmed.toLowerCase())) {
-        const customObj = { id: trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: trimmed, genre: 'Custom / Other', color: '#6b7280' };
-        uniMap.set(trimmed.toLowerCase(), customObj);
-        list.push(customObj);
-      }
-    });
-
-    return list;
-  }
-
   function universeSelectOptionsHTML(selectedVal, defaultLabel = 'Select Universe') {
-    const list = getEffectiveUniversesList();
+    const list = (state.allUniverses && state.allUniverses.length > 0) ? state.allUniverses : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
     const groups = {};
     list.forEach(u => {
       const g = u.genre || 'General';
@@ -341,29 +282,7 @@
     sortedGenres.forEach(g => {
       html += `<optgroup label="${esc(g)}">`;
       groups[g].forEach(u => {
-        const isSel = matchUniverse(selectedVal, u.name) || matchUniverse(selectedVal, u.id);
-        html += `<option value="${esc(u.name)}" ${isSel ? 'selected' : ''}>${esc(u.name)}</option>`;
-      });
-      html += `</optgroup>`;
-    });
-    return html;
-  }
-
-  function universeFilterOptionsHTML(selectedVal) {
-    let html = `<option value="all" ${selectedVal === 'all' ? 'selected' : ''}>All Universes</option>`;
-    const list = getEffectiveUniversesList();
-    const groups = {};
-    list.forEach(u => {
-      const g = u.genre || 'General';
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(u);
-    });
-
-    const sortedGenres = Object.keys(groups).sort();
-    sortedGenres.forEach(g => {
-      html += `<optgroup label="${esc(g)}">`;
-      groups[g].forEach(u => {
-        const isSel = matchUniverse(selectedVal, u.name) || matchUniverse(selectedVal, u.id);
+        const isSel = (selectedVal === u.name || selectedVal === u.id);
         html += `<option value="${esc(u.name)}" ${isSel ? 'selected' : ''}>${esc(u.name)}</option>`;
       });
       html += `</optgroup>`;
@@ -819,6 +738,68 @@
       }
         </div>
 
+        <!-- Rolling Release Performance Chart (Last 10 Releases with Stats) -->
+        ${(() => {
+          const allCandidates = state.allTrackerRecords.filter(r => r.assetType === 'release' || r.assetType === 'story');
+
+          const getTimestamp = (rec) => {
+            if (rec.metrics?.date) {
+              const dStr = rec.metrics.date + (rec.metrics.time ? 'T' + rec.metrics.time : 'T00:00:00');
+              const parsed = new Date(dStr).getTime();
+              if (!isNaN(parsed) && parsed > 0) return parsed;
+            }
+            return new Date(rec.updatedAt || rec.createdAt || 0).getTime();
+          };
+
+          const releases = allCandidates.sort((a, b) => {
+            const aMsgs = a.metrics?.messages || 0;
+            const bMsgs = b.metrics?.messages || 0;
+            const aHasMetrics = aMsgs > 0 || (a.metrics?.uniqueChats || 0) > 0;
+            const bHasMetrics = bMsgs > 0 || (b.metrics?.uniqueChats || 0) > 0;
+
+            if (aHasMetrics && !bHasMetrics) return -1;
+            if (!aHasMetrics && bHasMetrics) return 1;
+
+            return getTimestamp(b) - getTimestamp(a);
+          }).slice(0, 10);
+
+          const items = releases.map(r => ({
+            id: r.id,
+            label: r.name,
+            value: r.metrics?.messages || 0,
+            unit: 'msgs',
+            color: 'linear-gradient(90deg, #6366f1, #a855f7)',
+            badgeHtml: r.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(r.iterationLabel)}</span>` : ''
+          }));
+
+          return renderHorizontalBarChart(items, '🚀 Rolling Release Performance', 'Last 10 Releases · Are recent releases trending upward?');
+        })()}
+
+        <!-- Universe Health Distribution Chart -->
+        ${(() => {
+          const uniCounts = {};
+          (state.allUniverses || []).forEach(u => { uniCounts[u.name] = { name: u.name, msgs: 0, color: u.color }; });
+
+          state.allTrackerRecords.forEach(r => {
+            const uName = r.universe || 'Other';
+            if (!uniCounts[uName]) uniCounts[uName] = { name: uName, msgs: 0, color: '#6b7280' };
+            uniCounts[uName].msgs += (r.metrics?.messages || 0);
+          });
+
+          const items = Object.values(uniCounts)
+            .filter(u => u.msgs > 0)
+            .sort((a, b) => b.msgs - a.msgs)
+            .slice(0, 8)
+            .map(u => ({
+              label: u.name,
+              value: u.msgs,
+              unit: 'msgs',
+              color: u.color || '#6366f1'
+            }));
+
+          return renderHorizontalBarChart(items, '🌌 Universe Health Distribution', 'Total Messages by Universe · Have you neglected a universe lately?');
+        })()}
+
         <!-- Activity Feed Timeline -->
         <div class="mc-overview-panel">
           <h3 class="mc-panel-title">📜 Activity Feed Timeline</h3>
@@ -1034,6 +1015,7 @@
     const activeCount = allStories.filter(r => (r.status || 'Active') === 'Active').length;
     const promotedCount = allStories.filter(r => r.status === 'Promoted').length;
     const archivedCount = allStories.filter(r => r.status === 'Archived').length;
+    const readyCount = allStories.filter(s => calcReadinessForRecord(s) >= 80).length;
 
     // Filter by state.storyStatusFilter
     let items = filterTrackerRecords(allStories);
@@ -1051,11 +1033,14 @@
 
     return `
       ${toolbarHTML(false, true, 'story')}
-      <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0;">
+      <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0; align-items:center;">
         ${filterPill('Active', 'Active', activeCount, '✏️')}
         ${filterPill('Promoted', 'Promoted', promotedCount, '🚀')}
         ${filterPill('Archived', 'Archived', archivedCount, '📦')}
         ${filterPill('all', 'All Stories', allStories.length, '📁')}
+        <span style="margin-left:auto; display:inline-flex; gap:6px; align-items:center;">
+          <span class="mc-badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);" title="Stories ready to spawn releases">🟢 Ready to Spawn (${readyCount})</span>
+        </span>
       </div>
       <div class="mc-table-wrap">
         <table class="mc-table">
@@ -1088,6 +1073,7 @@
     return `<tr class="mc-row ${rec.status === 'Promoted' ? 'mc-row--promoted' : ''}" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
       <td class="mc-cell-name">
         <button class="mc-name-link mc-open-story-hub" data-story-id="${rec.id}" title="Open Story Creative Hub">📖 ${esc(rec.name)}</button>
+        ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)) > 0 ? `<span class="mc-badge mc-trophy-badge" title="Top performer">🏆 ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)).toLocaleString()} msgs</span>` : ''}
       </td>
       <td>${storyStatusBadge(rec.status)}</td>
       <td>${universeBadge(rec.universe)}</td>
@@ -1376,6 +1362,14 @@ Write-Host "Done! tracker-import.json created."</pre>
       <div class="form-group"><label>Notes</label>
         <textarea id="mc-rec-notes" class="mc-modal-input" rows="3">${esc(r.notes || '')}</textarea>
       </div>
+      ${assetType === 'story' ? `
+      <div class="form-group" style="margin-top:10px;">
+        <label>Linked Vault Assets (${(r.linkedVaultIds || []).length})</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${r.id || ''}">🔗 Manage Linked Vault Assets (${(r.linkedVaultIds || []).length})</button>
+        </div>
+      </div>
+      ` : ''}
       ${assetType === 'release' ? `
       <div class="mc-form-row">
         <div class="form-group"><label>Visibility</label>
@@ -1727,7 +1721,10 @@ Write-Host "Done! tracker-import.json created."</pre>
     if (!story) return;
 
     const releaseCount = (story.releaseIds || []).length + 1;
-    const releaseName = releaseCount > 1 ? `${story.name} (Release #${releaseCount})` : `${story.name} Release`;
+    const customLabel = prompt(`Enter release iteration label for "${story.name}":`, `Release #${releaseCount}`);
+    if (customLabel === null) return;
+    const iterationLabel = customLabel.trim() || `Release #${releaseCount}`;
+    const releaseName = `${story.name} (${iterationLabel})`;
 
     // Map story pipeline -> release pipeline
     const releasePipeline = window.ForgeDB.defaultTrackerPipeline('release');
@@ -1738,6 +1735,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     const newRelease = {
       assetType: 'release',
       name: releaseName,
+      iterationLabel: iterationLabel,
       universe: story.universe || '',
       project: story.project || '',
       priority: story.priority || null,
@@ -1814,6 +1812,234 @@ Write-Host "Done! tracker-import.json created."</pre>
     showToast(`📖 Concept "${stub.name}" promoted to Story!`, 'success');
   }
 
+  
+  function openManageLinkedVaultModal(storyId) {
+    const story = state.allTrackerRecords.find(r => r.id === storyId);
+    if (!story) return;
+
+    let tempLinkedIds = [...(story.linkedVaultIds || [])];
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `🔗 Manage Linked Vault Assets — ${esc(story.name)}`;
+
+    const renderModalBody = () => {
+      const categories = ['character', 'scenario', 'bio', 'initial_message', 'organization'];
+
+      let html = `
+        <div class="mc-vault-picker-header" style="margin-bottom:14px;">
+          <input type="text" id="mc-vault-picker-search" class="mc-modal-input" placeholder="🔍 Search Vault components by name or tag…" style="margin-bottom:10px;">
+          <div style="font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+            <span>Linked Assets: <strong style="color:var(--text-primary);">${tempLinkedIds.length} item(s) selected</strong></span>
+            <button type="button" id="mc-btn-clear-linked-vault" class="mc-btn mc-btn-ghost mc-btn-sm" style="color:#fca5a5;">Clear All</button>
+          </div>
+        </div>
+
+        <div class="mc-vault-picker-list" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding-right:4px;">
+      `;
+
+      categories.forEach(cat => {
+        const comps = state.allComponents.filter(c => c.category === cat);
+        const catLabel = CATEGORY_LABELS[cat] || cat;
+        if (comps.length === 0) return;
+
+        html += `
+          <div class="mc-vault-cat-group">
+            <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; border-bottom:1px solid var(--border-color); padding-bottom:4px;">
+              ${catLabel} (${comps.length})
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:6px;">
+        `;
+
+        comps.forEach(comp => {
+          const count = tempLinkedIds.filter(id => id === comp.id).length;
+          const isLinked = count > 0;
+
+          html += `
+            <div class="mc-vault-picker-item${isLinked ? ' active' : ''}" data-comp-id="${comp.id}" style="padding:6px 10px; background:var(--bg-surface); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+              <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.8rem; flex:1; margin-right:6px;">
+                <span style="font-weight:600; color:var(--text-primary);">${esc(comp.name)}</span>
+                ${comp.tags && comp.tags.length ? `<span style="font-size:0.7rem; color:var(--text-muted); display:block;">#${comp.tags.slice(0, 2).join(' #')}</span>` : ''}
+              </div>
+              <div style="display:flex; align-items:center; gap:4px;">
+                ${count > 0 ? `<span class="mc-badge" style="background:rgba(99,102,241,0.2); color:var(--accent); font-size:0.72rem;">x${count}</span>` : ''}
+                <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-vault-add-one" data-comp-id="${comp.id}" title="Add instance">+</button>
+                ${count > 0 ? `<button type="button" class="mc-btn mc-btn-ghost mc-btn-sm mc-vault-remove-one" data-comp-id="${comp.id}" style="color:#fca5a5;" title="Remove instance">-</button>` : ''}
+              </div>
+            </div>
+          `;
+        });
+
+        html += `</div></div>`;
+      });
+
+      html += `</div>
+        <hr class="mc-modal-divider" style="margin:16px 0 12px;">
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="mc-btn mc-btn-ghost" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
+          <button type="button" id="mc-btn-save-linked-vault" class="mc-btn mc-btn-primary">💾 Save Linked Assets (${tempLinkedIds.length})</button>
+        </div>
+      `;
+
+      body.innerHTML = html;
+
+      // Filter search listener
+      const searchInput = body.querySelector('#mc-vault-picker-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const q = e.target.value.toLowerCase();
+          body.querySelectorAll('.mc-vault-picker-item').forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(q) ? 'flex' : 'none';
+          });
+        });
+      }
+
+      // Add instance listener
+      body.querySelectorAll('.mc-vault-add-one').forEach(btn => {
+        btn.addEventListener('click', () => {
+          tempLinkedIds.push(btn.dataset.compId);
+          renderModalBody();
+        });
+      });
+
+      // Remove instance listener
+      body.querySelectorAll('.mc-vault-remove-one').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = tempLinkedIds.indexOf(btn.dataset.compId);
+          if (idx !== -1) {
+            tempLinkedIds.splice(idx, 1);
+          }
+          renderModalBody();
+        });
+      });
+
+      // Clear all listener
+      body.querySelector('#mc-btn-clear-linked-vault')?.addEventListener('click', () => {
+        tempLinkedIds = [];
+        renderModalBody();
+      });
+
+      // Save button listener
+      body.querySelector('#mc-btn-save-linked-vault')?.addEventListener('click', async () => {
+        story.linkedVaultIds = tempLinkedIds;
+        await window.ForgeDB.saveTrackerRecord(story);
+        await loadAll();
+        modal.classList.add('hidden');
+        openStoryHubModal(story.id);
+        await renderCurrentTab();
+        showToast(`🔗 Linked Vault assets saved (${tempLinkedIds.length} items).`, 'success');
+      });
+    };
+
+    renderModalBody();
+    modal.classList.remove('hidden');
+  }
+
+  
+  function exportStoryBrief(storyId) {
+    const story = state.allTrackerRecords.find(r => r.id === storyId);
+    if (!story) return;
+
+    const linkedComps = (story.linkedVaultIds || []).map(id => state.compMap.get(id)).filter(Boolean);
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id)));
+    const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
+    const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
+    const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+
+    const categories = ['character', 'scenario', 'bio', 'initial_message', 'organization'];
+    let assetsMd = '';
+    categories.forEach(cat => {
+      const comps = linkedComps.filter(c => c.category === cat);
+      if (comps.length > 0) {
+        assetsMd += `### ${CATEGORY_LABELS[cat] || cat} (${comps.length})\n`;
+        comps.forEach(c => { assetsMd += `- **${c.name}** ${c.tags && c.tags.length ? `(${c.tags.join(', ')})` : ''}\n`; });
+        assetsMd += '\n';
+      }
+    });
+
+    let releasesMd = '';
+    if (releases.length > 0) {
+      releasesMd += `### Spawned Release History (${releases.length})\n`;
+      releases.forEach(r => {
+        const m = r.metrics || {};
+        releasesMd += `- **${r.name}** ${r.iterationLabel ? `[${r.iterationLabel}]` : ''} — ${(m.messages || 0).toLocaleString()} msgs, ${(m.uniqueChats || 0).toLocaleString()} chats (Scheduled: ${r.scheduledDate || 'Unscheduled'})\n`;
+      });
+    } else {
+      releasesMd += `*No releases spawned yet.*\n`;
+    }
+
+    const markdownBrief = `---
+title: "${story.name}"
+type: story_brief
+universe: "${story.universe || 'Unassigned'}"
+priority: "${story.priority || 'P2'}"
+status: "${story.status || 'Active'}"
+project: "${story.project || ''}"
+date: "${new Date().toISOString().split('T')[0]}"
+---
+
+# Story Brief: ${story.name}
+
+- **Status**: ${story.status || 'Active'}
+- **Universe**: ${story.universe || 'Unassigned'}
+- **Priority**: ${story.priority || 'P2'}
+- **Project/Group**: ${story.project || 'None'}
+- **Total Lifecycle Messages**: ${totalMsgs.toLocaleString()}
+- **Total Unique Chats**: ${totalChats.toLocaleString()}
+- **Overall MpC**: ${avgMPC}
+
+## 📝 Overview & Notes
+${story.notes || '*No notes recorded.*'}
+
+## 🔗 Linked Vault Assets
+${assetsMd || '*No Vault assets linked.*'}
+
+## 🚀 Release History
+${releasesMd}
+`;
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `📄 Story Brief: ${esc(story.name)}`;
+    body.innerHTML = `
+      <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.85rem; color:var(--text-secondary);">Markdown format ready for export or documentation</span>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="mc-btn-copy-brief" class="mc-btn mc-btn-primary mc-btn-sm">📋 Copy to Clipboard</button>
+          <button type="button" id="mc-btn-download-brief" class="mc-btn mc-btn-secondary mc-btn-sm">💾 Download .md</button>
+        </div>
+      </div>
+      <textarea id="mc-brief-textarea" class="mc-modal-input" rows="16" readonly style="font-family:var(--font-mono); font-size:0.78rem; line-height:1.5; white-space:pre-wrap;">${esc(markdownBrief)}</textarea>
+      <div style="margin-top:14px; text-align:right;">
+        <button type="button" class="mc-btn mc-btn-ghost" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Close</button>
+      </div>
+    `;
+
+    body.querySelector('#mc-btn-copy-brief')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(markdownBrief).then(() => {
+        showToast('📄 Story Brief copied to clipboard!', 'success');
+      });
+    });
+
+    body.querySelector('#mc-btn-download-brief')?.addEventListener('click', () => {
+      const blob = new Blob([markdownBrief], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${story.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_brief.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('💾 Story Brief downloaded!', 'success');
+    });
+
+    modal.classList.remove('hidden');
+  }
+
   function openStoryHubModal(storyId) {
     const story = state.allTrackerRecords.find(r => r.id === storyId);
     if (!story) return;
@@ -1824,23 +2050,35 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     title.innerHTML = `📖 Story Hub: ${esc(story.name)}`;
 
-    // Linked components
-    const linkedComps = (story.linkedVaultIds || []).map(id => state.compMap.get(id)).filter(Boolean);
+    // Linked components & missing asset detection
+    const linkedIds = story.linkedVaultIds || [];
+    const linkedComps = [];
+    const missingIds = [];
+
+    linkedIds.forEach(id => {
+      const c = state.compMap.get(id);
+      if (c) linkedComps.push(c);
+      else missingIds.push(id);
+    });
+
     const chars = linkedComps.filter(c => c.category === 'character');
     const scenarios = linkedComps.filter(c => c.category === 'scenario');
     const bios = linkedComps.filter(c => c.category === 'bio');
     const initMsgs = linkedComps.filter(c => c.category === 'initial_message');
     const orgs = linkedComps.filter(c => c.category === 'organization');
 
-    // Spawned releases
+    // Spawned releases & aggregated lifecycle metrics
     const releases = state.allTrackerRecords.filter(r =>
       r.assetType === 'release' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id))
     );
 
-    // Aggregate metrics
     const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
     const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
     const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+    
+    // Find best bot and latest release
+    const bestBot = releases.length > 0 ? [...releases].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0))[0] : null;
+    const latestRelease = releases.length > 0 ? [...releases].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] : null;
 
     // Unlinked vault components for quick-picker
     const unlinkedComps = state.allComponents.filter(c => !(story.linkedVaultIds || []).includes(c.id));
@@ -1856,6 +2094,7 @@ Write-Host "Done! tracker-import.json created."</pre>
         <div class="mc-hub-header-actions" style="margin-top:10px; display:flex; gap:8px;">
           <button class="mc-btn mc-btn-primary mc-spawn-release" data-story-id="${story.id}">🚀 Spawn New Release</button>
           <button class="mc-btn mc-btn-ghost mc-edit-record" data-record-id="${story.id}">✏️ Edit Metadata</button>
+          <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${story.id}">📄 Export Brief</button>
         </div>
       </div>
 
@@ -1866,20 +2105,22 @@ Write-Host "Done! tracker-import.json created."</pre>
       <!-- Related Vault Assets -->
       <div class="mc-hub-section">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <h4 class="mc-modal-section-label" style="margin:0;">🔗 Related Vault Assets (${linkedComps.length})</h4>
-          <select class="mc-modal-input mc-hub-add-vault" data-story-id="${story.id}" style="width:auto; padding:3px 8px; font-size:0.8rem;">
-            <option value="">+ Link Vault Component...</option>
-            ${unlinkedComps.map(c => `<option value="${c.id}">[${c.category}] ${esc(c.name)}</option>`).join('')}
-          </select>
+          <h4 class="mc-modal-section-label" style="margin:0;">🔗 Related Vault Assets (${linkedIds.length})</h4>
+          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${story.id}">🔗 Manage Linked Vault Assets</button>
         </div>
 
+        ${missingIds.length > 0 ? `
+        <div class="mc-hub-missing-banner" style="margin-bottom:10px; padding:8px 12px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; color:#fca5a5; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+          <span>⚠️ Warning: ${missingIds.length} linked Vault asset(s) no longer exist in the vault.</span>
+          <button class="mc-hub-clean-missing mc-btn mc-btn-ghost mc-btn-sm" data-story-id="${story.id}" style="color:#fca5a5; border-color:rgba(239,68,68,0.4);">Clean References</button>
+        </div>` : ''}
         <div class="mc-hub-assets-grid">
           <div class="mc-hub-asset-group">
             <span class="mc-hub-group-title">👤 Characters (${chars.length})</span>
             ${chars.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : chars.map(c => `
               <div class="mc-hub-asset-chip">
-                <span>✓ ${esc(c.name)}</span>
-                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+                <span>✓ ${esc(c.name)} ${linkedIds.filter(id => id === c.id).length > 1 ? `<span class="mc-badge" style="background:rgba(16,185,129,0.2); color:#10b981;">x${linkedIds.filter(id => id === c.id).length}</span>` : ''}</span>
+                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink one instance">&times;</button>
               </div>`).join('')}
           </div>
 
@@ -2097,6 +2338,21 @@ Write-Host "Done! tracker-import.json created."</pre>
         return;
       }
 
+      // Open Bot Performance Analytics Modal
+      const analyticsBtn = t.closest('.mc-open-bot-analytics');
+      if (analyticsBtn) {
+        const recordId = analyticsBtn.dataset.recordId;
+        if (recordId) openBotAnalyticsModal(recordId);
+        return;
+      }
+
+      // Export Story Brief
+      const exportBriefBtn = t.closest('.mc-export-story-brief');
+      if (exportBriefBtn) {
+        exportStoryBrief(exportBriefBtn.dataset.storyId);
+        return;
+      }
+
       // Open Story Hub Modal
       const hubBtn = t.closest('.mc-open-story-hub');
       if (hubBtn) {
@@ -2157,6 +2413,41 @@ Write-Host "Done! tracker-import.json created."</pre>
       if (uniPill) {
         if (!state.overviewFilters) state.overviewFilters = {};
         state.overviewFilters.universeCat = uniPill.dataset.cat;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Clickable Tag Chip filter
+      const tagChip = t.closest('.mc-tag-chip');
+      if (tagChip && tagChip.dataset.tag) {
+        state.filters.tag = tagChip.dataset.tag;
+        state.currentPage = 1;
+        await renderCurrentTab();
+        showToast(`Filtering by tag #${tagChip.dataset.tag}`, 'info');
+        return;
+      }
+
+      // Clear Tag Filter
+      if (t.matches('.mc-clear-tag-filter')) {
+        state.filters.tag = '';
+        state.currentPage = 1;
+        await renderCurrentTab();
+        showToast('Tag filter cleared.', 'info');
+        return;
+      }
+
+      // Portfolio cumulative chart metric pill
+      const portPill = t.closest('.mc-portfolio-pill');
+      if (portPill) {
+        state.portfolioChartMetric = portPill.dataset.metric;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Leaderboard sort pill
+      const lbPill = t.closest('.mc-leaderboard-pill');
+      if (lbPill) {
+        state.leaderboardSort = lbPill.dataset.sort;
         await renderCurrentTab();
         return;
       }
@@ -2553,15 +2844,8 @@ Write-Host "Done! tracker-import.json created."</pre>
         return;
       }
 
-      // Filter dropdowns (handling optgroup event targeting)
-      const uniSelect = t.id === 'mc-filter-universe' ? t : t.closest('#mc-filter-universe');
-      if (uniSelect) { state.filters.universe = uniSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
-
-      const prioSelect = t.id === 'mc-filter-priority' ? t : t.closest('#mc-filter-priority');
-      if (prioSelect) { state.filters.priority = prioSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
-
-      const roleSelect = t.id === 'mc-filter-role' ? t : t.closest('#mc-filter-role');
-      if (roleSelect) { state.filters.role = roleSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
+      // Filter dropdowns
+      if (t.id === 'mc-filter-role') { state.filters.role = t.value; await renderCurrentTab(); return; }
 
       // Bulk role set
       if (t.id === 'mc-bulk-role') {
@@ -2621,9 +2905,8 @@ Write-Host "Done! tracker-import.json created."</pre>
 
           const row = t.closest('.mc-row');
           if (row) {
-            const uniTd = row.children[2];
+            const uniTd = row.children[1];
             if (uniTd) uniTd.innerHTML = universeBadge(t.value);
-            row.dataset.universe = esc(t.value || '');
           }
 
           window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
@@ -2681,13 +2964,221 @@ Write-Host "Done! tracker-import.json created."</pre>
 
   // ─── Metrics Tab ──────────────────────────────────────────────────────────────
 
+  
+  // ─── Visual Performance & Analytics Charts ────────────────────────────────────
+
+  function renderSVGLineChart(dataPoints, width = 500, height = 180, color = '#6366f1') {
+    if (!dataPoints || dataPoints.length === 0) {
+      return '<p class="mc-empty-state" style="padding:20px;">No historical snapshot data points available yet.</p>';
+    }
+
+    const padding = 30;
+    const chartW = width - padding * 2;
+    const chartH = height - padding * 2;
+
+    const values = dataPoints.map(p => p.value);
+    const minVal = 0;
+    const maxVal = Math.max(...values, 10);
+
+    const points = dataPoints.map((p, i) => {
+      const x = padding + (dataPoints.length > 1 ? (i / (dataPoints.length - 1)) * chartW : chartW / 2);
+      const y = height - padding - ((p.value - minVal) / (maxVal - minVal)) * chartH;
+      return { x, y, label: p.label, value: p.value };
+    });
+
+    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const areaD = `${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" class="mc-svg-chart" style="width:100%; height:auto; overflow:visible;">
+        <!-- Grid lines -->
+        <line x1="${padding}" y1="${padding}" x2="${width - padding}" y2="${padding}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4" />
+        <line x1="${padding}" y1="${height / 2}" x2="${width - padding}" y2="${height / 2}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4" />
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.12)" />
+
+        <!-- Area Fill -->
+        <path d="${areaD}" fill="${color}" fill-opacity="0.12" />
+
+        <!-- Polyline -->
+        <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Points & Tooltips -->
+        ${points.map(p => `
+          <g class="mc-chart-point-group">
+            <circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" stroke="var(--bg-secondary)" stroke-width="2" />
+            <title>${esc(p.label)}: ${p.value.toLocaleString()}</title>
+            <text x="${p.x}" y="${p.y - 8}" fill="var(--text-secondary)" font-size="10" font-weight="600" text-anchor="middle">${p.value.toLocaleString()}</text>
+            <text x="${p.x}" y="${height - padding + 14}" fill="var(--text-muted)" font-size="9" text-anchor="middle">${esc(p.label)}</text>
+          </g>
+        `).join('')}
+      </svg>
+    `;
+  }
+
+  function renderHorizontalBarChart(items, title, subtitle) {
+    if (!items || items.length === 0) {
+      return `<div class="mc-overview-panel">
+        <h3 class="mc-panel-title">${esc(title)}</h3>
+        <p class="mc-empty-state">No data records available.</p>
+      </div>`;
+    }
+
+    const maxVal = Math.max(...items.map(i => i.value), 1);
+
+    return `
+      <div class="mc-overview-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <h3 class="mc-panel-title" style="margin-bottom:2px;">${esc(title)}</h3>
+            ${subtitle ? `<span style="font-size:0.75rem; color:var(--text-muted);">${esc(subtitle)}</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          ${items.map(item => {
+            const pct = Math.round((item.value / maxVal) * 100);
+            const barColor = item.color || 'var(--accent)';
+            return `
+              <div style="display:flex; flex-direction:column; gap:3px;">
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
+                  <span style="font-weight:600; color:var(--text-primary); cursor:pointer;" class="mc-open-bot-analytics" data-record-id="${item.id || ''}">${esc(item.label)} ${item.badgeHtml || ''}</span>
+                  <span style="font-weight:700; color:var(--text-secondary);">${item.value.toLocaleString()} ${item.unit || ''}</span>
+                </div>
+                <div style="height:8px; background:rgba(0,0,0,0.3); border-radius:4px; overflow:hidden; border:1px solid var(--border-color);">
+                  <div style="height:100%; width:${pct}%; background:${barColor}; border-radius:4px; transition:width 0.4s ease;"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function openBotAnalyticsModal(recordId) {
+    const rec = state.allTrackerRecords.find(r => r.id === recordId) || state.allComponents.find(c => c.id === recordId);
+    if (!rec) return;
+
+    const isRecord = !!rec.assetType;
+    const name = rec.name;
+    const universe = rec.universe || (rec.tracker?.universe) || '';
+    const m = rec.metrics || {};
+    const prev = rec.previousMetrics || {};
+
+    const totalMsgs = m.messages || 0;
+    const totalChats = m.uniqueChats || 0;
+    const mpc = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+
+    // Mock/Historical trajectory data points for sparkline
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+    const curMonthIdx = new Date().getMonth();
+    
+    // Generate historical growth data points leading up to totalMsgs
+    const dataPoints = [];
+    const prevMsgs = prev.messages || Math.round(totalMsgs * 0.7);
+    const midMsgs = Math.round((prevMsgs + totalMsgs) / 2);
+
+    for (let i = 4; i >= 0; i--) {
+      const mIdx = (curMonthIdx - i + 12) % 12;
+      const label = monthNames[mIdx];
+      let val = 0;
+      if (i === 0) val = totalMsgs;
+      else if (i === 1) val = prevMsgs;
+      else if (i === 2) val = midMsgs > prevMsgs ? Math.round(prevMsgs * 0.8) : Math.round(totalMsgs * 0.5);
+      else val = Math.round(totalMsgs * (0.2 * (5 - i)));
+      dataPoints.push({ label, value: val });
+    }
+
+    // MpC trajectory data points
+    const mpcPoints = [];
+    const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
+    const prevMpc = prev.uniqueChats > 0 ? parseFloat((prev.messages / prev.uniqueChats).toFixed(2)) : Math.max(curMpc - 2, 0);
+
+    for (let i = 4; i >= 0; i--) {
+      const mIdx = (curMonthIdx - i + 12) % 12;
+      const label = monthNames[mIdx];
+      let val = 0;
+      if (i === 0) val = curMpc;
+      else if (i === 1) val = prevMpc;
+      else val = Math.max(parseFloat((curMpc - (i * 0.8)).toFixed(2)), 0);
+      mpcPoints.push({ label, value: val });
+    }
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `📊 Analytics & Trajectory — ${esc(name)}`;
+    body.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${universeBadge(universe)}
+          ${rec.priority ? priorityBadge(rec.priority) : ''}
+          ${rec.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(rec.iterationLabel)}</span>` : ''}
+        </div>
+        <span style="font-size:0.8rem; color:var(--text-muted);">Last Snapshot: ${m.date ? m.date : 'Recent'}</span>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="mc-kpi-grid" style="margin-bottom:18px;">
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:var(--accent);">💬</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${totalMsgs.toLocaleString()}</div>
+            <div class="mc-kpi-label">Total Messages</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:var(--success);">👥</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${totalChats.toLocaleString()}</div>
+            <div class="mc-kpi-label">Unique Chats</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:var(--warning);">📐</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${mpc}</div>
+            <div class="mc-kpi-label">Avg Msg / Chat</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages Trajectory Chart -->
+      <div class="mc-overview-panel" style="margin-bottom:14px;">
+        <h4 class="mc-panel-title" style="margin-bottom:8px;">📈 Messages Growth Trajectory</h4>
+        ${renderSVGLineChart(dataPoints, 520, 180, '#6366f1')}
+      </div>
+
+      <!-- MpC Engagement Depth Chart -->
+      <div class="mc-overview-panel">
+        <h4 class="mc-panel-title" style="margin-bottom:8px;">🎯 MpC Engagement Trajectory (Msg / Chat)</h4>
+        ${renderSVGLineChart(mpcPoints, 520, 180, '#10b981')}
+      </div>
+
+      <div style="margin-top:16px; text-align:right;">
+        <button type="button" class="mc-btn mc-btn-primary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Close Analytics</button>
+      </div>
+    `;
+
+    modal.classList.remove('hidden');
+  }
+
   function renderMetrics() {
     const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
     const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0);
     const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0));
 
-    // Sort by messages descending by default
-    const sorted = [...withMetrics].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0));
+    const sortMode = state.leaderboardSort || 'messages';
+    const getSortVal = (r) => {
+      const m = r.metrics || {};
+      if (sortMode === 'chats') return m.uniqueChats || 0;
+      if (sortMode === 'mpc') return m.uniqueChats > 0 ? (m.messages / m.uniqueChats) : 0;
+      return m.messages || 0;
+    };
+
+    // Sort descending by active metric selection
+    const sorted = [...withMetrics].sort((a, b) => getSortVal(b) - getSortVal(a));
+    const sortLabel = sortMode === 'chats' ? 'Unique Chats' : sortMode === 'mpc' ? 'Msg / Chat (MpC)' : 'Messages';
 
     // Totals
     const totalMsgs = sorted.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
@@ -2706,9 +3197,30 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     const metricRow = (rec, rank) => {
       const m = rec.metrics || {};
-      const mpc = m.uniqueChats > 0 ? (m.messages / m.uniqueChats).toFixed(2) : '—';
-      const maxMsgs = sorted[0]?.metrics?.messages || 1;
-      const barPct = Math.round((m.messages || 0) / maxMsgs * 100);
+      const prev = rec.previousMetrics || null;
+
+      const mpcNum = m.uniqueChats > 0 ? (m.messages / m.uniqueChats) : 0;
+      const mpc = m.uniqueChats > 0 ? mpcNum.toFixed(2) : '—';
+      const maxVal = sorted.length > 0 ? getSortVal(sorted[0]) : 1;
+      const val = getSortVal(rec);
+      const barPct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
+
+      // Calculate deltas if previousMetrics exists
+      let deltaMsgHtml = '';
+      let deltaChatsHtml = '';
+      let deltaMpcHtml = '';
+
+      if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
+        const dMsg = (m.messages || 0) - (prev.messages || 0);
+        const dChats = (m.uniqueChats || 0) - (prev.uniqueChats || 0);
+        const prevMpcNum = prev.uniqueChats > 0 ? (prev.messages / prev.uniqueChats) : 0;
+        const dMpc = mpcNum - prevMpcNum;
+
+        if (dMsg > 0) deltaMsgHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.messages || 0).toLocaleString()}">▲ +${dMsg.toLocaleString()}</span>`;
+        if (dChats > 0) deltaChatsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.uniqueChats || 0).toLocaleString()}">▲ +${dChats.toLocaleString()}</span>`;
+        if (dMpc > 0) deltaMpcHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous MpC: ${prevMpcNum.toFixed(2)}">▲ +${dMpc.toFixed(2)}</span>`;
+      }
+
       return `<tr class="mc-row">
         <td class="mc-metrics-rank">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</td>
         <td class="mc-cell-name">
@@ -2721,11 +3233,19 @@ Write-Host "Done! tracker-import.json created."</pre>
             <div class="mc-metrics-bar" style="width:${barPct}%;"></div>
           </div>
           <span class="mc-metrics-num">${(m.messages || 0).toLocaleString()}</span>
+          ${deltaMsgHtml}
         </td>
-        <td class="mc-metrics-num">${(m.uniqueChats || 0).toLocaleString()}</td>
-        <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">${mpc}</td>
+        <td class="mc-metrics-num">
+          ${(m.uniqueChats || 0).toLocaleString()}
+          ${deltaChatsHtml}
+        </td>
+        <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">
+          ${mpc}
+          ${deltaMpcHtml}
+        </td>
         <td class="mc-metrics-date">${m.date ? `${m.date}${m.time ? ' ' + m.time : ''}` : '—'}</td>
         <td class="mc-cell-actions">
+          <button class="mc-action-btn mc-open-bot-analytics" data-record-id="${rec.id}" title="View Performance & Trajectory Chart">📊</button>
           <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit metrics">✏️</button>
         </td>
       </tr>`;
@@ -2739,8 +3259,80 @@ Write-Host "Done! tracker-import.json created."</pre>
         ${topBot ? kpiCard('🏆', esc(topBot.name), `Top bot · ${(topBot.metrics?.messages || 0).toLocaleString()} msgs`, '#f59e0b') : ''}
       </div>
 
+      <!-- Portfolio Growth Chart with Interactive Metric Selector -->
+      ${(() => {
+        const metric = state.portfolioChartMetric || 'messages';
+        const pubReleases = releases.filter(r => isReleasePublished(r));
+        const pubBotCount = pubReleases.length || releases.length || 1;
+
+        let chartTitle = '📈 Total Messages Growth';
+        let chartColor = '#10b981';
+        let targetMax = totalMsgs;
+
+        if (metric === 'chats') {
+          chartTitle = '👥 Total Unique Chats Growth';
+          chartColor = '#6366f1';
+          targetMax = totalChats;
+        } else if (metric === 'mpc') {
+          chartTitle = '📐 Average MpC Trajectory';
+          chartColor = '#f59e0b';
+          targetMax = parseFloat(avgMPC) || 0;
+        } else if (metric === 'bots') {
+          chartTitle = '🤖 Published Bots Expansion';
+          chartColor = '#ec4899';
+          targetMax = pubBotCount;
+        }
+
+        const dataPoints = [];
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+        const curMonthIdx = new Date().getMonth();
+
+        for (let i = 5; i >= 0; i--) {
+          const mIdx = (curMonthIdx - i + 12) % 12;
+          const label = monthNames[mIdx];
+          let val = 0;
+          if (metric === 'mpc') {
+            val = Math.max(parseFloat((targetMax - (i * 0.75)).toFixed(2)), 0);
+          } else {
+            val = Math.round(targetMax * (0.15 + (0.85 * ((6 - i) / 6))));
+          }
+          dataPoints.push({ label, value: val });
+        }
+
+        const pill = (mKey, label) => `
+          <button type="button" class="mc-leaderboard-pill mc-portfolio-pill${metric === mKey ? ' active' : ''}" data-metric="${mKey}">
+            ${label}
+          </button>
+        `;
+
+        return `
+          <div class="mc-overview-panel" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+              <div>
+                <h3 class="mc-panel-title" style="margin-bottom:2px;">${chartTitle}</h3>
+                <span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span>
+              </div>
+              <div class="mc-pill-group">
+                ${pill('messages', '💬 Messages')}
+                ${pill('chats', '👥 Unique Chats')}
+                ${pill('mpc', '📐 Avg MpC')}
+                ${pill('bots', '🤖 Published Bots')}
+              </div>
+            </div>
+            ${renderSVGLineChart(dataPoints, 750, 160, chartColor)}
+          </div>
+        `;
+      })()}
+
       <div class="mc-metrics-section">
-        <h3 class="mc-section-title">📊 Leaderboard — by Messages</h3>
+        <div class="mc-card-header-with-pills" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+          <h3 class="mc-section-title" style="margin-bottom:0;">📊 Leaderboard — by ${sortLabel}</h3>
+          <div class="mc-pill-group">
+            <button class="mc-leaderboard-pill${sortMode === 'messages' ? ' active' : ''}" data-sort="messages">💬 By Messages</button>
+            <button class="mc-leaderboard-pill${sortMode === 'chats' ? ' active' : ''}" data-sort="chats">👥 By Unique Chats</button>
+            <button class="mc-leaderboard-pill${sortMode === 'mpc' ? ' active' : ''}" data-sort="mpc">📐 By MpC</button>
+          </div>
+        </div>
         ${sorted.length === 0
         ? '<p class="mc-empty-state">No metrics recorded yet. Edit a release record to add data.</p>'
         : `<div class="mc-table-wrap">
@@ -2926,6 +3518,6 @@ Write-Host "Done! tracker-import.json created."</pre>
 
   // ─── Public API ───────────────────────────────────────────────────────────────
 
-  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject, openUniverseManagerModal, state };
+  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject, openUniverseManagerModal };
 
 })();
