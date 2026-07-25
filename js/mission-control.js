@@ -738,12 +738,30 @@
       }
         </div>
 
-        <!-- Rolling Release Performance Chart (Last 10 Releases) -->
+        <!-- Rolling Release Performance Chart (Last 10 Releases with Stats) -->
         ${(() => {
-          const releases = state.allTrackerRecords
-            .filter(r => r.assetType === 'release')
-            .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
-            .slice(0, 10);
+          const allCandidates = state.allTrackerRecords.filter(r => r.assetType === 'release' || r.assetType === 'story');
+
+          const getTimestamp = (rec) => {
+            if (rec.metrics?.date) {
+              const dStr = rec.metrics.date + (rec.metrics.time ? 'T' + rec.metrics.time : 'T00:00:00');
+              const parsed = new Date(dStr).getTime();
+              if (!isNaN(parsed) && parsed > 0) return parsed;
+            }
+            return new Date(rec.updatedAt || rec.createdAt || 0).getTime();
+          };
+
+          const releases = allCandidates.sort((a, b) => {
+            const aMsgs = a.metrics?.messages || 0;
+            const bMsgs = b.metrics?.messages || 0;
+            const aHasMetrics = aMsgs > 0 || (a.metrics?.uniqueChats || 0) > 0;
+            const bHasMetrics = bMsgs > 0 || (b.metrics?.uniqueChats || 0) > 0;
+
+            if (aHasMetrics && !bHasMetrics) return -1;
+            if (!aHasMetrics && bHasMetrics) return 1;
+
+            return getTimestamp(b) - getTimestamp(a);
+          }).slice(0, 10);
 
           const items = releases.map(r => ({
             id: r.id,
