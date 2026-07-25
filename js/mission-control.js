@@ -3149,39 +3149,81 @@ ${releasesMd}
     const totalChats = m.uniqueChats || 0;
     const mpc = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
 
-    // Mock/Historical trajectory data points for sparkline
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-    const curMonthIdx = new Date().getMonth();
-    
-    // Generate historical growth data points leading up to totalMsgs
+    // Determine launch / creation timestamp
+    let launchDate = null;
+    if (rec.createdAt) launchDate = new Date(rec.createdAt);
+    else if (rec.scheduledDate) launchDate = new Date(rec.scheduledDate);
+    else if (rec.modifiedAt) launchDate = new Date(rec.modifiedAt);
+    else launchDate = new Date();
+
+    const now = new Date();
+    const daysActive = Math.max(0, Math.floor((now - launchDate) / (1000 * 60 * 60 * 24)));
+
     const dataPoints = [];
-    const prevMsgs = prev.messages || Math.round(totalMsgs * 0.7);
-    const midMsgs = Math.round((prevMsgs + totalMsgs) / 2);
-
-    for (let i = 4; i >= 0; i--) {
-      const mIdx = (curMonthIdx - i + 12) % 12;
-      const label = monthNames[mIdx];
-      let val = 0;
-      if (i === 0) val = totalMsgs;
-      else if (i === 1) val = prevMsgs;
-      else if (i === 2) val = midMsgs > prevMsgs ? Math.round(prevMsgs * 0.8) : Math.round(totalMsgs * 0.5);
-      else val = Math.round(totalMsgs * (0.2 * (5 - i)));
-      dataPoints.push({ label, value: val });
-    }
-
-    // MpC trajectory data points
     const mpcPoints = [];
-    const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
-    const prevMpc = prev.uniqueChats > 0 ? parseFloat((prev.messages / prev.uniqueChats).toFixed(2)) : Math.max(curMpc - 2, 0);
 
-    for (let i = 4; i >= 0; i--) {
-      const mIdx = (curMonthIdx - i + 12) % 12;
-      const label = monthNames[mIdx];
-      let val = 0;
-      if (i === 0) val = curMpc;
-      else if (i === 1) val = prevMpc;
-      else val = Math.max(parseFloat((curMpc - (i * 0.8)).toFixed(2)), 0);
-      mpcPoints.push({ label, value: val });
+    const formatLabel = (dt) => {
+      if (!dt || isNaN(dt.getTime())) return 'Snapshot';
+      return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    if (daysActive <= 30) {
+      // Recent release (launched within the last 30 days): plot actual launch/snapshot dates
+      const launchLabel = `Launch (${formatLabel(launchDate)})`;
+      dataPoints.push({ label: launchLabel, value: 0 });
+      mpcPoints.push({ label: launchLabel, value: 0 });
+
+      if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
+        const prevDate = prev.updatedAt ? new Date(prev.updatedAt) : new Date(launchDate.getTime() + (now.getTime() - launchDate.getTime()) / 2);
+        const prevMsgs = prev.messages || 0;
+        const prevChats = prev.uniqueChats || 0;
+        const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : 0;
+
+        const prevLabel = formatLabel(prevDate);
+        dataPoints.push({ label: prevLabel, value: prevMsgs });
+        mpcPoints.push({ label: prevLabel, value: prevMpcVal });
+      }
+
+      const snapDate = m.date ? new Date(m.date) : now;
+      const currentLabel = m.date ? formatLabel(snapDate) : 'Latest';
+      dataPoints.push({ label: currentLabel, value: totalMsgs });
+      mpcPoints.push({ label: currentLabel, value: curMpc });
+
+    } else {
+      // Older bot (> 30 days old): plot monthly trajectory starting strictly from actual launch month
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const startMonth = launchDate.getMonth();
+      const startYear = launchDate.getFullYear();
+      const endMonth = now.getMonth();
+      const endYear = now.getFullYear();
+
+      const monthsCount = Math.min(6, Math.max(2, (endYear - startYear) * 12 + (endMonth - startMonth) + 1));
+      
+      const prevMsgs = prev ? (prev.messages || Math.round(totalMsgs * 0.8)) : Math.round(totalMsgs * 0.8);
+      const prevChats = prev ? (prev.uniqueChats || Math.round(totalChats * 0.8)) : Math.round(totalChats * 0.8);
+      const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : Math.max(curMpc - 1, 0);
+
+      for (let i = monthsCount - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = monthNames[d.getMonth()];
+
+        let val = 0;
+        let mpcVal = 0;
+        if (i === 0) {
+          val = totalMsgs;
+          mpcVal = curMpc;
+        } else if (i === 1) {
+          val = prevMsgs;
+          mpcVal = prevMpcVal;
+        } else {
+          const ratio = (monthsCount - 1 - i) / (monthsCount - 1);
+          val = Math.round(totalMsgs * ratio);
+          mpcVal = parseFloat((curMpc * ratio).toFixed(2));
+        }
+
+        dataPoints.push({ label, value: val });
+        mpcPoints.push({ label, value: mpcVal });
+      }
     }
 
     const modal = document.getElementById('mc-modal-overlay');
