@@ -3170,19 +3170,20 @@ ${releasesMd}
     const dataPoints = [];
     const mpcPoints = [];
 
-    const formatLabel = (dt) => {
+    const formatLabel = (dt, includeTime = false) => {
       if (!dt || isNaN(dt.getTime())) return 'Snapshot';
-      return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const dStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (includeTime) {
+        const tStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${dStr} ${tStr}`;
+      }
+      return dStr;
     };
 
     if (daysActive <= 30) {
       // Recent release (launched within the last 30 days): plot launch & all historical snapshots
       const snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
       const latestDate = snapDate > launchDate ? snapDate : new Date(launchDate.getTime() + 86400000);
-
-      const launchLabel = `Launch (${formatLabel(launchDate)})`;
-      dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
-      mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
 
       // Gather all historical snapshots from metricsHistory, previousMetrics, and IndexedDB activity_log
       const rawSnapshots = [];
@@ -3221,23 +3222,39 @@ ${releasesMd}
         rawSnapshots.push({ dateObj: dt, messages: prev.messages || 0, uniqueChats: prev.uniqueChats || 0 });
       }
 
+      // Check if multiple snapshots occurred on the same day to toggle time labels
+      const allDates = [launchDate, ...rawSnapshots.map(s => s.dateObj), latestDate].filter(Boolean);
+      const dayCounts = {};
+      allDates.forEach(d => {
+        const k = d.toDateString();
+        dayCounts[k] = (dayCounts[k] || 0) + 1;
+      });
+      const useTimeLabels = Object.values(dayCounts).some(c => c > 1);
+
+      const launchLabel = `Launch (${formatLabel(launchDate)})`;
+      dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+      mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+
       // Process and add all valid intermediate snapshots
       rawSnapshots.forEach(snap => {
         let sDate = snap.dateObj;
-        if (!sDate || sDate >= latestDate || sDate <= launchDate) return;
+        if (!sDate || sDate.getTime() >= latestDate.getTime() - 60000 || sDate.getTime() <= launchDate.getTime() + 60000) return;
         
         const sMsgs = Math.min(snap.messages, totalMsgs);
         const sMpc = snap.uniqueChats > 0 ? parseFloat((sMsgs / snap.uniqueChats).toFixed(2)) : 0;
-        const sLabel = formatLabel(sDate);
+        const sLabel = formatLabel(sDate, useTimeLabels);
 
-        if (!dataPoints.some(dp => dp.label === sLabel && dp.value === sMsgs)) {
+        // Deduplicate by timestamp and value (allowing multiple intraday snapshots!)
+        const isDupe = dataPoints.some(dp => Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 60000 || dp.value === sMsgs);
+        if (!isDupe) {
           dataPoints.push({ dateObj: sDate, label: sLabel, value: sMsgs });
           mpcPoints.push({ dateObj: sDate, label: sLabel, value: sMpc });
         }
       });
 
-      dataPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: totalMsgs });
-      mpcPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: curMpc });
+      const latestLabel = formatLabel(latestDate, useTimeLabels);
+      dataPoints.push({ dateObj: latestDate, label: latestLabel, value: totalMsgs });
+      mpcPoints.push({ dateObj: latestDate, label: latestLabel, value: curMpc });
 
       // Sort chronologically ascending by timestamp
       dataPoints.sort((a, b) => a.dateObj - b.dateObj);
