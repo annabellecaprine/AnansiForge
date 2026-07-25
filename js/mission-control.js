@@ -3147,7 +3147,8 @@ ${releasesMd}
 
     const totalMsgs = m.messages || 0;
     const totalChats = m.uniqueChats || 0;
-    const mpc = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+    const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
+    const mpc = totalChats > 0 ? curMpc.toFixed(2) : '—';
 
     // Determine launch / creation timestamp
     let launchDate = null;
