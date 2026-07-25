@@ -3135,7 +3135,7 @@ ${releasesMd}
     `;
   }
 
-  function openBotAnalyticsModal(recordId) {
+  async function openBotAnalyticsModal(recordId) {
     const rec = state.allTrackerRecords.find(r => r.id === recordId) || state.allComponents.find(c => c.id === recordId);
     if (!rec) return;
 
@@ -3184,8 +3184,29 @@ ${releasesMd}
       dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
       mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
 
-      // Gather all historical snapshots from metricsHistory and previousMetrics
+      // Gather all historical snapshots from metricsHistory, previousMetrics, and IndexedDB activity_log
       const rawSnapshots = [];
+
+      if (window.ForgeDB?.getTargetActivity) {
+        try {
+          const logs = await window.ForgeDB.getTargetActivity(rec.id);
+          logs.forEach(log => {
+            if (log.action === 'metrics_updated' && log.details) {
+              const match = log.details.match(/(\d+)\s*msgs/i);
+              if (match) {
+                const msgs = parseInt(match[1], 10);
+                const dt = new Date(log.timestamp);
+                if (!isNaN(dt.getTime()) && msgs > 0) {
+                  rawSnapshots.push({ dateObj: dt, messages: msgs, uniqueChats: 0 });
+                }
+              }
+            }
+          });
+        } catch(e) {
+          console.warn('Could not query activity_log for historical metrics:', e);
+        }
+      }
+
       if (Array.isArray(rec.metricsHistory)) {
         rec.metricsHistory.forEach(h => {
           if (h && (h.messages > 0 || h.uniqueChats > 0)) {
