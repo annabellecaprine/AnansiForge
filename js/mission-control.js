@@ -3058,12 +3058,21 @@ ${releasesMd}
     const chartH = height - padding * 2;
 
     const values = dataPoints.map(p => p.value);
-    const minVal = 0;
-    const maxVal = Math.max(...values, 10);
+    const minRaw = Math.min(...values);
+    const maxRaw = Math.max(...values);
+    const range = maxRaw - minRaw;
+
+    // Dynamic Y-axis scale when values are large and growth range is focused
+    let minVal = 0;
+    if (minRaw > 100 && (range / Math.max(maxRaw, 1)) < 0.35) {
+      const padVal = Math.max(range * 0.4, minRaw * 0.02);
+      minVal = Math.max(0, Math.floor(minRaw - padVal));
+    }
+    const maxVal = Math.max(maxRaw, minVal + 10);
 
     const points = dataPoints.map((p, i) => {
       const x = padding + (dataPoints.length > 1 ? (i / (dataPoints.length - 1)) * chartW : chartW / 2);
-      const y = height - padding - ((p.value - minVal) / (maxVal - minVal)) * chartH;
+      const y = height - padding - ((p.value - minVal) / Math.max(maxVal - minVal, 1)) * chartH;
       return { x, y, label: p.label, value: p.value };
     });
 
@@ -3094,6 +3103,21 @@ ${releasesMd}
         `).join('')}
       </svg>
     `;
+  }
+
+  function parseDateTime(dateStr, timeStr) {
+    if (!dateStr) return null;
+    let iso = dateStr;
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) iso = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+    if (timeStr) {
+      const dt = new Date(`${iso} ${timeStr}`);
+      if (!isNaN(dt.getTime())) return dt;
+    }
+    const dt = new Date(iso);
+    return isNaN(dt.getTime()) ? null : dt;
   }
 
   function renderHorizontalBarChart(items, title, subtitle) {
@@ -3181,12 +3205,11 @@ ${releasesMd}
     };
 
     if (daysActive <= 30) {
-      // Recent release (launched within the last 30 days): plot launch & all historical snapshots
-      const snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
-      const latestDate = snapDate > launchDate ? snapDate : new Date(launchDate.getTime() + 86400000);
+      // Recent release (launched within the last 30 days): gather launch & all real snapshots
+      const snapDate = parseDateTime(m.date, m.time) || (rec.updatedAt ? new Date(rec.updatedAt) : now);
 
       // Gather all historical snapshots from metricsHistory, previousMetrics, and IndexedDB activity_log
-      const rawSnapshots = [];
+      const rawList = [];
 
       if (window.ForgeDB?.getTargetActivity) {
         try {
@@ -3198,7 +3221,7 @@ ${releasesMd}
                 const msgs = parseInt(match[1], 10);
                 const dt = new Date(log.timestamp);
                 if (!isNaN(dt.getTime()) && msgs > 0) {
-                  rawSnapshots.push({ dateObj: dt, messages: msgs, uniqueChats: 0 });
+                  rawList.push({ dateObj: dt, messages: msgs, uniqueChats: 0 });
                 }
               }
             }
