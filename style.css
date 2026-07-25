@@ -2489,6 +2489,25 @@ main#main-canvas {
   border-color: var(--accent);
 }
 
+.mc-badge-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 3px 10px !important;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  outline: none;
+}
+.mc-badge-select:hover {
+  filter: brightness(1.25);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+}
+
 .mc-select,
 .mc-filter-select,
 .mc-priority-select,

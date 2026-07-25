@@ -255,6 +255,27 @@
     return `<span class="mc-badge" style="background:${c}22; color:${c}; border:1px solid ${c}44;">${esc(u)}</span>`;
   }
 
+  function roleSelectBadge(r, compId, storeType = 'vault') {
+    const roleVal = r || 'Other';
+    const c = ROLE_COLORS[roleVal] || '#6b7280';
+    const roles = ['Hero', 'Villain', 'AntiHero', 'Support', 'Other'];
+    return `<select class="mc-badge-select mc-role-select" data-id="${compId}" data-store="${storeType}"
+      style="background:${c}22; color:${c}; border:1px solid ${c}44; border-radius:12px; padding:2px 8px; font-size:0.75rem; font-weight:600; cursor:pointer; outline:none; text-align:center;"
+      title="Click to change Role in place">
+      ${roles.map(role => `<option value="${role}" ${roleVal === role ? 'selected' : ''} style="background:var(--bg-secondary); color:var(--text-primary);">${ROLE_ICONS[role] || ''} ${role}</option>`).join('')}
+    </select>`;
+  }
+
+  function universeSelectBadge(u, compId, storeType = 'vault') {
+    const uniVal = u || '';
+    const c = (state.universeColorMap && state.universeColorMap[uniVal]) || UNIVERSE_COLORS[uniVal] || '#6b7280';
+    return `<select class="mc-badge-select mc-universe-select" data-id="${compId}" data-store="${storeType}"
+      style="background:${c}22; color:${c}; border:1px solid ${c}44; border-radius:12px; padding:2px 8px; font-size:0.75rem; font-weight:600; cursor:pointer; outline:none; text-align:center;"
+      title="Click to change Universe in place">
+      ${universeSelectOptionsHTML(uniVal, 'Select Universe')}
+    </select>`;
+  }
+
   function releaseSourceBadge(source) {
     const src = source || 'manual';
     const label = RELEASE_SOURCES[src] || src;
@@ -359,6 +380,16 @@
   function toolbarHTML(showAddStub = true, showAddRecord = false, recordType = '') {
     const priorities = ['P1', 'P2', 'P3', 'P4'];
     const roles = ['Hero', 'Villain', 'AntiHero', 'Support', 'Other'];
+
+    const catMap = {
+      characters: { label: '+ Character', cat: 'character' },
+      orgs: { label: '+ Org', cat: 'organization' },
+      scenarios: { label: '+ Scenario', cat: 'scenario' },
+      messages: { label: '+ Init Msg', cat: 'initial_message' },
+      bios: { label: '+ Bio', cat: 'bio' }
+    };
+    const quickAsset = catMap[state.activeSubTab];
+
     return `<div class="mc-toolbar">
       <div class="mc-toolbar-left">
         <input type="text" id="mc-search" class="mc-search" placeholder="Search…" value="${esc(state.filters.search)}">
@@ -382,8 +413,9 @@
       </div>
       <div class="mc-toolbar-right">
         ${state.activeTagFilter ? `<button class="mc-tag-chip active" id="mc-clear-tag">✕ #${esc(state.activeTagFilter)}</button>` : ''}
-        ${showAddStub ? `<button class="mc-btn mc-btn-primary" id="mc-add-stub">+ Concept</button>` : ''}
         ${showAddRecord ? `<button class="mc-btn mc-btn-primary" id="mc-add-record" data-type="${recordType}">+ Add ${recordType === 'story' ? 'Story' : 'Release'}</button>` : ''}
+        <button class="mc-btn mc-btn-primary" id="mc-add-stub" title="Stub out a new Concept">+ Concept</button>
+        ${quickAsset ? `<button class="mc-btn mc-btn-secondary mc-quick-add-asset" data-cat="${quickAsset.cat}">${quickAsset.label}</button>` : ''}
         <button class="mc-btn mc-btn-ghost" id="btn-mc-manage-universes" onclick="if(window.MissionControl && window.MissionControl.openUniverseManagerModal) window.MissionControl.openUniverseManagerModal();" title="Manage Universes & Genres">⚙️ Universes</button>
       </div>
     </div>`;
@@ -742,13 +774,13 @@
         ${(() => {
           const allCandidates = state.allTrackerRecords.filter(r => r.assetType === 'release' || r.assetType === 'story');
 
-          const getTimestamp = (rec) => {
-            if (rec.metrics?.date) {
-              const dStr = rec.metrics.date + (rec.metrics.time ? 'T' + rec.metrics.time : 'T00:00:00');
+          const getReleasePublishTimestamp = (rec) => {
+            const dStr = rec.scheduledDate || rec.publishedDate || rec.privateLaunchDate || rec.metrics?.date || rec.createdAt;
+            if (dStr) {
               const parsed = new Date(dStr).getTime();
               if (!isNaN(parsed) && parsed > 0) return parsed;
             }
-            return new Date(rec.updatedAt || rec.createdAt || 0).getTime();
+            return 0;
           };
 
           const releases = allCandidates.sort((a, b) => {
@@ -760,19 +792,23 @@
             if (aHasMetrics && !bHasMetrics) return -1;
             if (!aHasMetrics && bHasMetrics) return 1;
 
-            return getTimestamp(b) - getTimestamp(a);
+            return getReleasePublishTimestamp(b) - getReleasePublishTimestamp(a);
           }).slice(0, 10);
 
-          const items = releases.map(r => ({
-            id: r.id,
-            label: r.name,
-            value: r.metrics?.messages || 0,
-            unit: 'msgs',
-            color: 'linear-gradient(90deg, #6366f1, #a855f7)',
-            badgeHtml: r.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(r.iterationLabel)}</span>` : ''
-          }));
+          const items = releases.map(r => {
+            const pubDateStr = r.scheduledDate || r.publishedDate || r.privateLaunchDate || r.metrics?.date || r.createdAt;
+            const dateFormatted = pubDateStr ? new Date(pubDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '';
+            return {
+              id: r.id,
+              label: `${r.name}${dateFormatted ? ` (${dateFormatted})` : ''}`,
+              value: r.metrics?.messages || 0,
+              unit: 'msgs',
+              color: 'linear-gradient(90deg, #6366f1, #a855f7)',
+              badgeHtml: r.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(r.iterationLabel)}</span>` : ''
+            };
+          });
 
-          return renderHorizontalBarChart(items, '🚀 Rolling Release Performance', 'Last 10 Releases · Are recent releases trending upward?');
+          return renderHorizontalBarChart(items, '🚀 Rolling Release Performance', 'Last 10 Releases · Sorted by actual bot release dates');
         })()}
 
         <!-- Universe Health Distribution Chart -->
@@ -956,8 +992,8 @@
         ${isPinned ? '<span class="mc-pin-icon" title="Pinned">📌</span>' : ''}
         ${depCount > 0 ? `<span class="mc-dep-badge" title="Used in ${depCount} project${depCount > 1 ? 's' : ''}">📦 ${depCount}</span>` : ''}
       </td>
-      <td>${universeBadge(tracker.universe)}</td>
-      <td>${roleBadge(tracker.role)}</td>
+      <td>${universeSelectBadge(tracker.universe, comp.id, 'vault')}</td>
+      <td>${comp.category === 'character' || comp.category === 'organization' ? roleSelectBadge(tracker.role, comp.id, 'vault') : '—'}</td>
       <td class="mc-cell-project">
         <span class="mc-editable" data-field="project" data-id="${comp.id}" data-store="vault" title="Click to edit">${esc(tracker.project || '—')}</span>
       </td>
@@ -973,14 +1009,7 @@
       <td class="mc-cell-actions">
         <button class="mc-action-btn mc-pin-toggle" data-id="${comp.id}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '📌' : '☆'}</button>
         <button class="mc-action-btn" data-vault-id="${comp.id}" title="Open in Vault">✏️</button>
-        <select class="mc-role-select" data-id="${comp.id}" data-store="vault" title="Set role">
-          <option value="">Role</option>
-          ${['Hero', 'Villain', 'AntiHero', 'Support', 'Other'].map(r => `<option value="${r}" ${tracker.role === r ? 'selected' : ''}>${r}</option>`).join('')}
-        </select>
-        <select class="mc-universe-select" data-id="${comp.id}" data-store="vault" title="Set universe">
-          <option value="">Universe</option>
-          ${universeSelectOptionsHTML(tracker ? tracker.universe : '', 'Universe')}
-        </select>
+        ${comp.category === 'character' ? `<button class="mc-action-btn mc-open-interview" data-char-id="${comp.id}" data-name="${esc(comp.name)}" title="Character Voice Rapid Interview Tester">🎙️</button>` : ''}
       </td>
     </tr>`;
   }
@@ -1015,7 +1044,16 @@
     const activeCount = allStories.filter(r => (r.status || 'Active') === 'Active').length;
     const promotedCount = allStories.filter(r => r.status === 'Promoted').length;
     const archivedCount = allStories.filter(r => r.status === 'Archived').length;
-    const readyCount = allStories.filter(s => calcReadinessForRecord(s) >= 80).length;
+    // Ready to Spawn criteria: pipeline readiness >= 75% (0.75) OR linked assets >= 2 OR key concept/initialMessage steps completed
+    const isStoryReadyToSpawn = (s) => {
+      const score = calcReadinessForRecord(s);
+      if (score >= 0.75) return true;
+      const linkedIds = s.linkedVaultIds || [];
+      if (linkedIds.length >= 2) return true;
+      if (s.pipeline && s.pipeline.concept && s.pipeline.initialMessage) return true;
+      return false;
+    };
+    const readyCount = allStories.filter(isStoryReadyToSpawn).length;
 
     // Filter by state.storyStatusFilter
     let items = filterTrackerRecords(allStories);
@@ -1039,7 +1077,7 @@
         ${filterPill('Archived', 'Archived', archivedCount, '📦')}
         ${filterPill('all', 'All Stories', allStories.length, '📁')}
         <span style="margin-left:auto; display:inline-flex; gap:6px; align-items:center;">
-          <span class="mc-badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);" title="Stories ready to spawn releases">🟢 Ready to Spawn (${readyCount})</span>
+          <span class="mc-badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);" title="Ready to Spawn Criteria: Pipeline readiness >= 75%, linked Vault assets, or completed Concept & Init Msg steps.">🟢 Ready to Spawn (${readyCount})</span>
         </span>
       </div>
       <div class="mc-table-wrap">
@@ -1107,8 +1145,9 @@
     let releases = filterTrackerRecords(state.allTrackerRecords.filter(r => r.assetType === 'release'));
     releases = sortByReadiness(releases, calcReadinessForRecord, r => r.priority, state.sortDir);
 
-    const readyItems = releases.filter(r => steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r));
-    const inProgress = releases.filter(r => !steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r));
+    const readyItems = releases.filter(r => steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r) && r.visibility !== 'Private');
+    const inTesting = releases.filter(r => r.visibility === 'Private' && !isReleasePublished(r));
+    const inProgress = releases.filter(r => !steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r) && r.visibility !== 'Private');
     const released = releases.filter(isReleasePublished);
 
     const releaseSection = (title, items, showReady = false) => {
@@ -1125,7 +1164,9 @@
                 <th>Priority</th>
                 ${steps.map(s => `<th class="mc-pipe-th" title="${STEP_LABELS[s] || s}">${(STEP_LABELS[s] || s).substring(0, 4)}</th>`).join('')}
                 <th>Visibility</th>
-                <th>Scheduled</th>
+                <th>Created</th>
+                <th>Private Launch</th>
+                <th>Public Launch</th>
                 <th>Readiness</th>
                 <th>Actions</th>
               </tr>
@@ -1143,9 +1184,10 @@
     return `
       ${toolbarHTML(false, true, 'release')}
       ${readyItems.length > 0 ? `<div class="mc-ready-banner">
-        🚀 <strong>${readyItems.length}</strong> release${readyItems.length > 1 ? 's' : ''} ready to launch!
+        🚀 <strong>${readyItems.length}</strong> release${readyItems.length > 1 ? 's' : ''} ready for public launch!
       </div>` : ''}
-      ${releaseSection('🟢 Ready to Launch', readyItems, true)}
+      ${releaseSection('🟢 Ready for Public Launch', readyItems, true)}
+      ${releaseSection('🧪 In Testing (Private Build)', inTesting)}
       ${releaseSection('🔄 In Progress', inProgress)}
       ${releaseSection('✅ Released', released)}
       ${calendarHTML}`;
@@ -1175,8 +1217,14 @@
           ${['Private', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${rec.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </td>
+      <td class="mc-cell-date" style="font-size:0.75rem; color:var(--text-secondary);">
+        ${rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'2-digit'}) : '—'}
+      </td>
+      <td class="mc-cell-date" style="font-size:0.75rem; color:var(--text-secondary);">
+        ${rec.privateLaunchDate ? new Date(rec.privateLaunchDate).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'2-digit'}) : (rec.visibility === 'Private' ? 'Auto-stamped' : '—')}
+      </td>
       <td class="mc-cell-date">
-        <input type="date" class="mc-date-input" data-id="${rec.id}" value="${rec.scheduledDate || ''}" title="Scheduled date">
+        <input type="date" class="mc-date-input" data-id="${rec.id}" value="${rec.scheduledDate || ''}" title="Scheduled Public Launch (manual entry)">
       </td>
       <td class="mc-cell-readiness">${readinessPct(score)}</td>
       <td class="mc-cell-actions">
@@ -1297,9 +1345,40 @@ Write-Host "Done! tracker-import.json created."</pre>
         </div>
         <input type="file" id="mc-import-file-input" accept=".json" hidden>
         <div id="mc-import-preview" class="mc-import-preview" style="display:none;"></div>
-        <button class="mc-btn mc-btn-primary" id="mc-import-confirm" style="display:none; margin-top:12px;">✓ Import ${''} Records</button>
+        <button class="mc-btn mc-btn-primary" id="mc-import-confirm" style="display:none; margin-top:12px;">✓ Import Records</button>
       </div>
     </div>`;
+  }
+
+  async function exportCompleteBackup() {
+    if (!window.ForgeDB) return showToast('Database connection error.', 'error');
+    
+    const components = await window.ForgeDB.getAllComponents();
+    const trackerRecords = await window.ForgeDB.getAllTrackerRecords();
+    const projects = await window.ForgeDB.getAllProjects();
+    const activityLog = await window.ForgeDB.getAllActivity();
+
+    const backup = {
+      exportVersion: '2.0',
+      exportedAt: new Date().toISOString(),
+      components,
+      trackerRecords,
+      projects,
+      activityLog
+    };
+
+    const jsonStr = JSON.stringify(backup, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `anansi-forge-backup-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast('Exported complete AnansiForge backup!', 'success');
   }
 
   // ─── Record Edit Modal ────────────────────────────────────────────────────────
@@ -1378,34 +1457,23 @@ Write-Host "Done! tracker-import.json created."</pre>
             ${['Private', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${r.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group"><label>Scheduled Date</label>
-          <input type="date" id="mc-rec-date" value="${r.scheduledDate || ''}" class="mc-modal-input">
+        <div class="form-group"><label>Created Date</label>
+          <input type="text" class="mc-modal-input" value="${r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—'}" readonly disabled style="opacity:0.75;">
+        </div>
+      </div>
+      <div class="mc-form-row">
+        <div class="form-group"><label>Private Launch (Build Test)</label>
+          <input type="datetime-local" id="mc-rec-private-date" value="${r.privateLaunchDate ? new Date(r.privateLaunchDate).toISOString().slice(0, 16) : ''}" class="mc-modal-input" title="Auto-stamped when entering Private testing">
+        </div>
+        <div class="form-group"><label>Public Launch (Scheduled)</label>
+          <input type="date" id="mc-rec-date" value="${r.scheduledDate || ''}" class="mc-modal-input" title="Manually entered scheduled public release date">
         </div>
       </div>
       <hr class="mc-modal-divider">
       <p class="mc-modal-section-label">📈 Post-Release Metrics</p>
-      <div class="mc-form-row">
-        <div class="form-group"><label>Snapshot Date</label>
-          <input type="date" id="mc-rec-metrics-date" value="${r.metrics?.date || ''}" class="mc-modal-input">
-        </div>
-        <div class="form-group"><label>Snapshot Time</label>
-          <input type="time" id="mc-rec-metrics-time" value="${r.metrics?.time || ''}" class="mc-modal-input">
-        </div>
-      </div>
-      <div class="mc-form-row">
-        <div class="form-group"><label>Unique Chats</label>
-          <input type="number" id="mc-rec-unique-chats" value="${r.metrics?.uniqueChats || 0}" class="mc-modal-input" min="0">
-        </div>
-        <div class="form-group"><label>Messages</label>
-          <input type="number" id="mc-rec-messages" value="${r.metrics?.messages || 0}" class="mc-modal-input" min="0">
-        </div>
-      </div>
-      <div class="mc-metrics-derived">
-        <span class="mc-metrics-derived-label">Derived Msg / Chat</span>
-        <span class="mc-metrics-derived-value" id="mc-derived-mpc">${r.metrics?.uniqueChats > 0
-          ? (r.metrics.messages / r.metrics.uniqueChats).toFixed(2)
-          : '—'
-        }</span>
+      <div class="mc-metrics-read-only-banner" style="margin-top:12px; padding:10px; background:var(--bg-secondary); border-radius:6px; font-size:0.8rem; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center;">
+        <span>📈 Cached Metrics: <strong>${(r.metrics?.messages || 0).toLocaleString()} msgs</strong>, <strong>${(r.metrics?.uniqueChats || 0).toLocaleString()} chats</strong></span>
+        <button type="button" class="mc-btn mc-btn-sm mc-btn-secondary" onclick="if(window.MissionControl) window.MissionControl.openQuickMetricsModal('${r.id}')">⚡ Record Metric Snapshot</button>
       </div>` : ''}
     `;
 
@@ -1459,6 +1527,106 @@ Write-Host "Done! tracker-import.json created."</pre>
     document.getElementById('mc-rec-name').focus();
   }
 
+  function openQuickAssetModal(category = 'character') {
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    const catLabels = {
+      character: 'Character',
+      scenario: 'Scenario',
+      bio: 'Bio',
+      initial_message: 'Initial Message',
+      organization: 'Organization'
+    };
+
+    const label = catLabels[category] || 'Vault Asset';
+    title.textContent = `+ New ${label}`;
+
+    body.innerHTML = `
+      <div class="form-group"><label>Name</label>
+        <input type="text" id="mc-asset-name" class="mc-modal-input" placeholder="e.g. ${category === 'character' ? 'Kamala Khan' : category === 'scenario' ? 'Welcome to Xavier\'s' : 'New ' + label}">
+      </div>
+      <div class="mc-form-row">
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-asset-universe" class="mc-modal-input">
+            ${universeSelectOptionsHTML('', 'Select Universe')}
+          </select>
+        </div>
+        ${(category === 'character' || category === 'organization') ? `
+        <div class="form-group"><label>Role</label>
+          <select id="mc-asset-role" class="mc-modal-input">
+            <option value="Other">Other</option>
+            <option value="Hero">Hero</option>
+            <option value="Villain">Villain</option>
+            <option value="AntiHero">AntiHero</option>
+            <option value="Support">Support</option>
+          </select>
+        </div>` : ''}
+        <div class="form-group"><label>Lineage / Version</label>
+          <input type="text" id="mc-asset-lineage" class="mc-modal-input" placeholder="e.g. v1.0">
+        </div>
+      </div>
+      <div class="form-group"><label>Content / Details</label>
+        <textarea id="mc-asset-content" class="mc-modal-input" rows="3" placeholder="Enter ${label.toLowerCase()} content or notes..."></textarea>
+      </div>
+      <div class="form-group"><label>Tags (comma separated)</label>
+        <input type="text" id="mc-asset-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel">
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
+        <button class="mc-btn mc-btn-primary" id="mc-btn-submit-quick-asset" data-cat="${category}">Save to Vault</button>
+      </div>
+    `;
+
+    modal.classList.remove('hidden');
+    document.getElementById('mc-asset-name')?.focus();
+  }
+
+  async function submitQuickAsset(category) {
+    const name = document.getElementById('mc-asset-name')?.value?.trim();
+    if (!name) return showToast('Name is required.', 'error');
+
+    const universe = document.getElementById('mc-asset-universe')?.value || '';
+    const role = document.getElementById('mc-asset-role')?.value || 'Other';
+    const lineage = document.getElementById('mc-asset-lineage')?.value?.trim() || '';
+    const content = document.getElementById('mc-asset-content')?.value || '';
+    const tags = (document.getElementById('mc-asset-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+
+    const compId = crypto.randomUUID();
+    const comp = {
+      id: compId,
+      name,
+      category,
+      content,
+      lineage,
+      tags,
+      tracker: {
+        universe,
+        role,
+        project: '',
+        priority: null,
+        pipeline: window.ForgeDB ? window.ForgeDB.defaultTrackerPipeline(category) : {},
+        trackerTags: []
+      },
+      createdAt: new Date().toISOString(),
+      modifiedAt: new Date().toISOString()
+    };
+
+    if (window.ForgeDB && window.ForgeDB.saveComponent) {
+      await window.ForgeDB.saveComponent(comp);
+    }
+
+    if (window.AnansiEvents) {
+      await window.AnansiEvents.logActivity('Asset Created', category, compId, `Created ${category}: ${name}`);
+    }
+
+    await loadAll();
+    await renderCurrentTab();
+    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+    showToast(`Saved "${name}" to Vault!`, 'success');
+  }
+
   async function saveModalRecord() {
     const r = state.editingRecord;
     if (!r) return;
@@ -1488,6 +1656,12 @@ Write-Host "Done! tracker-import.json created."</pre>
       updated.releaseSource = document.getElementById('mc-rec-release-source')?.value || 'manual';
       updated.projectId = document.getElementById('mc-rec-project-id')?.value || null;
       updated.visibility = document.getElementById('mc-rec-visibility')?.value || null;
+      const privDateVal = document.getElementById('mc-rec-private-date')?.value;
+      if (privDateVal) {
+        updated.privateLaunchDate = new Date(privDateVal).toISOString();
+      } else if (updated.visibility === 'Private' && !updated.privateLaunchDate) {
+        updated.privateLaunchDate = new Date().toISOString();
+      }
       updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
 
       // Auto-check pipeline steps if an assembled project is linked
@@ -1500,16 +1674,8 @@ Write-Host "Done! tracker-import.json created."</pre>
           if (comps.some(c => c.category === 'initial_message')) updated.pipeline.initialMessage = true;
         }
       }
-
-      const uniqueChats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
-      const messages = parseInt(document.getElementById('mc-rec-messages')?.value) || 0;
-      updated.metrics = {
-        date: document.getElementById('mc-rec-metrics-date')?.value || null,
-        time: document.getElementById('mc-rec-metrics-time')?.value || null,
-        uniqueChats,
-        messages,
-        msgPerChat: uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null
-      };
+      // Retain existing metrics untouched when saving metadata
+      updated.metrics = r.metrics || null;
     }
 
     const isNew = !r.id;
@@ -2193,6 +2359,83 @@ ${releasesMd}
     modal.classList.remove('hidden');
   }
 
+  function openLinkVaultModal(storyId) {
+    const story = state.allTrackerRecords.find(r => r.id === storyId);
+    if (!story) return;
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `🔗 Manage Linked Vault Assets: ${esc(story.name)}`;
+
+    const linkedIds = new Set(story.linkedVaultIds || []);
+    const comps = state.allComponents || [];
+
+    const categoryGroups = {
+      character: { label: '👤 Characters', items: [] },
+      scenario: { label: '🎭 Scenarios', items: [] },
+      bio: { label: '📋 Bios', items: [] },
+      initial_message: { label: '💬 Initial Messages', items: [] },
+      organization: { label: '🏢 Organizations', items: [] }
+    };
+
+    comps.forEach(c => {
+      const cat = c.category || 'character';
+      if (!categoryGroups[cat]) {
+        categoryGroups[cat] = { label: cat, items: [] };
+      }
+      categoryGroups[cat].items.push(c);
+    });
+
+    body.innerHTML = `
+      <div style="margin-bottom:12px;">
+        <input type="text" id="mc-link-vault-search" class="mc-search" placeholder="Search Vault components to link..." style="width:100%;">
+      </div>
+      <div id="mc-link-vault-list" style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
+        ${Object.keys(categoryGroups).map(catKey => {
+          const group = categoryGroups[catKey];
+          if (!group.items.length) return '';
+          return `
+            <div class="mc-vault-link-group">
+              <h4 style="margin:0 0 8px 0; font-size:0.9rem; color:var(--accent);">${group.label} (${group.items.length})</h4>
+              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px;">
+                ${group.items.map(c => {
+                  const isLinked = linkedIds.has(c.id);
+                  return `
+                    <div class="mc-vault-link-card" data-name="${esc(c.name).toLowerCase()}" style="padding:8px 12px; background:var(--bg-secondary); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-size:0.85rem; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:140px;" title="${esc(c.name)}">${esc(c.name)}</span>
+                      <button class="mc-btn mc-btn-sm ${isLinked ? 'mc-btn-danger mc-unlink-vault-item' : 'mc-btn-primary mc-link-vault-item'}" data-story-id="${story.id}" data-comp-id="${c.id}">
+                        ${isLinked ? '✓ Unlink' : '+ Link'}
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+        <button class="mc-btn mc-btn-secondary" onclick="if(window.MissionControl) window.MissionControl.openStoryHubModal('${story.id}')">← Return to Story Hub</button>
+      </div>
+    `;
+
+    modal.classList.remove('hidden');
+
+    const searchInput = document.getElementById('mc-link-vault-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        const cards = document.querySelectorAll('.mc-vault-link-card');
+        cards.forEach(card => {
+          const name = card.dataset.name || '';
+          card.style.display = name.includes(q) ? 'flex' : 'none';
+        });
+      });
+    }
+  }
+
   // ─── Promote Stub → Vault ─────────────────────────────────────────────────────
 
   async function promoteStub(stubId) {
@@ -2361,6 +2604,74 @@ ${releasesMd}
         return;
       }
 
+      // Open Link Vault Modal
+      const linkModalBtn = t.closest('.mc-open-link-vault-modal');
+      if (linkModalBtn) {
+        const storyId = linkModalBtn.dataset.storyId;
+        openLinkVaultModal(storyId);
+        return;
+      }
+
+      // Link item in Link Vault Modal
+      const linkItemBtn = t.closest('.mc-link-vault-item');
+      if (linkItemBtn) {
+        const storyId = linkItemBtn.dataset.storyId;
+        const compId = linkItemBtn.dataset.compId;
+        const story = state.allTrackerRecords.find(r => r.id === storyId);
+        if (story) {
+          const updatedIds = Array.from(new Set([...(story.linkedVaultIds || []), compId]));
+          await window.ForgeDB.saveTrackerRecord({ ...story, linkedVaultIds: updatedIds });
+          await loadAll();
+          openLinkVaultModal(storyId);
+          await renderCurrentTab();
+          showToast('Vault asset linked to Story!', 'success');
+        }
+        return;
+      }
+
+      // Unlink item in Link Vault Modal
+      const unlinkItemBtn = t.closest('.mc-unlink-vault-item');
+      if (unlinkItemBtn) {
+        const storyId = unlinkItemBtn.dataset.storyId;
+        const compId = unlinkItemBtn.dataset.compId;
+        const story = state.allTrackerRecords.find(r => r.id === storyId);
+        if (story) {
+          const updatedIds = (story.linkedVaultIds || []).filter(id => id !== compId);
+          await window.ForgeDB.saveTrackerRecord({ ...story, linkedVaultIds: updatedIds });
+          await loadAll();
+          openLinkVaultModal(storyId);
+          await renderCurrentTab();
+          showToast('Vault asset unlinked.', 'info');
+        }
+        return;
+      }
+
+      // Open Character Voice Rapid Interview Tester
+      const interviewBtn = t.closest('.mc-open-interview');
+      if (interviewBtn) {
+        const charName = interviewBtn.dataset.name;
+        if (window.MissionControlInterviewModal) {
+          window.MissionControlInterviewModal.openModal(charName);
+        }
+        return;
+      }
+
+      // Open Quick Asset Creator Modal
+      const quickAssetBtn = t.closest('.mc-quick-add-asset');
+      if (quickAssetBtn) {
+        const cat = quickAssetBtn.dataset.cat || 'character';
+        openQuickAssetModal(cat);
+        return;
+      }
+
+      // Submit Quick Asset
+      if (t.id === 'mc-btn-submit-quick-asset' || t.closest('#mc-btn-submit-quick-asset')) {
+        const btn = t.id === 'mc-btn-submit-quick-asset' ? t : t.closest('#mc-btn-submit-quick-asset');
+        const cat = btn.dataset.cat || 'character';
+        await submitQuickAsset(cat);
+        return;
+      }
+
       // Promote stub to story
       if (t.matches('.mc-promote-stub-story')) {
         await promoteStubToStory(t.dataset.stubId);
@@ -2394,6 +2705,22 @@ ${releasesMd}
           await renderCurrentTab();
           showToast('Vault asset unlinked from Story.', 'info');
         }
+        return;
+      }
+
+      // Open Quick Metrics Snapshot Modal
+      const quickMetricsBtn = t.closest('.mc-open-quick-metrics');
+      if (quickMetricsBtn) {
+        const recordId = quickMetricsBtn.dataset.recordId;
+        if (recordId) openQuickMetricsModal(recordId);
+        return;
+      }
+
+      // Submit Metric Snapshot
+      if (t.id === 'mc-btn-submit-snapshot' || t.closest('#mc-btn-submit-snapshot')) {
+        const btn = t.id === 'mc-btn-submit-snapshot' ? t : t.closest('#mc-btn-submit-snapshot');
+        const botId = btn.dataset.botId;
+        if (botId) await submitMetricSnapshot(botId);
         return;
       }
 
@@ -2917,7 +3244,17 @@ ${releasesMd}
       // Visibility select
       if (t.matches('.mc-vis-select')) {
         const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
-        if (rec) { await window.ForgeDB.saveTrackerRecord({ ...rec, visibility: t.value || null }); await loadAll(); }
+        if (rec) {
+          const newVis = t.value || null;
+          const updated = { ...rec, visibility: newVis };
+          if (newVis === 'Private' && !updated.privateLaunchDate) {
+            updated.privateLaunchDate = new Date().toISOString();
+          }
+          await window.ForgeDB.saveTrackerRecord(updated);
+          await loadAll();
+          await renderCurrentTab();
+          showToast(`Visibility set to ${newVis || 'None'}${newVis === 'Private' ? ' (Private Build Test stamped)' : ''}`, 'info');
+        }
         return;
       }
 
@@ -3068,40 +3405,39 @@ ${releasesMd}
     const totalChats = m.uniqueChats || 0;
     const mpc = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
 
-    // Mock/Historical trajectory data points for sparkline
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-    const curMonthIdx = new Date().getMonth();
-    
-    // Generate historical growth data points leading up to totalMsgs
+    // Build trajectory strictly from real metricSnapshots, previousMetrics, and current metrics
     const dataPoints = [];
-    const prevMsgs = prev.messages || Math.round(totalMsgs * 0.7);
-    const midMsgs = Math.round((prevMsgs + totalMsgs) / 2);
-
-    for (let i = 4; i >= 0; i--) {
-      const mIdx = (curMonthIdx - i + 12) % 12;
-      const label = monthNames[mIdx];
-      let val = 0;
-      if (i === 0) val = totalMsgs;
-      else if (i === 1) val = prevMsgs;
-      else if (i === 2) val = midMsgs > prevMsgs ? Math.round(prevMsgs * 0.8) : Math.round(totalMsgs * 0.5);
-      else val = Math.round(totalMsgs * (0.2 * (5 - i)));
-      dataPoints.push({ label, value: val });
-    }
-
-    // MpC trajectory data points
     const mpcPoints = [];
-    const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
-    const prevMpc = prev.uniqueChats > 0 ? parseFloat((prev.messages / prev.uniqueChats).toFixed(2)) : Math.max(curMpc - 2, 0);
+    const allSnaps = [];
 
-    for (let i = 4; i >= 0; i--) {
-      const mIdx = (curMonthIdx - i + 12) % 12;
-      const label = monthNames[mIdx];
-      let val = 0;
-      if (i === 0) val = curMpc;
-      else if (i === 1) val = prevMpc;
-      else val = Math.max(parseFloat((curMpc - (i * 0.8)).toFixed(2)), 0);
-      mpcPoints.push({ label, value: val });
+    if (rec.metricSnapshots && rec.metricSnapshots.length > 0) {
+      rec.metricSnapshots.forEach(s => {
+        const d = new Date(s.timestamp || Date.now());
+        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        allSnaps.push({ label, messages: s.messages || 0, mpc: s.mpc || 0 });
+      });
+    } else {
+      // Include real user-entered previous metrics snapshot if available
+      if (prev && (prev.messages > 0 || prev.uniqueChats > 0)) {
+        const prevMpc = prev.uniqueChats > 0 ? parseFloat((prev.messages / prev.uniqueChats).toFixed(2)) : 0;
+        const prevDate = prev.updatedAt ? new Date(prev.updatedAt) : null;
+        const prevLabel = (prevDate && !isNaN(prevDate)) ? prevDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Previous';
+        allSnaps.push({ label: prevLabel, messages: prev.messages || 0, mpc: prevMpc });
+      }
+      // Include current real metrics snapshot
+      if (m && (m.messages > 0 || m.uniqueChats > 0)) {
+        const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
+        const curDateStr = m.date ? (m.time ? `${m.date} ${m.time}` : m.date) : 'Current';
+        const curDate = new Date(curDateStr);
+        const curLabel = (curDate && !isNaN(curDate)) ? curDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : (m.date || 'Current');
+        allSnaps.push({ label: curLabel, messages: totalMsgs, mpc: curMpc });
+      }
     }
+
+    allSnaps.forEach(s => {
+      dataPoints.push({ label: s.label, value: s.messages });
+      mpcPoints.push({ label: s.label, value: s.mpc });
+    });
 
     const modal = document.getElementById('mc-modal-overlay');
     const body = document.getElementById('mc-modal-body');
@@ -3161,6 +3497,109 @@ ${releasesMd}
     `;
 
     modal.classList.remove('hidden');
+  }
+
+  function openQuickMetricsModal(botId) {
+    const bot = state.allTrackerRecords.find(r => r.id === botId);
+    if (!bot) return;
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.innerHTML = `⚡ Record Metric Snapshot: ${esc(bot.name)}`;
+
+    const last = bot.metrics || {};
+
+    body.innerHTML = `
+      <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
+        Metric updates create an immutable, append-only performance snapshot with an automatic timestamp.
+      </div>
+      <div class="mc-form-row" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+        <div class="form-group"><label>Messages</label>
+          <input type="number" id="mc-snap-msgs" value="${last.messages || 0}" class="mc-modal-input" min="0">
+        </div>
+        <div class="form-group"><label>Unique Chats</label>
+          <input type="number" id="mc-snap-chats" value="${last.uniqueChats || 0}" class="mc-modal-input" min="0">
+        </div>
+        <div class="form-group"><label>Favorites</label>
+          <input type="number" id="mc-snap-favs" value="${last.favorites || 0}" class="mc-modal-input" min="0">
+        </div>
+      </div>
+      <div style="padding:10px; background:var(--bg-secondary); border-radius:6px; font-size:0.8rem; margin-bottom:16px;">
+        <div><strong>Live Derived Preview:</strong></div>
+        <div id="mc-snap-preview" style="display:flex; gap:16px; margin-top:6px; color:var(--accent);">
+          <span>MpC: <strong id="mc-prev-mpc">—</strong></span>
+          <span>Fav / Chat: <strong id="mc-prev-favchat">—</strong></span>
+          <span>Fav / 100 Msg: <strong id="mc-prev-favmsg">—</strong></span>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
+        <button class="mc-btn mc-btn-primary" id="mc-btn-submit-snapshot" data-bot-id="${bot.id}">📈 Record Snapshot</button>
+      </div>
+    `;
+
+    modal.classList.remove('hidden');
+
+    const updatePreview = () => {
+      const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
+      const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
+      const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
+
+      const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs) : null;
+      if (calc) {
+        document.getElementById('mc-prev-mpc').textContent = calc.mpc;
+        document.getElementById('mc-prev-favchat').textContent = calc.favPerChat;
+        document.getElementById('mc-prev-favmsg').textContent = calc.favPer100Msg;
+      }
+    };
+
+    document.getElementById('mc-snap-msgs')?.addEventListener('input', updatePreview);
+    document.getElementById('mc-snap-chats')?.addEventListener('input', updatePreview);
+    document.getElementById('mc-snap-favs')?.addEventListener('input', updatePreview);
+    updatePreview();
+  }
+
+  async function submitMetricSnapshot(botId) {
+    const bot = state.allTrackerRecords.find(r => r.id === botId);
+    if (!bot) return;
+
+    const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
+    const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
+    const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
+
+    const prevSnap = (bot.metricSnapshots && bot.metricSnapshots.length > 0)
+      ? bot.metricSnapshots[bot.metricSnapshots.length - 1]
+      : null;
+
+    const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs, prevSnap) : {
+      messages: msgs, chats, favorites: favs, mpc: chats > 0 ? parseFloat((msgs / chats).toFixed(2)) : 0, timestamp: new Date().toISOString()
+    };
+
+    bot.metricSnapshots = bot.metricSnapshots || [];
+    bot.metricSnapshots.push(calc);
+
+    bot.previousMetrics = bot.metrics ? { ...bot.metrics } : null;
+    bot.metrics = {
+      messages: msgs,
+      uniqueChats: chats,
+      favorites: favs,
+      msgPerChat: calc.mpc,
+      lastUpdated: calc.timestamp
+    };
+    bot.latestSnapshotReference = calc.timestamp;
+
+    await window.ForgeDB.saveTrackerRecord(bot);
+
+    if (window.AnansiEvents) {
+      await window.AnansiEvents.logActivity('Metrics Updated', 'bot', bot.id, `Recorded snapshot: ${msgs} msgs, ${chats} chats, ${favs} favs`);
+    }
+
+    await loadAll();
+    await renderCurrentTab();
+    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+    showToast(`Metric snapshot recorded for ${bot.name}!`, 'success');
   }
 
   function renderMetrics() {
@@ -3284,20 +3723,44 @@ ${releasesMd}
         }
 
         const dataPoints = [];
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-        const curMonthIdx = new Date().getMonth();
+        const datedReleases = releases.map(r => {
+          const dStr = r.scheduledDate || r.publishedDate || r.metrics?.date || r.createdAt;
+          const d = dStr ? new Date(dStr) : new Date();
+          return {
+            name: r.name,
+            dStr,
+            d,
+            msgs: r.metrics?.messages || 0,
+            chats: r.metrics?.uniqueChats || r.metrics?.chats || 0
+          };
+        }).filter(r => r.dStr && !isNaN(r.d)).sort((a, b) => a.d - b.d);
 
-        for (let i = 5; i >= 0; i--) {
-          const mIdx = (curMonthIdx - i + 12) % 12;
-          const label = monthNames[mIdx];
-          let val = 0;
-          if (metric === 'mpc') {
-            val = Math.max(parseFloat((targetMax - (i * 0.75)).toFixed(2)), 0);
-          } else {
-            val = Math.round(targetMax * (0.15 + (0.85 * ((6 - i) / 6))));
-          }
-          dataPoints.push({ label, value: val });
-        }
+        const monthsMap = {};
+        let cumMsgs = 0, cumChats = 0, cumBots = 0;
+
+        datedReleases.forEach(r => {
+          cumBots++;
+          cumMsgs += r.msgs;
+          cumChats += r.chats;
+          const label = r.d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+          const mpcVal = cumChats > 0 ? parseFloat((cumMsgs / cumChats).toFixed(2)) : 0;
+          monthsMap[label] = {
+            label,
+            messages: cumMsgs,
+            chats: cumChats,
+            mpc: mpcVal,
+            bots: cumBots
+          };
+        });
+
+        const timelinePoints = Object.values(monthsMap);
+        timelinePoints.forEach(p => {
+          let val = p.messages;
+          if (metric === 'chats') val = p.chats;
+          else if (metric === 'mpc') val = p.mpc;
+          else if (metric === 'bots') val = p.bots;
+          dataPoints.push({ label: p.label, value: val });
+        });
 
         const pill = (mKey, label) => `
           <button type="button" class="mc-leaderboard-pill mc-portfolio-pill${metric === mKey ? ' active' : ''}" data-metric="${mKey}">
@@ -3447,6 +3910,19 @@ ${releasesMd}
     });
   }
 
+  function bindGlobalListeners() {
+    if (window._mcEscapeBound) return;
+    window._mcEscapeBound = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('mc-modal-overlay');
+        if (modal && !modal.classList.contains('hidden')) {
+          modal.classList.add('hidden');
+        }
+      }
+    });
+  }
+
   // ─── Init ─────────────────────────────────────────────────────────────────────
 
   async function init() {
@@ -3483,6 +3959,7 @@ ${releasesMd}
       if (e.target.id === 'mc-modal-cancel2') closeModal();
     });
 
+    bindGlobalListeners();
     bindEvents(view);
     await renderCurrentTab();
   }
@@ -3518,6 +3995,6 @@ ${releasesMd}
 
   // ─── Public API ───────────────────────────────────────────────────────────────
 
-  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject, openUniverseManagerModal };
+  window.MissionControl = { init, renderCurrentTab, loadAll, openNewReleaseForProject, openUniverseManagerModal, openStoryHubModal, openLinkVaultModal, openQuickMetricsModal, submitMetricSnapshot, exportCompleteBackup };
 
 })();
