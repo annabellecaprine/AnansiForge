@@ -555,10 +555,13 @@
           const newM = rec.metrics.messages || 0;
           const newC = rec.metrics.uniqueChats || 0;
           if (oldM !== newM || oldC !== newC) {
+            const prevTime = existing.updatedAt && existing.updatedAt !== now 
+              ? existing.updatedAt 
+              : new Date(Date.now() - 3600000).toISOString();
             previousMetrics = {
               messages: oldM,
               uniqueChats: oldC,
-              updatedAt: existing.updatedAt || now
+              updatedAt: prevTime
             };
           }
         }

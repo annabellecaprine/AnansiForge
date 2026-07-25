@@ -3169,26 +3169,34 @@ ${releasesMd}
     };
 
     if (daysActive <= 30) {
-      // Recent release (launched within the last 30 days): plot actual launch/snapshot dates in chronological order
+      // Recent release (launched within the last 30 days): plot actual launch/snapshot dates in monotonic order
+      const snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
+      const latestDate = snapDate > launchDate ? snapDate : new Date(launchDate.getTime() + 86400000);
+
       const launchLabel = `Launch (${formatLabel(launchDate)})`;
       dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
       mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
 
       if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
-        let prevDate = prev.updatedAt ? new Date(prev.updatedAt) : new Date(launchDate.getTime() + 1000);
         const prevMsgs = prev.messages || 0;
         const prevChats = prev.uniqueChats || 0;
         const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : 0;
 
-        dataPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMsgs });
+        // Ensure prevDate is strictly between launchDate and latestDate
+        let prevDate = prev.updatedAt ? new Date(prev.updatedAt) : null;
+        if (!prevDate || prevDate >= latestDate || prevDate <= launchDate) {
+          prevDate = new Date(launchDate.getTime() + (latestDate.getTime() - launchDate.getTime()) * 0.5);
+        }
+
+        // Cap prevVal to ensure cumulative trajectory never drops
+        const prevValClamped = Math.min(prevMsgs, totalMsgs);
+
+        dataPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevValClamped });
         mpcPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMpcVal });
       }
 
-      let snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
-      if (snapDate < launchDate) snapDate = new Date(launchDate.getTime() + 2000);
-
-      dataPoints.push({ dateObj: snapDate, label: formatLabel(snapDate), value: totalMsgs });
-      mpcPoints.push({ dateObj: snapDate, label: formatLabel(snapDate), value: curMpc });
+      dataPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: totalMsgs });
+      mpcPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: curMpc });
 
       // Sort chronologically ascending by timestamp
       dataPoints.sort((a, b) => a.dateObj - b.dateObj);
