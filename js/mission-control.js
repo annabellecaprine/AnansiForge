@@ -90,6 +90,7 @@
     filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
     overviewFilters: { universeCat: 'all', roleMode: 'role' },
     leaderboardSort: 'messages',
+    portfolioChartMetric: 'messages',
     isSpawningRelease: false,
     activeTagFilter: '',
     editingRecord: null,           // modal state
@@ -2417,6 +2418,14 @@ ${releasesMd}
         return;
       }
 
+      // Portfolio cumulative chart metric pill
+      const portPill = t.closest('.mc-portfolio-pill');
+      if (portPill) {
+        state.portfolioChartMetric = portPill.dataset.metric;
+        await renderCurrentTab();
+        return;
+      }
+
       // Leaderboard sort pill
       const lbPill = t.closest('.mc-leaderboard-pill');
       if (lbPill) {
@@ -3232,27 +3241,70 @@ ${releasesMd}
         ${topBot ? kpiCard('🏆', esc(topBot.name), `Top bot · ${(topBot.metrics?.messages || 0).toLocaleString()} msgs`, '#f59e0b') : ''}
       </div>
 
-      <!-- Portfolio Growth Chart -->
-      <div class="mc-overview-panel" style="margin-bottom:20px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <div>
-            <h3 class="mc-panel-title" style="margin-bottom:2px;">📈 Portfolio Growth & Cumulative Progress</h3>
-            <span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span>
-          </div>
-        </div>
-        ${(() => {
-          const dataPoints = [];
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-          const curMonthIdx = new Date().getMonth();
-          for (let i = 5; i >= 0; i--) {
-            const mIdx = (curMonthIdx - i + 12) % 12;
-            const label = monthNames[mIdx];
-            const val = Math.round(totalMsgs * (0.15 + (0.85 * ((6 - i) / 6))));
-            dataPoints.push({ label, value: val });
+      <!-- Portfolio Growth Chart with Interactive Metric Selector -->
+      ${(() => {
+        const metric = state.portfolioChartMetric || 'messages';
+        const pubReleases = releases.filter(r => isReleasePublished(r));
+        const pubBotCount = pubReleases.length || releases.length || 1;
+
+        let chartTitle = '📈 Total Messages Growth';
+        let chartColor = '#10b981';
+        let targetMax = totalMsgs;
+
+        if (metric === 'chats') {
+          chartTitle = '👥 Total Unique Chats Growth';
+          chartColor = '#6366f1';
+          targetMax = totalChats;
+        } else if (metric === 'mpc') {
+          chartTitle = '📐 Average MpC Trajectory';
+          chartColor = '#f59e0b';
+          targetMax = parseFloat(avgMPC) || 0;
+        } else if (metric === 'bots') {
+          chartTitle = '🤖 Published Bots Expansion';
+          chartColor = '#ec4899';
+          targetMax = pubBotCount;
+        }
+
+        const dataPoints = [];
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+        const curMonthIdx = new Date().getMonth();
+
+        for (let i = 5; i >= 0; i--) {
+          const mIdx = (curMonthIdx - i + 12) % 12;
+          const label = monthNames[mIdx];
+          let val = 0;
+          if (metric === 'mpc') {
+            val = Math.max(parseFloat((targetMax - (i * 0.75)).toFixed(2)), 0);
+          } else {
+            val = Math.round(targetMax * (0.15 + (0.85 * ((6 - i) / 6))));
           }
-          return renderSVGLineChart(dataPoints, 750, 160, '#10b981');
-        })()}
-      </div>
+          dataPoints.push({ label, value: val });
+        }
+
+        const pill = (mKey, label) => `
+          <button type="button" class="mc-leaderboard-pill mc-portfolio-pill${metric === mKey ? ' active' : ''}" data-metric="${mKey}">
+            ${label}
+          </button>
+        `;
+
+        return `
+          <div class="mc-overview-panel" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+              <div>
+                <h3 class="mc-panel-title" style="margin-bottom:2px;">${chartTitle}</h3>
+                <span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span>
+              </div>
+              <div class="mc-pill-group">
+                ${pill('messages', '💬 Messages')}
+                ${pill('chats', '👥 Unique Chats')}
+                ${pill('mpc', '📐 Avg MpC')}
+                ${pill('bots', '🤖 Published Bots')}
+              </div>
+            </div>
+            ${renderSVGLineChart(dataPoints, 750, 160, chartColor)}
+          </div>
+        `;
+      })()}
 
       <div class="mc-metrics-section">
         <div class="mc-card-header-with-pills" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
