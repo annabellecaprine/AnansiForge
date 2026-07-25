@@ -1451,7 +1451,7 @@ Write-Host "Done! tracker-import.json created."</pre>
             ${['Private', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${r.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group"><label>Scheduled Date</label>
+        <div class="form-group"><label>Live / Launch Date <span style="font-size:0.75rem; color:var(--text-muted); font-weight:400;">— when this bot went public</span></label>
           <input type="date" id="mc-rec-date" value="${r.scheduledDate || ''}" class="mc-modal-input">
         </div>
       </div>
@@ -1576,13 +1576,32 @@ Write-Host "Done! tracker-import.json created."</pre>
 
       const uniqueChats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
       const messages = parseInt(document.getElementById('mc-rec-messages')?.value) || 0;
-      updated.metrics = {
+      const newMetrics = {
         date: document.getElementById('mc-rec-metrics-date')?.value || null,
         time: document.getElementById('mc-rec-metrics-time')?.value || null,
         uniqueChats,
         messages,
         msgPerChat: uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null
       };
+
+      // ── Archive old metrics into metricsHistory before overwriting ──
+      const metricsChangedEarly = newMetrics.messages !== (r.metrics?.messages || 0) ||
+        newMetrics.uniqueChats !== (r.metrics?.uniqueChats || 0) ||
+        newMetrics.date !== r.metrics?.date;
+
+      if (metricsChangedEarly && r.metrics && (r.metrics.messages > 0 || r.metrics.uniqueChats > 0)) {
+        const existingHistory = Array.isArray(r.metricsHistory) ? [...r.metricsHistory] : [];
+        const alreadyStored = existingHistory.some(h =>
+          h.date === r.metrics.date &&
+          h.time === r.metrics.time &&
+          h.messages === r.metrics.messages &&
+          h.uniqueChats === r.metrics.uniqueChats
+        );
+        if (!alreadyStored) existingHistory.push({ ...r.metrics });
+        updated.metricsHistory = existingHistory;
+      }
+
+      updated.metrics = newMetrics;
     }
 
     const isNew = !r.id;
@@ -1615,7 +1634,10 @@ Write-Host "Done! tracker-import.json created."</pre>
         targetType: r.assetType || 'record',
         targetId: updated.id,
         targetName: updated.name,
-        details: act === 'metrics_updated' ? `${updated.metrics?.messages || 0} msgs` : ''
+        // Include both msgs and chats so MpC can be reconstructed from log history
+        details: act === 'metrics_updated'
+          ? `${updated.metrics?.messages || 0} msgs, ${updated.metrics?.uniqueChats || 0} chats`
+          : ''
       }).catch(e => console.error(e));
     }
 
@@ -3173,15 +3195,14 @@ ${releasesMd}
     const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
     const mpc = totalChats > 0 ? curMpc.toFixed(2) : '—';
 
+    // ── Anchor A: Ready-to-Launch timestamp (when bot moved to private testing) ──
+    // Read from activity_log: the 'ready' pipeline step being checked logs a 'pipeline_step' action
+    let rtlDate = null;
+
+    // ── Anchor B: Public Launch Date (scheduledDate only — no guessing from createdAt) ──
     let launchDate = null;
     if (rec.scheduledDate && !isNaN(new Date(rec.scheduledDate).getTime())) {
       launchDate = new Date(rec.scheduledDate);
-    } else if (rec.publishedDate && !isNaN(new Date(rec.publishedDate).getTime())) {
-      launchDate = new Date(rec.publishedDate);
-    } else if (rec.createdAt && !isNaN(new Date(rec.createdAt).getTime())) {
-      launchDate = new Date(rec.createdAt);
-    } else {
-      launchDate = new Date();
     }
 
     const dataPoints = [];
@@ -3197,23 +3218,34 @@ ${releasesMd}
       return dStr;
     };
 
-    // Single, 100% empirical trajectory generator (NO ratio math or fake month multipliers EVER)
-    const snapDate = parseDateTime(m.date, m.time) || (rec.updatedAt ? new Date(rec.updatedAt) : new Date());
-
-    // Gather all real historical snapshots from metricsHistory, previousMetrics, and IndexedDB activity_log
+    // ── Gather all real activity log entries for this record ──
     const rawList = [];
 
     if (window.ForgeDB?.getTargetActivity) {
       try {
         const logs = await window.ForgeDB.getTargetActivity(rec.id);
+
+        // Find Ready-to-Launch timestamp (pipeline step 'ready' checked)
+        const rtlLog = logs.find(log =>
+          (log.action === 'pipeline_step' || log.action === 'step_checked') &&
+          (log.details?.includes('ready') || log.step === 'ready')
+        );
+        if (rtlLog) {
+          const dt = new Date(rtlLog.timestamp);
+          if (!isNaN(dt.getTime())) rtlDate = dt;
+        }
+
+        // Gather metrics_updated log entries — now includes chats since v31
         logs.forEach(log => {
           if (log.action === 'metrics_updated' && log.details) {
-            const match = log.details.match(/(\d+)\s*msgs/i);
-            if (match) {
-              const msgs = parseInt(match[1], 10);
+            const msgsMatch = log.details.match(/(\d+)\s*msgs/i);
+            const chatsMatch = log.details.match(/(\d+)\s*chats/i);
+            if (msgsMatch) {
+              const msgs = parseInt(msgsMatch[1], 10);
+              const chats = chatsMatch ? parseInt(chatsMatch[1], 10) : 0;
               const dt = new Date(log.timestamp);
               if (!isNaN(dt.getTime()) && msgs > 0) {
-                rawList.push({ dateObj: dt, messages: msgs, uniqueChats: 0 });
+                rawList.push({ dateObj: dt, messages: msgs, uniqueChats: chats, source: 'log' });
               }
             }
           }
@@ -3223,49 +3255,93 @@ ${releasesMd}
       }
     }
 
+    // metricsHistory entries — the canonical truth, prioritised over log entries
     if (Array.isArray(rec.metricsHistory)) {
       rec.metricsHistory.forEach(h => {
         if (h && (h.messages > 0 || h.uniqueChats > 0)) {
           let dt = parseDateTime(h.date, h.time) || (h.updatedAt ? new Date(h.updatedAt) : null);
-          if (dt) rawList.push({ dateObj: dt, messages: h.messages || 0, uniqueChats: h.uniqueChats || 0 });
+          if (dt) rawList.push({ dateObj: dt, messages: h.messages || 0, uniqueChats: h.uniqueChats || 0, source: 'history' });
         }
       });
     }
 
+    // previousMetrics as a fallback single snapshot
     if (prev && (prev.messages > 0 || prev.uniqueChats > 0)) {
       let dt = prev.updatedAt ? new Date(prev.updatedAt) : null;
-      if (dt) rawList.push({ dateObj: dt, messages: prev.messages || 0, uniqueChats: prev.uniqueChats || 0 });
+      if (dt) rawList.push({ dateObj: dt, messages: prev.messages || 0, uniqueChats: prev.uniqueChats || 0, source: 'previous' });
     }
 
-    // Add current snapshot
-    rawList.push({ dateObj: snapDate, messages: totalMsgs, uniqueChats: totalChats });
+    // Current metrics — always added as the most recent real reading
+    const snapDate = parseDateTime(m.date, m.time) || (rec.updatedAt ? new Date(rec.updatedAt) : new Date());
+    if (totalMsgs > 0 || totalChats > 0) {
+      rawList.push({ dateObj: snapDate, messages: totalMsgs, uniqueChats: totalChats, source: 'current' });
+    }
 
-    // Sort all raw snapshots by timestamp ascending
-    rawList.sort((a, b) => a.dateObj - b.dateObj);
+    // Prefer metricsHistory/current entries over log entries (same msg value = same snapshot)
+    const canonicalList = [];
+    rawList.forEach(snap => {
+      const isLog = snap.source === 'log';
+      const alreadyCovered = canonicalList.some(c =>
+        c.messages === snap.messages &&
+        Math.abs(c.dateObj.getTime() - snap.dateObj.getTime()) < 86400000
+      );
+      if (!alreadyCovered || !isLog) {
+        // Remove any log entry that covers the same snapshot
+        const dupLogIdx = isLog ? -1 : canonicalList.findIndex(c =>
+          c.source === 'log' && c.messages === snap.messages &&
+          Math.abs(c.dateObj.getTime() - snap.dateObj.getTime()) < 86400000
+        );
+        if (dupLogIdx >= 0) canonicalList.splice(dupLogIdx, 1);
+        canonicalList.push(snap);
+      }
+    });
 
-    // Check for multiple intraday snapshots
-    const allDates = [launchDate, ...rawList.map(s => s.dateObj)].filter(Boolean);
+    // Sort ascending by timestamp
+    canonicalList.sort((a, b) => a.dateObj - b.dateObj);
+
+    // Check for multiple intraday snapshots to toggle time labels
+    const anchorDates = [rtlDate, launchDate, ...canonicalList.map(s => s.dateObj)].filter(Boolean);
     const dayCounts = {};
-    allDates.forEach(d => { const k = d.toDateString(); dayCounts[k] = (dayCounts[k] || 0) + 1; });
+    anchorDates.forEach(d => { const k = d.toDateString(); dayCounts[k] = (dayCounts[k] || 0) + 1; });
     const useTimeLabels = Object.values(dayCounts).some(c => c > 1);
 
-    // Build initial Launch point
-    const launchLabel = `Launch (${formatLabel(launchDate, useTimeLabels)})`;
-    dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
-    mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+    // ── Build the chart data point array ──
+    // Anchor A: Ready-to-Launch (if we have the timestamp)
+    if (rtlDate) {
+      dataPoints.push({ dateObj: rtlDate, label: `RtL (${formatLabel(rtlDate, useTimeLabels)})`, value: 0 });
+      mpcPoints.push({ dateObj: rtlDate, label: `RtL (${formatLabel(rtlDate, useTimeLabels)})`, value: 0 });
+    }
 
-    // Clean & deduplicate snapshots sequentially
-    rawList.forEach(snap => {
-      let sDate = snap.dateObj;
-      if (!sDate || sDate <= launchDate) sDate = new Date(launchDate.getTime() + 60000);
+    // Anchor B: Public Launch (scheduledDate) — value 0 since metrics start from zero at launch
+    if (launchDate) {
+      // If we have an RtL anchor and some pre-launch metrics, those slot before this point
+      // Launch point marks the transition to public metrics
+      const launchLabel = `Launch (${formatLabel(launchDate, useTimeLabels)})`;
+      // Only push Launch=0 if there are no real metrics already at/before launchDate
+      const hasPreLaunchMetrics = canonicalList.some(s => s.dateObj <= launchDate);
+      if (!hasPreLaunchMetrics) {
+        dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+        mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+      } else {
+        // Insert Launch as a marker at its date with whatever metrics existed at that point
+        const atLaunch = canonicalList.filter(s => s.dateObj <= launchDate).pop();
+        const launchMsgs = atLaunch ? atLaunch.messages : 0;
+        const launchMpc = atLaunch && atLaunch.uniqueChats > 0
+          ? parseFloat((atLaunch.messages / atLaunch.uniqueChats).toFixed(2)) : 0;
+        dataPoints.push({ dateObj: launchDate, label: launchLabel, value: launchMsgs });
+        mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: launchMpc });
+      }
+    }
 
+    // Slot all real snapshots in relative to the anchors — deduplicate by value+proximity
+    canonicalList.forEach(snap => {
+      const sDate = snap.dateObj;
       const sMsgs = snap.messages;
       const sMpc = snap.uniqueChats > 0 ? parseFloat((sMsgs / snap.uniqueChats).toFixed(2)) : 0;
       const sLabel = formatLabel(sDate, useTimeLabels);
 
-      // Deduplicate snapshots that occur within 2 minutes of each other or have duplicate message values
-      const isDupe = dataPoints.some(dp => 
-        Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 120000 || 
+      const isDupe = dataPoints.some(dp =>
+        Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 120000 ||
         (dp.value === sMsgs && Math.abs(dp.dateObj.getTime() - sDate.getTime()) < 86400000)
       );
 
@@ -3275,9 +3351,12 @@ ${releasesMd}
       }
     });
 
-    // Sort chronologically ascending by timestamp
+    // Final sort ascending by timestamp
     dataPoints.sort((a, b) => a.dateObj - b.dateObj);
     mpcPoints.sort((a, b) => a.dateObj - b.dateObj);
+
+    const limitedData = dataPoints.length <= 2;
+    const noLaunchDate = !launchDate;
 
     const modal = document.getElementById('mc-modal-overlay');
     const body = document.getElementById('mc-modal-body');
@@ -3291,7 +3370,7 @@ ${releasesMd}
           ${rec.priority ? priorityBadge(rec.priority) : ''}
           ${rec.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(rec.iterationLabel)}</span>` : ''}
         </div>
-        <span style="font-size:0.8rem; color:var(--text-muted);">Last Snapshot: ${m.date ? m.date : 'Recent'}</span>
+        <span style="font-size:0.8rem; color:var(--text-muted);">Last Snapshot: ${m.date ? m.date : 'No date set'}</span>
       </div>
 
       <!-- KPI Summary Cards -->
@@ -3319,16 +3398,23 @@ ${releasesMd}
         </div>
       </div>
 
+      ${noLaunchDate ? `
+      <div style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:12px 16px; margin-bottom:14px; color:var(--warning); font-size:0.85rem;">
+        📅 <strong>No Live / Launch Date set.</strong> Open the edit modal and set a <em>Live / Launch Date</em> to anchor the growth timeline.
+      </div>` : ''}
+
       <!-- Messages Trajectory Chart -->
       <div class="mc-overview-panel" style="margin-bottom:14px;">
         <h4 class="mc-panel-title" style="margin-bottom:8px;">📈 Messages Growth Trajectory</h4>
         ${renderSVGLineChart(dataPoints, 520, 180, '#6366f1')}
+        ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
       </div>
 
       <!-- MpC Engagement Depth Chart -->
       <div class="mc-overview-panel">
         <h4 class="mc-panel-title" style="margin-bottom:8px;">🎯 MpC Engagement Trajectory (Msg / Chat)</h4>
         ${renderSVGLineChart(mpcPoints, 520, 180, '#10b981')}
+        ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
       </div>
 
       <div style="margin-top:16px; text-align:right;">
