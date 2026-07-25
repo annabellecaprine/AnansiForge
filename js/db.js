@@ -544,29 +544,52 @@
       releaseSource = VALID_RELEASE_SOURCES.has(releaseSource) ? releaseSource : (rec.sourceStoryId ? 'story' : 'manual');
     }
 
-    // Delta metric tracking: fetch existing record BEFORE opening readwrite transaction!
+    // Metrics history & delta tracking
     let previousMetrics = rec.previousMetrics || null;
+    let metricsHistory = Array.isArray(rec.metricsHistory) ? [...rec.metricsHistory] : [];
+
     if (rec.id) {
       try {
         const existing = await getTrackerRecord(rec.id);
-        if (existing && existing.metrics && rec.metrics) {
-          const oldM = existing.metrics.messages || 0;
-          const oldC = existing.metrics.uniqueChats || 0;
-          const newM = rec.metrics.messages || 0;
-          const newC = rec.metrics.uniqueChats || 0;
-          if (oldM !== newM || oldC !== newC) {
-            const prevTime = existing.updatedAt && existing.updatedAt !== now 
-              ? existing.updatedAt 
-              : new Date(Date.now() - 3600000).toISOString();
-            previousMetrics = {
-              messages: oldM,
-              uniqueChats: oldC,
-              updatedAt: prevTime
-            };
+        if (existing) {
+          if (Array.isArray(existing.metricsHistory)) {
+            existing.metricsHistory.forEach(h => {
+              if (!metricsHistory.some(mh => mh.updatedAt === h.updatedAt || (mh.messages === h.messages && mh.uniqueChats === h.uniqueChats))) {
+                metricsHistory.push(h);
+              }
+            });
+          }
+
+          if (existing.metrics && rec.metrics) {
+            const oldM = existing.metrics.messages || 0;
+            const oldC = existing.metrics.uniqueChats || 0;
+            const newM = rec.metrics.messages || 0;
+            const newC = rec.metrics.uniqueChats || 0;
+            if (oldM !== newM || oldC !== newC) {
+              const prevTime = existing.updatedAt && existing.updatedAt !== now 
+                ? existing.updatedAt 
+                : new Date(Date.now() - 3600000).toISOString();
+              previousMetrics = {
+                messages: oldM,
+                uniqueChats: oldC,
+                updatedAt: prevTime
+              };
+
+              const isDuplicate = metricsHistory.some(mh => mh.messages === oldM && mh.uniqueChats === oldC);
+              if (!isDuplicate && (oldM > 0 || oldC > 0)) {
+                metricsHistory.push({
+                  messages: oldM,
+                  uniqueChats: oldC,
+                  date: existing.metrics.date || null,
+                  time: existing.metrics.time || null,
+                  updatedAt: prevTime
+                });
+              }
+            }
           }
         }
       } catch(e) {
-        console.warn('Could not fetch existing record for delta metrics:', e);
+        console.warn('Could not fetch existing record for metrics history:', e);
       }
     }
 
@@ -594,6 +617,7 @@
       sourceStoryId: rec.sourceStoryId || null,
       iterationLabel: rec.iterationLabel || '',
       previousMetrics: previousMetrics,
+      metricsHistory: metricsHistory,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
@@ -818,6 +842,28 @@
         }
       };
       cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  async function getTargetActivity(targetId) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('activity_log', 'readonly');
+    const store = tx.objectStore('activity_log');
+    return new Promise((resolve) => {
+      const results = [];
+      const req = store.openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          if (cursor.value.targetId === targetId) {
+            results.push(cursor.value);
+          }
+          cursor.continue();
+        } else {
+          resolve(results.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+        }
+      };
+      req.onerror = () => resolve([]);
     });
   }
 
@@ -1171,6 +1217,7 @@
     deleteOldVersions,
     logActivity,
     getRecentActivity,
+    getTargetActivity,
     pruneActivityLog,
     captureSnapshot,
     getSnapshots,

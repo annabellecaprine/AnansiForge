@@ -3176,7 +3176,7 @@ ${releasesMd}
     };
 
     if (daysActive <= 30) {
-      // Recent release (launched within the last 30 days): plot actual launch & snapshot dates
+      // Recent release (launched within the last 30 days): plot launch & all historical snapshots
       const snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
       const latestDate = snapDate > launchDate ? snapDate : new Date(launchDate.getTime() + 86400000);
 
@@ -3184,19 +3184,36 @@ ${releasesMd}
       dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
       mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
 
-      if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
-        const prevMsgs = prev.messages || 0;
-        const prevChats = prev.uniqueChats || 0;
-        const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : 0;
-
-        // Include prevDate ONLY if it represents a distinct real date strictly between launchDate and latestDate
-        let prevDate = (prev.updatedAt && !isNaN(new Date(prev.updatedAt).getTime())) ? new Date(prev.updatedAt) : null;
-        if (prevDate && prevDate > launchDate && prevDate < latestDate) {
-          const prevValClamped = Math.min(prevMsgs, totalMsgs);
-          dataPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevValClamped });
-          mpcPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMpcVal });
-        }
+      // Gather all historical snapshots from metricsHistory and previousMetrics
+      const rawSnapshots = [];
+      if (Array.isArray(rec.metricsHistory)) {
+        rec.metricsHistory.forEach(h => {
+          if (h && (h.messages > 0 || h.uniqueChats > 0)) {
+            let dt = (h.date && !isNaN(new Date(h.date).getTime())) ? new Date(h.date) : (h.updatedAt ? new Date(h.updatedAt) : null);
+            rawSnapshots.push({ dateObj: dt, messages: h.messages || 0, uniqueChats: h.uniqueChats || 0 });
+          }
+        });
       }
+
+      if (prev && (prev.messages > 0 || prev.uniqueChats > 0)) {
+        let dt = prev.updatedAt ? new Date(prev.updatedAt) : null;
+        rawSnapshots.push({ dateObj: dt, messages: prev.messages || 0, uniqueChats: prev.uniqueChats || 0 });
+      }
+
+      // Process and add all valid intermediate snapshots
+      rawSnapshots.forEach(snap => {
+        let sDate = snap.dateObj;
+        if (!sDate || sDate >= latestDate || sDate <= launchDate) return;
+        
+        const sMsgs = Math.min(snap.messages, totalMsgs);
+        const sMpc = snap.uniqueChats > 0 ? parseFloat((sMsgs / snap.uniqueChats).toFixed(2)) : 0;
+        const sLabel = formatLabel(sDate);
+
+        if (!dataPoints.some(dp => dp.label === sLabel && dp.value === sMsgs)) {
+          dataPoints.push({ dateObj: sDate, label: sLabel, value: sMsgs });
+          mpcPoints.push({ dateObj: sDate, label: sLabel, value: sMpc });
+        }
+      });
 
       dataPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: totalMsgs });
       mpcPoints.push({ dateObj: latestDate, label: formatLabel(latestDate), value: curMpc });
