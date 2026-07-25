@@ -3552,3 +3552,24 @@ select.mc-vis-select:focus, input.mc-date-input:focus, select.mc-universe-select
   color: var(--text-primary) !important;
   border-color: var(--accent) !important;
 }
+
+/* SVG Performance Chart Styling */
+.mc-svg-chart {
+  display: block;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  padding: 8px;
+}
+.mc-chart-point-group {
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.mc-chart-point-group:hover circle {
+  r: 6;
+  stroke: var(--accent);
+}
+.mc-open-bot-analytics:hover {
+  color: var(--accent) !important;
+  text-decoration: underline;
+}
