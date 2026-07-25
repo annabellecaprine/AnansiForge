@@ -23,6 +23,7 @@
 
   // Active state
   let editingComponentId = null;
+  let pendingStubId = null;
   let activeSidebarTab = 'vault'; // 'vault' or 'projects'
   let editorIsDirty = false;  // tracks unsaved editor changes
   let activeEditorTab = 'raw'; // 'raw' or 'form'
@@ -34,6 +35,7 @@
   
   // Vault filters / actions rows
   const filterCat = document.getElementById('vault-category-filter');
+  const filterUniverse = document.getElementById('vault-universe-filter');
   const filterLineage = document.getElementById('vault-lineage-filter');
   const filterScenario = document.getElementById('vault-scenario-filter');
   const btnTemplatesOnly = document.getElementById('btn-templates-only');
@@ -119,6 +121,10 @@
   function showView(viewId) {
     document.querySelectorAll('.view').forEach(v => {
       v.classList.toggle('active', v.id === viewId);
+      // Mission control uses display:none/block, not .active class
+      if (v.id === 'mission-control-view') {
+        v.style.display = v.id === viewId ? 'block' : 'none';
+      }
     });
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
@@ -130,6 +136,13 @@
   function switchSidebarTab(tabName) {
     activeSidebarTab = tabName;
     
+    // Deactivate Mission Control if open
+    const btnMC = document.getElementById('btn-mission-control');
+    if (btnMC) btnMC.classList.remove('active');
+    const mcView = document.getElementById('mission-control-view');
+    if (mcView) mcView.style.display = 'none';
+    window.lastViewMC = false;
+
     // Toggle active classes on tab buttons
     tabVault.classList.toggle('active', tabName === 'vault');
     tabProjects.classList.toggle('active', tabName === 'projects');
@@ -147,6 +160,7 @@
       searchInput.placeholder = 'Search compiled projects...';
       refreshProjectsList();
     }
+    showView('welcome-view');
   }
 
   // --- Render Vault Components List ---
@@ -156,6 +170,50 @@
     try {
       const components = await window.ForgeDB.getAllComponents();
       
+      // Update Universe Filter dropdown options
+      if (filterUniverse) {
+        const activeUniFilter = filterUniverse.value;
+        const registry = (window.MissionControl?.state?.allUniverses && window.MissionControl.state.allUniverses.length > 0)
+          ? window.MissionControl.state.allUniverses
+          : (window.ForgeDB?.DEFAULT_UNIVERSES || []);
+        const uniMap = new Map();
+        const list = [];
+        registry.forEach(u => {
+          if (u && u.name) {
+            const key = u.name.toLowerCase();
+            if (!uniMap.has(key)) { uniMap.set(key, u); list.push(u); }
+          }
+        });
+        const compUnis = components.map(c => c.tracker?.universe || c.universe).filter(Boolean);
+        [...new Set(compUnis)].forEach(raw => {
+          const trimmed = String(raw).trim();
+          if (trimmed && !uniMap.has(trimmed.toLowerCase())) {
+            const customObj = { name: trimmed, genre: 'Custom / Other' };
+            uniMap.set(trimmed.toLowerCase(), customObj);
+            list.push(customObj);
+          }
+        });
+        const groups = {};
+        list.forEach(u => {
+          const g = u.genre || 'General';
+          if (!groups[g]) groups[g] = [];
+          groups[g].push(u);
+        });
+        filterUniverse.innerHTML = '<option value="all">All</option>';
+        Object.keys(groups).sort().forEach(g => {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = g;
+          groups[g].forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.name;
+            opt.textContent = u.name;
+            if (u.name === activeUniFilter) opt.selected = true;
+            optgroup.appendChild(opt);
+          });
+          filterUniverse.appendChild(optgroup);
+        });
+      }
+
       // Update Lineage Filter dropdown options
       const activeLineageFilter = filterLineage.value;
       const activeCat = filterCat.value;
@@ -198,6 +256,7 @@
       // Filter
       const search = searchInput.value.toLowerCase().trim();
       const cat = filterCat.value;
+      const uniVal = filterUniverse ? filterUniverse.value : 'all';
       const lineageVal = filterLineage.value;
       const scenarioVal = filterScenario.value;
 
@@ -206,24 +265,27 @@
                               (comp.content || '').toLowerCase().includes(search) ||
                               (comp.tags || []).some(t => t.toLowerCase().includes(search));
         const matchesCat = cat === 'all' || comp.category === cat;
+        const matchesUni = uniVal === 'all' || (comp.tracker?.universe || comp.universe || '').toLowerCase() === uniVal.toLowerCase();
         const matchesLineage = lineageVal === 'all' || comp.lineage === lineageVal;
         const matchesScenario = scenarioVal === 'all' || (comp.scenarios || []).includes(scenarioVal);
         const matchesTemplate = !showTemplatesOnly || comp.isTemplate === true;
 
-        return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate;
+        return matchesSearch && matchesCat && matchesUni && matchesLineage && matchesScenario && matchesTemplate;
       });
 
-      // Apply Sorting
+      // Apply Sorting (Pinned components first)
       const sortBy = filterSort.value;
       filtered.sort((a, b) => {
+        const isAPinned = a.tracker?.pinned === true ? 1 : 0;
+        const isBPinned = b.tracker?.pinned === true ? 1 : 0;
+        if (isAPinned !== isBPinned) return isBPinned - isAPinned; // pinned items first
+
         if (sortBy === 'name-asc') {
           return a.name.localeCompare(b.name);
         } else if (sortBy === 'name-desc') {
           return b.name.localeCompare(a.name);
-        } else {
-          const dateA = a.modifiedAt || 0;
-          const dateB = b.modifiedAt || 0;
-          return dateB - dateA;
+        } else { // modified-desc default
+          return new Date(b.modifiedAt || 0) - new Date(a.modifiedAt || 0);
         }
       });
 
@@ -237,7 +299,7 @@
         }
       }
 
-      // Render
+      // Render in chunks of 60 items for 500+ scale performance
       sidebarList.innerHTML = '';
       
       if (filtered.length === 0) {
@@ -249,13 +311,19 @@
         return;
       }
 
-      filtered.forEach(comp => {
+      const limit = window.vaultSidebarLimit || 60;
+      const chunk = filtered.slice(0, limit);
+
+      chunk.forEach(comp => {
         const item = document.createElement('div');
-        item.className = 'vault-item';
+        const isPinned = comp.tracker?.pinned === true;
+        item.className = `vault-item${isPinned ? ' vault-item--pinned' : ''}`;
         
         const templateBadge = comp.isTemplate 
           ? `<span class="template-badge">⭐ Template</span>` 
           : '';
+
+        const pinIcon = isPinned ? `<span class="pin-badge" title="Pinned">📌</span>` : '';
 
         const lineageLabel = comp.lineage 
           ? `<span class="vault-item-lineage">🔗 ${escapeHTML(comp.lineage)}</span>` 
@@ -267,7 +335,7 @@
 
         item.innerHTML = `
           <div class="vault-item-header">
-            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${escapeHTML(comp.name)}</span>
+            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${pinIcon}${escapeHTML(comp.name)}</span>
             <div style="display:flex; gap:4px; align-items:center;">
               ${templateBadge}
               <span class="vault-item-category ${comp.category}">${comp.category}</span>
@@ -277,11 +345,19 @@
           <div class="vault-item-footer">
             ${lineageLabel}
             <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost btn-icon btn-sm btn-pin-toggle" title="${isPinned ? 'Unpin' : 'Pin'}" style="padding:2px 6px;">${isPinned ? '📌' : '☆'}</button>
               <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
               <button class="btn btn-primary btn-icon btn-sm btn-stage" title="Stage for Assembly" style="padding:2px 6px;">＋</button>
             </div>
           </div>
         `;
+
+        item.querySelector('.btn-pin-toggle').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const newVal = !isPinned;
+          await window.ForgeDB.updateVaultTracker(comp.id, { pinned: newVal }, false);
+          refreshVaultList();
+        });
 
         item.querySelector('.btn-edit').addEventListener('click', (e) => {
           e.stopPropagation();
@@ -299,6 +375,18 @@
 
         sidebarList.appendChild(item);
       });
+
+      if (filtered.length > limit) {
+        const loadMore = document.createElement('button');
+        loadMore.className = 'btn btn-secondary btn-sm';
+        loadMore.style.cssText = 'width:100%; margin:12px 0 20px 0; border-radius:6px; font-size:0.8rem;';
+        loadMore.textContent = `Load More (${filtered.length - limit} remaining)…`;
+        loadMore.addEventListener('click', () => {
+          window.vaultSidebarLimit = (window.vaultSidebarLimit || 60) + 60;
+          refreshVaultList();
+        });
+        sidebarList.appendChild(loadMore);
+      }
 
     } catch (err) {
       console.error('Failed to load components list:', err);
@@ -340,7 +428,10 @@
         return;
       }
 
-      filtered.forEach(proj => {
+      const limit = window.projectsSidebarLimit || 60;
+      const chunk = filtered.slice(0, limit);
+
+      chunk.forEach(proj => {
         const item = document.createElement('div');
         item.className = 'vault-item';
         
@@ -389,6 +480,18 @@
 
         sidebarList.appendChild(item);
       });
+
+      if (filtered.length > limit) {
+        const loadMore = document.createElement('button');
+        loadMore.className = 'btn btn-secondary btn-sm';
+        loadMore.style.cssText = 'width:100%; margin:12px 0 20px 0; border-radius:6px; font-size:0.8rem;';
+        loadMore.textContent = `Load More (${filtered.length - limit} remaining)…`;
+        loadMore.addEventListener('click', () => {
+          window.projectsSidebarLimit = (window.projectsSidebarLimit || 60) + 60;
+          refreshProjectsList();
+        });
+        sidebarList.appendChild(loadMore);
+      }
     } catch (err) {
       console.error('Failed to load projects list:', err);
     }
@@ -536,9 +639,25 @@
         compIsTemplateCheck.checked = comp.isTemplate === true;
         btnCreateVariant.style.display = comp.isTemplate ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
+        
+        const roleEl = document.getElementById('comp-role');
+        if (roleEl) roleEl.value = comp.tracker?.role || '';
+        const factionEl = document.getElementById('comp-faction');
+        if (factionEl) factionEl.value = comp.tracker?.faction || '';
+
         updateTokenCount();
+
+        // Load Dependency Map (projects referencing this component)
+        await loadComponentDependencies(id);
       }
+    } else {
+      const depContainer = document.getElementById('editor-dep-container');
+      if (depContainer) depContainer.innerHTML = '';
     }
+
+    // Toggle Version History button visibility
+    const btnHistory = document.getElementById('btn-version-history');
+    if (btnHistory) btnHistory.style.display = id ? 'inline-flex' : 'none';
 
     if (compCategorySelect.value === 'character' || compCategorySelect.value === 'scenario') {
       editorTabsContainer.style.display = 'flex';
@@ -547,6 +666,38 @@
 
     showView('editor-view');
     editorIsDirty = false;  // fresh open — nothing changed yet
+  }
+
+  // Load projects using this component for Dependency Map
+  async function loadComponentDependencies(compTargetId) {
+    const depContainer = document.getElementById('editor-dep-container');
+    if (!depContainer) return;
+
+    try {
+      const allProjects = await window.ForgeDB.getAllProjects();
+      const matchingProjects = allProjects.filter(p => (p.componentIds || []).includes(compTargetId));
+
+      if (matchingProjects.length === 0) {
+        depContainer.innerHTML = `<div class="dep-panel-empty">📦 Used in 0 Projects</div>`;
+        return;
+      }
+
+      depContainer.innerHTML = `
+        <div class="dep-panel">
+          <div class="dep-panel-header">📦 Used in ${matchingProjects.length} Project${matchingProjects.length > 1 ? 's' : ''}</div>
+          <div class="dep-panel-list">
+            ${matchingProjects.map(p => `
+              <div class="dep-item">
+                <span class="dep-item-name">🤖 ${esc(p.name)}</span>
+                <button class="btn btn-ghost btn-sm dep-open-btn" data-project-id="${p.id}">Open ↗</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   async function saveComponentForm() {
@@ -594,6 +745,21 @@
       return;
     }
 
+    // Duplicate / Similarity Detection check for new components
+    if (!editingComponentId && window.ForgeDB?.findSimilarComponents) {
+      try {
+        const allComps = await window.ForgeDB.getAllComponents();
+        const similars = window.ForgeDB.findSimilarComponents(name, allComps, 0.85);
+        if (similars.length > 0) {
+          const matchNames = similars.map(s => s.name).join(', ');
+          const confirmProceed = confirm(`⚠️ Warning: Highly similar component(s) already exist in your Vault: "${matchNames}". Save anyway?`);
+          if (!confirmProceed) return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     const tags = compTagsInput.value.split(',')
       .map(t => t.trim())
       .filter(Boolean);
@@ -601,6 +767,9 @@
     const scenarios = compScenariosInput.value.split(',')
       .map(s => s.trim())
       .filter(Boolean);
+
+    const roleVal = document.getElementById('comp-role')?.value || '';
+    const factionVal = document.getElementById('comp-faction')?.value || '';
 
     const record = {
       id: editingComponentId,
@@ -610,11 +779,20 @@
       lineage: compLineageInput.value.trim(),
       scenarios,
       isTemplate: compIsTemplateCheck.checked,
-      tags
+      tags,
+      tracker: {
+        role: roleVal,
+        faction: factionVal
+      }
     };
 
     try {
       await window.ForgeDB.saveComponent(record);
+      if (pendingStubId) {
+        await window.ForgeDB.deleteTrackerRecord(pendingStubId);
+        pendingStubId = null;
+        if (window.MissionControl) await window.MissionControl.loadAll();
+      }
       editorIsDirty = false;  // saved — clear dirty flag
       showToast(`Component "${name}" saved!`, 'success');
       showView('welcome-view');
@@ -1233,10 +1411,13 @@
 
     // Sidebar search and filters
     searchInput.addEventListener('input', () => {
+      window.vaultSidebarLimit = 60;
+      window.projectsSidebarLimit = 60;
       if (activeSidebarTab === 'vault') refreshVaultList();
       else refreshProjectsList();
     });
     filterCat.addEventListener('change', refreshVaultList);
+    if (filterUniverse) filterUniverse.addEventListener('change', refreshVaultList);
     filterLineage.addEventListener('change', refreshVaultList);
     filterScenario.addEventListener('change', refreshVaultList);
     filterSort.addEventListener('change', refreshVaultList);
@@ -1291,7 +1472,18 @@
         if (!leave) return;
       }
       editorIsDirty = false;
-      showView('welcome-view');
+      if (window.lastViewMC) {
+        window.lastViewMC = false;
+        const btnMC = document.getElementById('btn-mission-control');
+        btnMC?.classList.add('active');
+        const mcView = document.getElementById('mission-control-view');
+        if (mcView) {
+          mcView.style.display = 'block';
+          window.MissionControl.renderCurrentTab();
+        }
+      } else {
+        showView('welcome-view');
+      }
     });
     btnBreakoutBack.addEventListener('click', () => showView('welcome-view'));
     btnAssemblerBack.addEventListener('click', () => showView('welcome-view'));
@@ -1305,8 +1497,136 @@
     });
     btnParlorBack.addEventListener('click', () => showView('welcome-view'));
 
+    // Mission Control Nav
+    const btnMC = document.getElementById('btn-mission-control');
+    if (btnMC) {
+      btnMC.addEventListener('click', async () => {
+        btnMC.classList.add('active');
+        // Hide all normal views, show MC
+        document.querySelectorAll('#main-canvas .view').forEach(v => v.classList.remove('active'));
+        const mcView = document.getElementById('mission-control-view');
+        if (mcView) {
+          mcView.style.display = 'block';
+          if (window.MissionControl) {
+            if (!document.getElementById('mc-content')) {
+              await window.MissionControl.init();
+            } else {
+              await window.MissionControl.loadAll();
+              await window.MissionControl.renderCurrentTab();
+            }
+          }
+        }
+      });
+    }
+
+    // Version History Drawer Handler
+    const btnVersionHistory = document.getElementById('btn-version-history');
+    if (btnVersionHistory) {
+      btnVersionHistory.addEventListener('click', async () => {
+        if (!editingComponentId) return;
+        const modal = document.getElementById('version-history-modal');
+        const list = document.getElementById('version-history-list');
+        if (!modal || !list) return;
+
+        list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Loading version history…</div>';
+        modal.classList.remove('hidden');
+
+        try {
+          const versions = await window.ForgeDB.getComponentVersions(editingComponentId);
+          if (versions.length === 0) {
+            list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No prior versions recorded for this component yet.</div>';
+            return;
+          }
+
+          list.innerHTML = versions.map((v, idx) => `
+            <div class="version-card">
+              <div class="version-card-header">
+                <strong>Version #${versions.length - idx}</strong> — ${new Date(v.timestamp).toLocaleString()}
+                <button class="btn btn-accent btn-sm btn-restore-version" data-version-id="${v.id}">Restore</button>
+              </div>
+              <div class="version-card-meta">Category: ${v.category} | Name: ${esc(v.name)}</div>
+              <pre class="version-card-content">${esc((v.content || '').substring(0, 200))}${v.content?.length > 200 ? '…' : ''}</pre>
+            </div>
+          `).join('');
+
+          list.querySelectorAll('.btn-restore-version').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const ver = versions.find(v => v.id === btn.dataset.versionId);
+              if (ver) {
+                compNameInput.value = ver.name;
+                compContentInput.value = ver.content;
+                compCategorySelect.value = ver.category;
+                editorIsDirty = true;
+                showToast(`Restored version from ${new Date(ver.timestamp).toLocaleTimeString()}`, 'success');
+                modal.classList.add('hidden');
+              }
+            });
+          });
+        } catch (err) {
+          console.error(err);
+          list.innerHTML = '<div style="color:var(--danger); padding:10px;">Failed to load versions.</div>';
+        }
+      });
+    }
+
+    // Auto-Backup Timer (IndexedDB target as requested)
+    function initAutoBackupTimer() {
+      const intervalMs = 30 * 60 * 1000; // 30 minutes
+      setInterval(async () => {
+        try {
+          const bundle = await window.ForgeDB.exportVault();
+          await window.ForgeDB.saveAutoBackup(JSON.stringify(bundle));
+          console.log('[Auto-Backup] Saved silent IndexedDB vault backup.');
+        } catch (e) {
+          console.error('[Auto-Backup] Error during silent backup:', e);
+        }
+      }, intervalMs);
+    }
+    initAutoBackupTimer();
+
+    // Keyboard Shortcuts Help Modal Toggle (?)
+    document.addEventListener('keydown', (e) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+      if (!isInput && e.key === '?') {
+        const kbdModal = document.getElementById('kbd-shortcuts-modal');
+        if (kbdModal) kbdModal.classList.toggle('hidden');
+      }
+    });
+
+    // Expose bridge so MissionControl can open the Vault editor
+    window.ForgeAppBridge = {
+      openEditor: (id) => {
+        window.lastViewMC = true;
+        btnMC?.classList.remove('active');
+        document.getElementById('mission-control-view').style.display = 'none';
+        openComponentEditor(id);
+      },
+      openEditorNew: (prefill) => {
+        window.lastViewMC = true;
+        btnMC?.classList.remove('active');
+        document.getElementById('mission-control-view').style.display = 'none';
+        pendingStubId = prefill?._stubId || null;
+        // Pre-fill editor fields then open it
+        openComponentEditor(null);
+        if (prefill) {
+          setTimeout(() => {
+            if (prefill.name) { const el = document.getElementById('comp-name'); if(el) el.value = prefill.name; }
+            if (prefill.category) { const el = document.getElementById('comp-category'); if(el) el.value = prefill.category; }
+            if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if(el) el.value = prefill.tags.join(', '); }
+          }, 100);
+        }
+      }
+    };
+
     // Initial List Load
     await refreshVaultList();
+
+    // Init Mission Control (lazy — only renders when opened)
+    if (window.MissionControl) await window.MissionControl.init();
+
+    // Init Omni-Search module
+    if (window.OmniSearch) window.OmniSearch.init();
 
     console.log('Anansi Forge fully initialized.');
   }

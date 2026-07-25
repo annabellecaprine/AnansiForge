@@ -1,7 +1,7 @@
 /**
  * db.js - IndexedDB wrapper for Anansi Forge.
  * 
- * Database: "anansi-forge" v5
+ * Database: "anansi-forge" v10
  * Stores:
  *   - "vault_components" (keyPath: "id")
  *   - "projects" (keyPath: "id")
@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 5;
+  const DB_VERSION = 10;
   
   let dbInstance = null;
 
@@ -30,6 +30,30 @@
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
+  }
+
+  function defaultTrackerPipeline(category) {
+    if (category === 'story') {
+      return { concept: false, notesReady: false, initialMessage: false, bio: false, otherMessages: false, testing: false, complete: false, published: false };
+    }
+    if (category === 'release') {
+      return { staged: false, bio: false, scenario: false, initialMessage: false, personalityLocked: false, thumbnail: false, banner: false, tagsDone: false, initialTest: false, regressionTest: false, finalPolish: false, ready: false, released: false, hotfixNeeded: false };
+    }
+    // character, scenario, bio, initial_message, organization, concept_stub
+    return { generated: false, goldenTemplate: false, test1: false, trimmed: false, test2: false, complete: false, published: false };
+  }
+
+  function defaultTracker() {
+    return {
+      universe: '',
+      project: '',
+      role: '',         // 'Hero' | 'Villain' | 'AntiHero' | 'Support' | 'Other'
+      faction: '',      // e.g. 'X-Men', 'Avengers', 'Sinister Six'
+      priority: null,
+      pipeline: defaultTrackerPipeline('character'),
+      publishedDate: null,
+      trackerTags: []
+    };
   }
 
   async function runSchemaMigration(db) {
@@ -66,6 +90,12 @@
         // Migrate legacy setting/rules/lore categories to scenario
         if (rec.category === 'setting' || rec.category === 'rules' || rec.category === 'lore') {
           rec.category = 'scenario';
+          changed = true;
+        }
+        // v6: inject tracker metadata field
+        if (rec.tracker === undefined) {
+          rec.tracker = defaultTracker();
+          rec.tracker.pipeline = defaultTrackerPipeline(rec.category || 'character');
           changed = true;
         }
         
@@ -133,6 +163,53 @@
         if (!db.objectStoreNames.contains('personas')) {
           db.createObjectStore('personas', { keyPath: 'id' });
         }
+
+        // 6. Tracker Records Store (Stories, Releases, Concept Stubs)
+        if (!db.objectStoreNames.contains('tracker_records')) {
+          const trStore = db.createObjectStore('tracker_records', { keyPath: 'id' });
+          trStore.createIndex('assetType', 'assetType', { unique: false });
+          trStore.createIndex('name', 'name', { unique: false });
+          trStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 7. Component Versions
+        if (!db.objectStoreNames.contains('component_versions')) {
+          const cvStore = db.createObjectStore('component_versions', { keyPath: 'id' });
+          cvStore.createIndex('componentId', 'componentId', { unique: false });
+          cvStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+        
+        // 8. Activity Log
+        if (!db.objectStoreNames.contains('activity_log')) {
+          const alStore = db.createObjectStore('activity_log', { keyPath: 'id' });
+          alStore.createIndex('timestamp', 'timestamp', { unique: false });
+          alStore.createIndex('targetType', 'targetType', { unique: false });
+        }
+
+        // 9. Snapshots
+        if (!db.objectStoreNames.contains('snapshots')) {
+          const snapStore = db.createObjectStore('snapshots', { keyPath: 'id' });
+          snapStore.createIndex('date', 'date', { unique: true });
+        }
+
+        // 10. Auto Backups
+        if (!db.objectStoreNames.contains('auto_backups')) {
+          const backupStore = db.createObjectStore('auto_backups', { keyPath: 'id' });
+          backupStore.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+
+        // 11. Universes & Genres Store
+        if (!db.objectStoreNames.contains('universes')) {
+          const uniStore = db.createObjectStore('universes', { keyPath: 'id' });
+          uniStore.createIndex('name', 'name', { unique: true });
+          uniStore.createIndex('genre', 'genre', { unique: false });
+          DEFAULT_UNIVERSES.forEach(u => uniStore.put(u));
+        } else {
+          try {
+            const uniTx = event.target.transaction.objectStore('universes');
+            DEFAULT_UNIVERSES.forEach(u => uniTx.put(u));
+          } catch(e) {}
+        }
       };
 
       request.onsuccess = async (event) => {
@@ -183,35 +260,65 @@
 
   async function saveComponent(comp) {
     const db = dbInstance || await initDB();
+    const existing = comp.id ? await getComponent(comp.id) : null;
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
     
     const now = new Date().toISOString();
+    const cat = comp.category || existing?.category || 'character';
+    const tracker = comp.tracker || existing?.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] };
+
     const record = {
+      ...(existing || {}),
       ...comp,
       id: comp.id || generateId(),
-      name: (comp.name || 'Unnamed Item').trim(),
-      category: comp.category || 'character',
-      lineage: (comp.lineage || '').trim(),
-      scenarios: Array.isArray(comp.scenarios) ? comp.scenarios : [],
-      isTemplate: comp.isTemplate === true,
-      content: comp.content || '',
-      tags: Array.isArray(comp.tags) ? comp.tags : [],
-      createdAt: comp.createdAt || now,
+      name: (comp.name || existing?.name || 'Unnamed Item').trim(),
+      category: cat,
+      lineage: (comp.lineage !== undefined ? comp.lineage : existing?.lineage || '').trim(),
+      scenarios: Array.isArray(comp.scenarios) ? comp.scenarios : (existing?.scenarios || []),
+      isTemplate: comp.isTemplate !== undefined ? (comp.isTemplate === true) : (existing?.isTemplate === true),
+      content: comp.content !== undefined ? comp.content : (existing?.content || ''),
+      tags: Array.isArray(comp.tags) ? comp.tags : (existing?.tags || []),
+      tracker: tracker,
+      createdAt: comp.createdAt || existing?.createdAt || now,
       modifiedAt: now
     };
     // Ensure old cluster key is not persisted
     delete record.cluster;
     
     await promisify(store.put(record));
+
+    // Activity Log
+    logActivity({
+      action: existing ? 'edited' : 'created',
+      targetType: 'component',
+      targetId: record.id,
+      targetName: record.name,
+      details: record.category
+    });
+
+    // Version History
+    if (existing) {
+      saveComponentVersion(record.id, {
+        name: record.name,
+        content: record.content,
+        category: record.category,
+        tags: record.tags,
+        tracker: record.tracker
+      });
+    }
+
     return record;
   }
 
   async function deleteComponent(id) {
     const db = dbInstance || await initDB();
+    const comp = await getComponent(id);
+    const name = comp ? comp.name : 'Unknown';
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
-    return promisify(store.delete(id));
+    await promisify(store.delete(id));
+    logActivity({ action: 'deleted', targetType: 'component', targetId: id, targetName: name });
   }
 
   // --- Project CRUD ---
@@ -361,32 +468,586 @@
     return promisify(store.delete(id));
   }
 
+  // --- Tracker Records CRUD ---
+
+  const VALID_STORY_STATUSES = new Set(['Active', 'Promoted', 'Archived']);
+  const VALID_RELEASE_SOURCES = new Set(['story', 'existing_bot', 'legacy_import', 'manual', 'experiment']);
+
+  /**
+   * Normalizes a tracker record on read so legacy/uninitialized records never break UI state
+   */
+  function normalizeTrackerRecord(rec) {
+    if (!rec) return rec;
+    const aType = rec.assetType || 'concept_stub';
+
+    // Normalize Story specific fields
+    if (aType === 'story') {
+      if (!rec.status || !VALID_STORY_STATUSES.has(rec.status)) {
+        rec.status = 'Active';
+      }
+      if (!Array.isArray(rec.releaseIds)) {
+        rec.releaseIds = rec.promotedToReleaseId ? [rec.promotedToReleaseId] : [];
+      }
+      if (!Array.isArray(rec.linkedVaultIds)) {
+        rec.linkedVaultIds = [];
+      }
+    }
+
+    // Normalize Release specific fields
+    if (aType === 'release') {
+      if (!rec.releaseSource || !VALID_RELEASE_SOURCES.has(rec.releaseSource)) {
+        rec.releaseSource = rec.sourceStoryId ? 'story' : 'manual';
+      }
+      if (rec.sourceStoryId === undefined) {
+        rec.sourceStoryId = null;
+      }
+    }
+
+    // Common defaults
+    if (!Array.isArray(rec.tags)) rec.tags = [];
+    if (!Array.isArray(rec.linkedVaultIds)) rec.linkedVaultIds = [];
+    if (!rec.notes) rec.notes = '';
+    if (!rec.pipeline) rec.pipeline = defaultTrackerPipeline(aType);
+
+    return rec;
+  }
+
+  async function getAllTrackerRecords() {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readonly');
+    const store = tx.objectStore('tracker_records');
+    const records = await promisify(store.getAll());
+    return (records || []).map(normalizeTrackerRecord);
+  }
+
+  async function getTrackerRecord(id) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readonly');
+    const store = tx.objectStore('tracker_records');
+    const record = await promisify(store.get(id));
+    return normalizeTrackerRecord(record);
+  }
+
+  async function saveTrackerRecord(rec) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readwrite');
+    const store = tx.objectStore('tracker_records');
+    const now = new Date().toISOString();
+    const aType = rec.assetType || 'concept_stub';
+
+    // Save-time validation & default enforcement
+    let status = rec.status;
+    if (aType === 'story') {
+      status = VALID_STORY_STATUSES.has(status) ? status : 'Active';
+    }
+
+    let releaseSource = rec.releaseSource;
+    if (aType === 'release') {
+      releaseSource = VALID_RELEASE_SOURCES.has(releaseSource) ? releaseSource : (rec.sourceStoryId ? 'story' : 'manual');
+    }
+
+    const record = {
+      ...rec,
+      id: rec.id || generateId(),
+      assetType: aType,
+      name: (rec.name || 'Unnamed').trim(),
+      universe: rec.universe || '',
+      project: rec.project || '',
+      priority: rec.priority || null,
+      tags: Array.isArray(rec.tags) ? rec.tags : [],
+      notes: rec.notes || '',
+      linkedVaultIds: Array.isArray(rec.linkedVaultIds) ? rec.linkedVaultIds : [],
+      pipeline: rec.pipeline || defaultTrackerPipeline(aType),
+      // story-specific
+      status: status || 'Active',
+      releaseIds: Array.isArray(rec.releaseIds) ? rec.releaseIds : (rec.promotedToReleaseId ? [rec.promotedToReleaseId] : []),
+      // release-specific
+      releaseSource: releaseSource || 'manual',
+      sourceStoryId: rec.sourceStoryId || null,
+      projectId: rec.projectId || null,
+      visibility: rec.visibility || null,
+      scheduledDate: rec.scheduledDate || null,
+      metrics: rec.metrics || { messages: 0, chats: 0 },
+      // stub-specific
+      intendedCategory: rec.intendedCategory || 'character',
+      promotedToVaultId: rec.promotedToVaultId || null,
+      createdAt: rec.createdAt || now,
+      updatedAt: now
+    };
+    await promisify(store.put(record));
+    return normalizeTrackerRecord(record);
+  }
+
+  async function deleteTrackerRecord(id) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('tracker_records', 'readwrite');
+    const store = tx.objectStore('tracker_records');
+    return promisify(store.delete(id));
+  }
+
+  async function updateVaultTracker(id, trackerPatch, updateModifiedAt = true) {
+    const db = dbInstance || await initDB();
+    const comp = await getComponent(id);
+    if (!comp) throw new Error('Component not found: ' + id);
+    comp.tracker = { ...(comp.tracker || defaultTracker()), ...trackerPatch };
+    if (updateModifiedAt) {
+      comp.modifiedAt = new Date().toISOString();
+    }
+    const tx = db.transaction('vault_components', 'readwrite');
+    const store = tx.objectStore('vault_components');
+    await promisify(store.put(comp));
+    
+    logActivity({
+      action: 'tracker_updated',
+      targetType: 'component',
+      targetId: id,
+      targetName: comp.name,
+      details: Object.keys(trackerPatch).join(', ')
+    });
+    
+    return comp;
+  }
+
+  // --- Universes & Genres Registry CRUD ---
+
+  const DEFAULT_UNIVERSES = [
+    // Comics
+    { id: 'dc', name: 'DC', genre: 'Comics', color: '#2563eb' },
+    { id: 'marvel', name: 'Marvel', genre: 'Comics', color: '#dc2626' },
+    { id: 'hellboy', name: 'Hellboy', genre: 'Comics', color: '#b91c1c' },
+    { id: 'invincible', name: 'Invincible', genre: 'Comics', color: '#f59e0b' },
+    { id: 'oc', name: 'OC', genre: 'Comics', color: '#7c3aed' },
+    { id: 'mixed', name: 'Mixed', genre: 'Comics', color: '#d97706' },
+    // Sci-Fi & Space Opera
+    { id: 'star_wars', name: 'Star Wars', genre: 'Sci-Fi & Space Opera', color: '#0284c7' },
+    { id: 'star_trek', name: 'Star Trek', genre: 'Sci-Fi & Space Opera', color: '#0369a1' },
+    { id: 'firefly', name: 'Firefly', genre: 'Sci-Fi & Space Opera', color: '#ea580c' },
+    { id: 'stargate', name: 'Stargate', genre: 'Sci-Fi & Space Opera', color: '#0891b2' },
+    { id: 'mass_effect', name: 'Mass Effect', genre: 'Sci-Fi & Space Opera', color: '#2563eb' },
+    { id: 'babylon_5', name: 'Babylon 5', genre: 'Sci-Fi & Space Opera', color: '#4f46e5' },
+    // Urban Fantasy
+    { id: 'supernatural', name: 'Supernatural', genre: 'Urban Fantasy', color: '#78350f' },
+    { id: 'buffy', name: 'Buffy', genre: 'Urban Fantasy', color: '#9333ea' },
+    { id: 'angel', name: 'Angel', genre: 'Urban Fantasy', color: '#6b21a8' },
+    { id: 'dresden_files', name: 'Dresden Files', genre: 'Urban Fantasy', color: '#1e293b' },
+    { id: 'grimm', name: 'Grimm', genre: 'Urban Fantasy', color: '#15803d' },
+    { id: 'constantine', name: 'Constantine', genre: 'Urban Fantasy', color: '#ca8a04' },
+    { id: 'daniel_faust', name: 'Daniel Faust', genre: 'Urban Fantasy', color: '#881337' },
+    // Fantasy
+    { id: 'lotr', name: 'LotR', genre: 'Fantasy', color: '#15803d' },
+    { id: 'dragon_age', name: 'Dragon Age', genre: 'Fantasy', color: '#991b1b' },
+    { id: 'elder_scrolls', name: 'Elder Scrolls', genre: 'Fantasy', color: '#854d0e' },
+    { id: 'dnd', name: 'D&D', genre: 'Fantasy', color: '#dc2626' },
+    { id: 'witcher', name: 'Witcher', genre: 'Fantasy', color: '#374151' },
+    // Adventure / Pulp
+    { id: 'indiana_jones', name: 'Indiana Jones', genre: 'Adventure / Pulp', color: '#d97706' },
+    { id: 'the_shadow', name: 'The Shadow', genre: 'Adventure / Pulp', color: '#111827' },
+    { id: 'the_phantom', name: 'The Phantom', genre: 'Adventure / Pulp', color: '#7c3aed' },
+    { id: 'doc_savage', name: 'Doc Savage', genre: 'Adventure / Pulp', color: '#ca8a04' },
+    { id: 'zorro', name: 'Zorro', genre: 'Adventure / Pulp', color: '#991b1b' },
+    { id: 'dick_tracy', name: 'Dick Tracy', genre: 'Adventure / Pulp', color: '#f59e0b' },
+    { id: 'the_rocketeer', name: 'The Rocketeer', genre: 'Adventure / Pulp', color: '#b91c1c' },
+    // Detective
+    { id: 'sherlock', name: 'Sherlock', genre: 'Detective', color: '#475569' },
+    { id: 'lupin', name: 'Lupin', genre: 'Detective', color: '#c026d3' },
+    { id: 'columbo', name: 'Columbo', genre: 'Detective', color: '#854d0e' },
+    // General
+    { id: 'other', name: 'Other', genre: 'General', color: '#6b7280' }
+  ];
+
+  async function getAllUniverses() {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) {
+      return DEFAULT_UNIVERSES;
+    }
+    const tx = db.transaction('universes', 'readonly');
+    const store = tx.objectStore('universes');
+    return new Promise((resolve) => {
+      const req = store.getAll();
+      req.onsuccess = () => {
+        let list = req.result || [];
+        if (list.length === 0) {
+          resolve(DEFAULT_UNIVERSES);
+        } else {
+          resolve(list);
+        }
+      };
+      req.onerror = () => resolve(DEFAULT_UNIVERSES);
+    });
+  }
+
+  async function getUniverse(id) {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) return null;
+    const tx = db.transaction('universes', 'readonly');
+    const store = tx.objectStore('universes');
+    return promisify(store.get(id));
+  }
+
+  async function saveUniverse(uni) {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) return null;
+    const name = (uni.name || 'Universe').trim();
+    const id = uni.id || name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const record = {
+      id,
+      name,
+      genre: (uni.genre || 'General').trim(),
+      color: uni.color || '#6b7280',
+      isCustom: uni.isCustom !== undefined ? uni.isCustom : true,
+      updatedAt: new Date().toISOString()
+    };
+    const tx = db.transaction('universes', 'readwrite');
+    const store = tx.objectStore('universes');
+    await promisify(store.put(record));
+    return record;
+  }
+
+  async function deleteUniverse(id) {
+    const db = dbInstance || await initDB();
+    if (!db.objectStoreNames.contains('universes')) return;
+    const tx = db.transaction('universes', 'readwrite');
+    const store = tx.objectStore('universes');
+    return promisify(store.delete(id));
+  }
+
+  async function getUniverseColorMap() {
+    const list = await getAllUniverses();
+    const map = {};
+    list.forEach(u => {
+      if (u.name) map[u.name] = u.color || '#6b7280';
+      if (u.id) map[u.id] = u.color || '#6b7280';
+    });
+    return map;
+  }
+
+  // --- Version History ---
+  async function saveComponentVersion(componentId, snapshot) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('component_versions', 'readwrite');
+    const store = tx.objectStore('component_versions');
+    const record = { id: generateId(), componentId, ...snapshot, timestamp: new Date().toISOString() };
+    await promisify(store.put(record));
+    deleteOldVersions(componentId, 10);
+  }
+
+  async function getComponentVersions(componentId) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('component_versions', 'readonly');
+    const store = tx.objectStore('component_versions');
+    const index = store.index('componentId');
+    const results = await new Promise((resolve, reject) => {
+      const req = index.getAll(componentId);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  async function deleteOldVersions(componentId, keepCount) {
+    const versions = await getComponentVersions(componentId);
+    if (versions.length <= keepCount) return;
+    const db = dbInstance || await initDB();
+    const toDelete = versions.slice(keepCount);
+    const tx = db.transaction('component_versions', 'readwrite');
+    const store = tx.objectStore('component_versions');
+    for (const v of toDelete) {
+      store.delete(v.id);
+    }
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  // --- Activity Logging ---
+  async function logActivity(entry) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('activity_log', 'readwrite');
+    const store = tx.objectStore('activity_log');
+    const record = { id: generateId(), ...entry, timestamp: new Date().toISOString() };
+    await promisify(store.put(record));
+    pruneActivityLog(500); // fire and forget
+  }
+
+  async function getRecentActivity(limit = 50) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('activity_log', 'readonly');
+    const store = tx.objectStore('activity_log');
+    const index = store.index('timestamp');
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < limit) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  let lastPruneTime = 0;
+  async function pruneActivityLog(keepCount = 500) {
+    const now = Date.now();
+    if (now - lastPruneTime < 30000) return; // Throttle to run at most once per 30 seconds
+    lastPruneTime = now;
+
+    try {
+      const db = dbInstance || await initDB();
+      const txRead = db.transaction('activity_log', 'readonly');
+      const storeRead = txRead.objectStore('activity_log');
+      
+      const count = await promisify(storeRead.count());
+      if (count <= keepCount) return;
+
+      const index = storeRead.index('timestamp');
+      const entries = await new Promise((resolve, reject) => {
+        const req = index.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      if (entries.length <= keepCount) return;
+      
+      const toDelete = entries.slice(keepCount);
+      const txDelete = db.transaction('activity_log', 'readwrite');
+      const storeDelete = txDelete.objectStore('activity_log');
+      for (const entry of toDelete) {
+        storeDelete.delete(entry.id);
+      }
+    } catch (e) {
+      console.warn('Prune activity log skipped:', e);
+    }
+  }
+
+  // --- Snapshots ---
+  async function captureSnapshot() {
+    const components = await getAllComponents();
+    const records = await getAllTrackerRecords();
+
+    let publishedVault = 0;
+    const byCategory = {};
+    const universes = {};
+    
+    components.forEach(c => {
+      if (c.tracker && c.tracker.pipeline && c.tracker.pipeline.published) {
+        publishedVault++;
+      }
+      const cat = c.category || 'character';
+      if (!byCategory[cat]) byCategory[cat] = { total: 0, published: 0 };
+      byCategory[cat].total++;
+      if (c.tracker && c.tracker.pipeline && c.tracker.pipeline.published) {
+        byCategory[cat].published++;
+      }
+      if (c.tracker && c.tracker.universe) {
+        const u = c.tracker.universe;
+        universes[u] = (universes[u] || 0) + 1;
+      }
+    });
+
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    const releases = records.filter(r => r.assetType === 'release');
+    const isReleased = (r) => {
+      if (r.pipeline?.released || r.pipeline?.published) return true;
+      if (r.scheduledDate && r.scheduledDate <= dateStr) return true;
+      return false;
+    };
+    const publishedReleases = releases.filter(isReleased).length;
+
+    const totalItems = components.length + releases.length;
+    const publishedCount = publishedVault + publishedReleases;
+
+    const db = dbInstance || await initDB();
+    
+    // Check if snapshot for today exists
+    const txCheck = db.transaction('snapshots', 'readonly');
+    const storeCheck = txCheck.objectStore('snapshots');
+    const index = storeCheck.index('date');
+    const existing = await new Promise((resolve, reject) => {
+      const req = index.get(dateStr);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    const snapshot = {
+      id: existing ? existing.id : generateId(),
+      date: dateStr,
+      totalItems,
+      publishedCount,
+      publishedVault,
+      publishedReleases,
+      totalVault: components.length,
+      totalReleases: releases.length,
+      byCategory,
+      universes,
+      timestamp: new Date().toISOString()
+    };
+    
+    await saveSnapshot(snapshot);
+    return snapshot;
+  }
+
+  async function getSnapshots(limit = 12) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('snapshots', 'readonly');
+    const store = tx.objectStore('snapshots');
+    const index = store.index('date');
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < limit) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  async function saveSnapshot(snapshot) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('snapshots', 'readwrite');
+    const store = tx.objectStore('snapshots');
+    return promisify(store.put(snapshot));
+  }
+
+  // --- Auto-Backup ---
+  async function saveAutoBackup(bundleJSON) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('auto_backups', 'readwrite');
+    const store = tx.objectStore('auto_backups');
+    const record = { id: generateId(), bundle: bundleJSON, createdAt: new Date().toISOString() };
+    await promisify(store.put(record));
+    
+    const all = await getAllAutoBackups();
+    if (all.length > 3) {
+      const toDelete = all.slice(3);
+      const txDelete = db.transaction('auto_backups', 'readwrite');
+      const storeDelete = txDelete.objectStore('auto_backups');
+      for (const b of toDelete) {
+        storeDelete.delete(b.id);
+      }
+    }
+  }
+
+  async function getLatestAutoBackup() {
+    const all = await getAllAutoBackups();
+    return all.length > 0 ? all[0] : null;
+  }
+
+  async function getAllAutoBackups() {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('auto_backups', 'readonly');
+    const store = tx.objectStore('auto_backups');
+    const index = store.index('createdAt');
+    const results = await new Promise((resolve, reject) => {
+      const req = index.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return results.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  // --- Duplicate Detection ---
+  function normalizeForComparison(str) {
+    if (!str) return '';
+    return str.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  }
+
+  function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
+  function findSimilarComponents(name, components, threshold = 0.8) {
+    const normName = normalizeForComparison(name);
+    if (!normName) return [];
+    
+    return components.filter(c => {
+      const normC = normalizeForComparison(c.name);
+      if (!normC) return false;
+      const dist = levenshteinDistance(normName, normC);
+      const maxLen = Math.max(normName.length, normC.length);
+      const sim = 1 - (dist / maxLen);
+      return sim >= threshold;
+    });
+  }
+
   // --- Vault Backup / Restore ---
 
   async function exportVault() {
-    const components = await getAllComponents();
-    const projects   = await getAllProjects();
-    const personas   = await getAllPersonas();
+    const components     = await getAllComponents();
+    const projects       = await getAllProjects();
+    const personas       = await getAllPersonas();
+    const trackerRecords = await getAllTrackerRecords();
+    
+    let component_versions = [];
+    let activity_log = [];
+    try {
+      const db = dbInstance || await initDB();
+      const tx = db.transaction(['component_versions', 'activity_log'], 'readonly');
+      component_versions = await promisify(tx.objectStore('component_versions').getAll());
+      activity_log = await promisify(tx.objectStore('activity_log').getAll());
+    } catch (e) {
+      console.warn('Could not export versions/activity', e);
+    }
+
     return {
-      _version: 1,
+      _version: 3,
       _exportedAt: new Date().toISOString(),
       components,
       projects,
-      personas
+      personas,
+      trackerRecords,
+      component_versions,
+      activity_log
     };
   }
 
   async function importVault(bundle) {
-    if (!bundle || bundle._version !== 1) throw new Error('Unrecognised backup format.');
+    if (!bundle || (bundle._version !== 1 && bundle._version !== 2 && bundle._version !== 3)) throw new Error('Unrecognised backup format.');
     const db = dbInstance || await initDB();
 
-    const stores = ['vault_components', 'projects', 'personas'];
-    const keys   = ['components',       'projects',  'personas'];
+    const stores = ['vault_components', 'projects', 'personas', 'tracker_records', 'component_versions', 'activity_log'];
+    const keys   = ['components',       'projects',  'personas', 'trackerRecords',  'component_versions', 'activity_log'];
 
     for (let i = 0; i < stores.length; i++) {
       const storeName = stores[i];
       const records   = bundle[keys[i]] || [];
       if (!records.length) continue;
+
+      if (!db.objectStoreNames.contains(storeName)) continue;
 
       await new Promise((resolve, reject) => {
         const tx    = db.transaction(storeName, 'readwrite');
@@ -420,7 +1081,33 @@
     getPersona,
     savePersona,
     deletePersona,
+    getAllTrackerRecords,
+    getTrackerRecord,
+    saveTrackerRecord,
+    deleteTrackerRecord,
+    getAllUniverses,
+    getUniverse,
+    saveUniverse,
+    deleteUniverse,
+    getUniverseColorMap,
+    DEFAULT_UNIVERSES,
+    updateVaultTracker,
+    defaultTrackerPipeline,
     exportVault,
-    importVault
+    importVault,
+    saveComponentVersion,
+    getComponentVersions,
+    deleteOldVersions,
+    logActivity,
+    getRecentActivity,
+    pruneActivityLog,
+    captureSnapshot,
+    getSnapshots,
+    saveSnapshot,
+    saveAutoBackup,
+    getLatestAutoBackup,
+    getAllAutoBackups,
+    findSimilarComponents,
+    levenshteinDistance
   };
 })();
