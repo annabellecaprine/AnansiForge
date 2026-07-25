@@ -3163,7 +3163,6 @@ ${releasesMd}
     const rec = state.allTrackerRecords.find(r => r.id === recordId) || state.allComponents.find(c => c.id === recordId);
     if (!rec) return;
 
-    const isRecord = !!rec.assetType;
     const name = rec.name;
     const universe = rec.universe || (rec.tracker?.universe) || '';
     const m = rec.metrics || {};
@@ -3174,7 +3173,6 @@ ${releasesMd}
     const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
     const mpc = totalChats > 0 ? curMpc.toFixed(2) : '—';
 
-    // Determine actual release / launch date (Scheduled Date takes first priority)
     let launchDate = null;
     if (rec.scheduledDate && !isNaN(new Date(rec.scheduledDate).getTime())) {
       launchDate = new Date(rec.scheduledDate);
@@ -3182,14 +3180,9 @@ ${releasesMd}
       launchDate = new Date(rec.publishedDate);
     } else if (rec.createdAt && !isNaN(new Date(rec.createdAt).getTime())) {
       launchDate = new Date(rec.createdAt);
-    } else if (rec.modifiedAt && !isNaN(new Date(rec.modifiedAt).getTime())) {
-      launchDate = new Date(rec.modifiedAt);
     } else {
       launchDate = new Date();
     }
-
-    const now = new Date();
-    const daysActive = Math.max(0, Math.floor((now - launchDate) / (1000 * 60 * 60 * 24)));
 
     const dataPoints = [];
     const mpcPoints = [];
@@ -3204,64 +3197,27 @@ ${releasesMd}
       return dStr;
     };
 
-    if (daysActive <= 30) {
-      // Recent release (launched within the last 30 days): gather launch & all real snapshots
-      const snapDate = parseDateTime(m.date, m.time) || (rec.updatedAt ? new Date(rec.updatedAt) : now);
+    // Single, 100% empirical trajectory generator (NO ratio math or fake month multipliers EVER)
+    const snapDate = parseDateTime(m.date, m.time) || (rec.updatedAt ? new Date(rec.updatedAt) : new Date());
 
-      // Gather all historical snapshots from metricsHistory, previousMetrics, and IndexedDB activity_log
-      const rawList = [];
+    // Gather all real historical snapshots from metricsHistory, previousMetrics, and IndexedDB activity_log
+    const rawList = [];
 
-      if (window.ForgeDB?.getTargetActivity) {
-        try {
-          const logs = await window.ForgeDB.getTargetActivity(rec.id);
-          logs.forEach(log => {
-            if (log.action === 'metrics_updated' && log.details) {
-              const match = log.details.match(/(\d+)\s*msgs/i);
-              if (match) {
-                const msgs = parseInt(match[1], 10);
-                const dt = new Date(log.timestamp);
-                if (!isNaN(dt.getTime()) && msgs > 0) {
-                  rawList.push({ dateObj: dt, messages: msgs, uniqueChats: 0 });
-                }
+    if (window.ForgeDB?.getTargetActivity) {
+      try {
+        const logs = await window.ForgeDB.getTargetActivity(rec.id);
+        logs.forEach(log => {
+          if (log.action === 'metrics_updated' && log.details) {
+            const match = log.details.match(/(\d+)\s*msgs/i);
+            if (match) {
+              const msgs = parseInt(match[1], 10);
+              const dt = new Date(log.timestamp);
+              if (!isNaN(dt.getTime()) && msgs > 0) {
+                rawList.push({ dateObj: dt, messages: msgs, uniqueChats: 0 });
               }
             }
-          });
-        } catch(e) {
-          console.warn('Could not query activity_log for historical metrics:', e);
-        }
-      }
-
-      if (Array.isArray(rec.metricsHistory)) {
-        rec.metricsHistory.forEach(h => {
-          if (h && (h.messages > 0 || h.uniqueChats > 0)) {
-            let dt = (h.date && !isNaN(new Date(h.date).getTime())) ? new Date(h.date) : (h.updatedAt ? new Date(h.updatedAt) : null);
-            rawSnapshots.push({ dateObj: dt, messages: h.messages || 0, uniqueChats: h.uniqueChats || 0 });
           }
         });
-      }
-
-      if (prev && (prev.messages > 0 || prev.uniqueChats > 0)) {
-        let dt = prev.updatedAt ? new Date(prev.updatedAt) : null;
-        rawSnapshots.push({ dateObj: dt, messages: prev.messages || 0, uniqueChats: prev.uniqueChats || 0 });
-      }
-
-      // Check if multiple snapshots occurred on the same day to toggle time labels
-      const allDates = [launchDate, ...rawSnapshots.map(s => s.dateObj), latestDate].filter(Boolean);
-      const dayCounts = {};
-      allDates.forEach(d => {
-        const k = d.toDateString();
-        dayCounts[k] = (dayCounts[k] || 0) + 1;
-      });
-      const useTimeLabels = Object.values(dayCounts).some(c => c > 1);
-
-      const launchLabel = `Launch (${formatLabel(launchDate)})`;
-      dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
-      mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
-
-      // Process and add all valid intermediate snapshots
-      rawSnapshots.forEach(snap => {
-        let sDate = snap.dateObj;
-        if (!sDate || sDate.getTime() >= latestDate.getTime() - 60000 || sDate.getTime() <= launchDate.getTime() + 60000) return;
         
         const sMsgs = Math.min(snap.messages, totalMsgs);
         const sMpc = snap.uniqueChats > 0 ? parseFloat((sMsgs / snap.uniqueChats).toFixed(2)) : 0;
