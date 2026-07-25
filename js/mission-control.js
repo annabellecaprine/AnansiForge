@@ -3169,26 +3169,42 @@ ${releasesMd}
     };
 
     if (daysActive <= 30) {
-      // Recent release (launched within the last 30 days): plot actual launch/snapshot dates
+      // Recent release (launched within the last 30 days): plot actual launch/snapshot dates in chronological order
       const launchLabel = `Launch (${formatLabel(launchDate)})`;
-      dataPoints.push({ label: launchLabel, value: 0 });
-      mpcPoints.push({ label: launchLabel, value: 0 });
+      dataPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
+      mpcPoints.push({ dateObj: launchDate, label: launchLabel, value: 0 });
 
       if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
-        const prevDate = prev.updatedAt ? new Date(prev.updatedAt) : new Date(launchDate.getTime() + (now.getTime() - launchDate.getTime()) / 2);
+        let prevDate = prev.updatedAt ? new Date(prev.updatedAt) : new Date(launchDate.getTime() + 1000);
         const prevMsgs = prev.messages || 0;
         const prevChats = prev.uniqueChats || 0;
         const prevMpcVal = prevChats > 0 ? parseFloat((prevMsgs / prevChats).toFixed(2)) : 0;
 
-        const prevLabel = formatLabel(prevDate);
-        dataPoints.push({ label: prevLabel, value: prevMsgs });
-        mpcPoints.push({ label: prevLabel, value: prevMpcVal });
+        dataPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMsgs });
+        mpcPoints.push({ dateObj: prevDate, label: formatLabel(prevDate), value: prevMpcVal });
       }
 
-      const snapDate = m.date ? new Date(m.date) : now;
-      const currentLabel = m.date ? formatLabel(snapDate) : 'Latest';
-      dataPoints.push({ label: currentLabel, value: totalMsgs });
-      mpcPoints.push({ label: currentLabel, value: curMpc });
+      let snapDate = (m.date && !isNaN(new Date(m.date).getTime())) ? new Date(m.date) : (rec.updatedAt ? new Date(rec.updatedAt) : now);
+      if (snapDate < launchDate) snapDate = new Date(launchDate.getTime() + 2000);
+
+      dataPoints.push({ dateObj: snapDate, label: formatLabel(snapDate), value: totalMsgs });
+      mpcPoints.push({ dateObj: snapDate, label: formatLabel(snapDate), value: curMpc });
+
+      // Sort chronologically ascending by timestamp
+      dataPoints.sort((a, b) => a.dateObj - b.dateObj);
+      mpcPoints.sort((a, b) => a.dateObj - b.dateObj);
+
+      // Disambiguate labels if snapshot dates land on the same calendar day
+      const fixLabels = (pts) => {
+        for (let i = 1; i < pts.length; i++) {
+          if (pts[i].label === pts[i - 1].label) {
+            if (i === pts.length - 1) pts[i].label = 'Latest';
+            else pts[i].label = pts[i].label + ' (Snap ' + i + ')';
+          }
+        }
+      };
+      fixLabels(dataPoints);
+      fixLabels(mpcPoints);
 
     } else {
       // Older bot (> 30 days old): plot monthly trajectory starting strictly from actual launch month
