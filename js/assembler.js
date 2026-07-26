@@ -1044,6 +1044,7 @@
       };
       const savedProj = await window.ForgeDB.saveProject(projectRecord);
       activeProjectId = savedProj.id;
+      await linkProjectToTargetRecord(savedProj.id);
 
       // Save cover to library if available
       if (coverDataUrl) {
@@ -1085,6 +1086,7 @@
       };
       const savedProj = await window.ForgeDB.saveProject(projectRecord);
       activeProjectId = savedProj.id;
+      await linkProjectToTargetRecord(savedProj.id);
 
       // Save cover to library if available
       if (coverDataUrl) {
@@ -1200,6 +1202,7 @@
 
       const savedProj = await window.ForgeDB.saveProject(projectRecord);
       activeProjectId = savedProj.id;
+      await linkProjectToTargetRecord(savedProj.id);
       
       if (coverDataUrl) {
         await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
@@ -1232,6 +1235,7 @@
         };
         const savedProj = await window.ForgeDB.saveProject(projectRecord);
         activeProjectId = savedProj.id;
+        await linkProjectToTargetRecord(savedProj.id);
         if (coverDataUrl) {
           await window.ForgeDB.saveCover(savedProj.id, coverDataUrl);
         }
@@ -1354,6 +1358,71 @@
     }
   }
 
+  async function createFromStory(storyOrId) {
+    let story = storyOrId;
+    if (typeof storyOrId === 'string') {
+      story = await window.ForgeDB.getTrackerRecord(storyOrId);
+    }
+    if (!story) {
+      if (typeof showToast === 'function') showToast('Story record not found', 'error');
+      return;
+    }
+
+    activeProjectId = null;
+    coverDataUrl = null;
+    contentOverrides = {};
+    relationships = [];
+
+    const linkedIds = story.linkedVaultIds || [];
+    stagedIds = [];
+    mappings = {};
+
+    const allComponents = await window.ForgeDB.getAllComponents();
+    for (const compId of linkedIds) {
+      const comp = allComponents.find(c => c.id === compId);
+      if (comp) {
+        if (!stagedIds.includes(compId)) {
+          stagedIds.push(compId);
+          if (comp.category === 'character') mappings[compId] = 'description';
+          else if (comp.category === 'scenario') mappings[compId] = 'scenario';
+          else if (comp.category === 'initial_message') mappings[compId] = 'first_mes';
+          else if (comp.category === 'bio') mappings[compId] = 'description';
+          else if (comp.category === 'organization') mappings[compId] = 'description';
+          else mappings[compId] = 'description';
+        }
+      }
+    }
+
+    projNameInput.value = story.name || 'New Story Project';
+
+    await populateLinkTargets();
+    const linkSelect = document.getElementById('assembler-link-target');
+    if (linkSelect) {
+      linkSelect.value = `story:${story.id}`;
+    }
+
+    await renderAssemblerScreen();
+    updateCoverPreview();
+    renderDrawer();
+
+    const mcModal = document.getElementById('mc-modal-overlay');
+    if (mcModal) mcModal.classList.add('hidden');
+
+    const mcView = document.getElementById('mission-control-view');
+    if (mcView) mcView.style.display = 'none';
+
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    assemblerView.classList.add('active');
+
+    if (typeof showToast === 'function') {
+      if (stagedIds.length > 0) {
+        showToast(`Created Project for "${story.name}" with ${stagedIds.length} component(s) staged!`, 'success');
+      } else {
+        showToast(`Opened Project Assembler for Story "${story.name}". No components linked to this story yet.`, 'info');
+      }
+    }
+  }
+
   // Expose APIs
   window.ProjectAssembler = {
     init: initAssembler,
@@ -1362,6 +1431,7 @@
     clear: clearDrawer,
     compile: compileCardData,
     exportLorebook: exportAsLorebook,
-    open: openAssemblerScreen
+    open: openAssemblerScreen,
+    createFromStory: createFromStory
   };
 })();

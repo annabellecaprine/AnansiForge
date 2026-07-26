@@ -1215,6 +1215,7 @@
       <td class="mc-cell-readiness">${readinessPct(score)}</td>
       <td class="mc-cell-actions">
         <button class="mc-action-btn mc-btn-accent mc-spawn-release" data-story-id="${rec.id}" title="Spawn Release from Story">🚀 Spawn</button>
+        <button class="mc-action-btn mc-btn-secondary mc-create-project-from-story" data-story-id="${rec.id}" title="Create Project in Assembler from Story">🤖 Create Project</button>
         <button class="mc-action-btn mc-open-story-hub" data-story-id="${rec.id}" title="Open Story Hub">👁️</button>
         <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit Metadata">✏️</button>
         <button class="mc-action-btn mc-toggle-story-archive" data-story-id="${rec.id}" title="${isArchived ? 'Reactivate Story' : 'Archive Story'}">${isArchived ? '🔄' : '📦'}</button>
@@ -2371,6 +2372,7 @@ ${releasesMd}
         </div>
         <div class="mc-hub-header-actions" style="margin-top:10px; display:flex; gap:8px;">
           <button class="mc-btn mc-btn-primary mc-spawn-release" data-story-id="${story.id}">🚀 Spawn New Release</button>
+          <button class="mc-btn mc-btn-accent mc-create-project-from-story" data-story-id="${story.id}">🤖 Create Project</button>
           <button class="mc-btn mc-btn-ghost mc-edit-record" data-record-id="${story.id}">✏️ Edit Metadata</button>
           <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${story.id}">📄 Export Brief</button>
         </div>
@@ -2693,6 +2695,16 @@ ${releasesMd}
       if (spawnBtn) {
         const storyId = spawnBtn.dataset.storyId;
         await spawnReleaseFromStory(storyId);
+        return;
+      }
+
+      // Create Project from story
+      const createProjBtn = t.closest('.mc-create-project-from-story');
+      if (createProjBtn) {
+        const storyId = createProjBtn.dataset.storyId;
+        if (storyId && window.ProjectAssembler?.createFromStory) {
+          window.ProjectAssembler.createFromStory(storyId);
+        }
         return;
       }
 
