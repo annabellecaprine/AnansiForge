@@ -544,8 +544,10 @@
       releaseSource = VALID_RELEASE_SOURCES.has(releaseSource) ? releaseSource : (rec.sourceStoryId ? 'story' : 'manual');
     }
 
-    // Delta metric tracking: fetch existing record BEFORE opening readwrite transaction!
+    // Metrics history & delta tracking
     let previousMetrics = rec.previousMetrics || null;
+    let metricsHistory = Array.isArray(rec.metricsHistory) ? [...rec.metricsHistory] : [];
+
     if (rec.id) {
       try {
         const existing = await getTrackerRecord(rec.id);
@@ -566,7 +568,7 @@
           }
         }
       } catch(e) {
-        console.warn('Could not fetch existing record for delta metrics:', e);
+        console.warn('Could not fetch existing record for metrics history:', e);
       }
     }
 
@@ -594,6 +596,7 @@
       sourceStoryId: rec.sourceStoryId || null,
       iterationLabel: rec.iterationLabel || '',
       previousMetrics: previousMetrics,
+      metricsHistory: metricsHistory,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
@@ -818,6 +821,28 @@
         }
       };
       cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  async function getTargetActivity(targetId) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('activity_log', 'readonly');
+    const store = tx.objectStore('activity_log');
+    return new Promise((resolve) => {
+      const results = [];
+      const req = store.openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          if (cursor.value.targetId === targetId) {
+            results.push(cursor.value);
+          }
+          cursor.continue();
+        } else {
+          resolve(results.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+        }
+      };
+      req.onerror = () => resolve([]);
     });
   }
 
@@ -1182,6 +1207,7 @@
     deleteOldVersions,
     logActivity,
     getRecentActivity,
+    getTargetActivity,
     pruneActivityLog,
     captureSnapshot,
     getSnapshots,
