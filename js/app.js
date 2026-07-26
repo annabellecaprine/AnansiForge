@@ -298,12 +298,23 @@
           <div class="vault-item-footer">
             ${lineageLabel}
             <div style="display:flex; gap:6px;">
+              ${comp.category === 'character' ? `<button class="btn btn-ghost btn-icon btn-sm btn-interview" title="Character Voice Rapid Tester" style="padding:2px 6px;">🎙️</button>` : ''}
               <button class="btn btn-ghost btn-icon btn-sm btn-pin-toggle" title="${isPinned ? 'Unpin' : 'Pin'}" style="padding:2px 6px;">${isPinned ? '📌' : '☆'}</button>
               <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
               <button class="btn btn-primary btn-icon btn-sm btn-stage" title="Stage for Assembly" style="padding:2px 6px;">＋</button>
             </div>
           </div>
         `;
+
+        const interviewBtn = item.querySelector('.btn-interview');
+        if (interviewBtn) {
+          interviewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.MissionControlInterviewModal) {
+              window.MissionControlInterviewModal.openModal(comp.id, comp.name);
+            }
+          });
+        }
 
         item.querySelector('.btn-pin-toggle').addEventListener('click', async (e) => {
           e.stopPropagation();
