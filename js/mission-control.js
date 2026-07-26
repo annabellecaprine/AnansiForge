@@ -2783,9 +2783,10 @@ ${releasesMd}
       // Open Character Voice Rapid Interview Tester
       const interviewBtn = t.closest('.mc-open-interview');
       if (interviewBtn) {
+        const charId = interviewBtn.dataset.charId;
         const charName = interviewBtn.dataset.name;
         if (window.MissionControlInterviewModal) {
-          window.MissionControlInterviewModal.openModal(charName);
+          window.MissionControlInterviewModal.openModal(charId, charName);
         }
         return;
       }
