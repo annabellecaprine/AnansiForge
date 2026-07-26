@@ -78,7 +78,7 @@
      */
     promoteBot: async function (botId, targetStage) {
       if (!window.ForgeDB) throw new Error('Database not initialized');
-      const bot = await window.ForgeDB.getTrackerRecord ? window.ForgeDB.getTrackerRecord(botId) : null;
+      const bot = window.ForgeDB.getTrackerRecord ? await window.ForgeDB.getTrackerRecord(botId) : null;
       if (!bot) throw new Error(`Bot record ${botId} not found`);
 
       const currentStage = bot.stage || 'Untested';

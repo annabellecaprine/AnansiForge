@@ -81,8 +81,12 @@
         else open();
     }
 
+    let debounceTimer;
     function handleInput() {
-        renderResults();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            renderResults();
+        }, 150);
     }
 
     function searchData(query) {
@@ -100,7 +104,7 @@
                 item.universe || tracker.universe,
                 tracker.role || item.role,
                 item.project || tracker.project,
-                ...(item.tags || [])
+                ...(Array.isArray(item.tags) ? item.tags : [])
             ];
             
             for (const field of searchFields) {

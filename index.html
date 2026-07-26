@@ -891,17 +891,17 @@
   </div>
 
   <!-- PARLOR CONTEXT ATTACHMENT MODAL -->
-  <div id="parlor-attach-modal" class="modal-overlay hidden">
+  <div id="parlor-attach-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="parlor-attach-modal-title">
     <div class="modal" style="max-width: 540px; width: 90%;">
       <div class="modal-header">
         <h3 id="parlor-attach-modal-title">Anchor Context to AI Forge</h3>
         <button onclick="document.getElementById('parlor-attach-modal').classList.add('hidden')"
-          class="btn btn-ghost btn-icon">&times;</button>
+          class="btn btn-ghost btn-icon" aria-label="Close modal">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group" style="margin-bottom:12px;">
           <input type="text" id="parlor-attach-search" class="mc-search" placeholder="Search items to attach…"
-            style="width:100%;">
+            style="width:100%;" aria-label="Search items to attach">
         </div>
         <div id="parlor-attach-list" class="parlor-attach-list"
           style="max-height: 320px; overflow-y: auto; display:flex; flex-direction:column; gap:6px;"></div>
@@ -914,11 +914,11 @@
   </div>
 
   <!-- COMPONENT TWEAK MODAL -->
-  <div id="tweak-modal-overlay" class="modal-overlay hidden">
+  <div id="tweak-modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="tweak-modal-title">
     <div class="modal" style="max-width: 600px; width: 90%;">
       <div class="modal-header">
         <h3 id="tweak-modal-title">Tweak Component for Project</h3>
-        <button id="btn-close-tweak-modal" class="btn btn-ghost btn-icon">&times;</button>
+        <button id="btn-close-tweak-modal" class="btn btn-ghost btn-icon" aria-label="Close tweak modal">&times;</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;">
@@ -942,12 +942,12 @@
   </div>
 
   <!-- VERSION HISTORY MODAL -->
-  <div id="version-history-modal" class="modal-overlay hidden">
+  <div id="version-history-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Component Version History">
     <div class="modal" style="max-width: 650px; width: 92%;">
       <div class="modal-header">
         <h3>📜 Component Version History</h3>
         <button onclick="document.getElementById('version-history-modal').classList.add('hidden')"
-          class="btn btn-ghost btn-icon">&times;</button>
+          class="btn btn-ghost btn-icon" aria-label="Close version history modal">&times;</button>
       </div>
       <div class="modal-body">
         <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:12px;">
@@ -965,12 +965,12 @@
   </div>
 
   <!-- KEYBOARD SHORTCUTS HELP MODAL -->
-  <div id="kbd-shortcuts-modal" class="modal-overlay hidden">
+  <div id="kbd-shortcuts-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Keyboard Shortcuts">
     <div class="modal" style="max-width: 500px; width: 90%;">
       <div class="modal-header">
         <h3>⌨️ Keyboard Shortcuts</h3>
         <button onclick="document.getElementById('kbd-shortcuts-modal').classList.add('hidden')"
-          class="btn btn-ghost btn-icon">&times;</button>
+          class="btn btn-ghost btn-icon" aria-label="Close shortcuts modal">&times;</button>
       </div>
       <div class="modal-body" style="font-size:0.85rem;">
         <div class="kbd-grid" style="display:grid; grid-template-columns: 120px 1fr; gap:8px 12px; align-items:center;">
@@ -995,29 +995,29 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
-  <script src="js/db.js?v=16.0"></script>
-  <script src="js/png-handler.js?v=16.0"></script>
-  <script src="js/breakout.js?v=16.0"></script>
-  <script src="js/llm.js?v=16.0"></script>
-  <script src="js/parlor.js?v=16.0"></script>
-  <script src="js/assembler.js?v=16.0"></script>
-  <script src="js/sandbox.js?v=16.0"></script>
-  <script src="js/omni-search.js?v=16.0"></script>
+  <script src="js/db.js?v=16.1"></script>
+  <script src="js/png-handler.js?v=16.1"></script>
+  <script src="js/breakout.js?v=16.1"></script>
+  <script src="js/llm.js?v=16.1"></script>
 
-  <!-- REFACTORED SUB-MODULES -->
-  <script src="js/analytics/metrics_math.js?v=16.0"></script>
-  <script src="js/state_filtering/filter_engine.js?v=16.0"></script>
-  <script src="js/state_filtering/priority_sorter.js?v=16.0"></script>
-  <script src="js/state_filtering/bulk_operations.js?v=16.0"></script>
-  <script src="js/core/relationships.js?v=16.0"></script>
-  <script src="js/core/lifecycle.js?v=16.0"></script>
-  <script src="js/modals/concept_stub_modal.js?v=16.0"></script>
-  <script src="js/modals/universe_genre_modal.js?v=16.0"></script>
-  <script src="js/modals/interview_modal.js?v=16.0"></script>
-  <script src="js/modals/record_edit_modal.js?v=16.0"></script>
+  <!-- CORE MODULES (must load before UI controllers) -->
+  <script src="js/analytics/metrics_math.js?v=16.1"></script>
+  <script src="js/core/events.js?v=16.1"></script>
+  <script src="js/core/version_engine.js?v=16.1"></script>
+  <script src="js/core/relationships.js?v=16.1"></script>
+  <script src="js/core/lifecycle.js?v=16.1"></script>
+  <script src="js/state_filtering/filter_engine.js?v=16.1"></script>
+  <script src="js/state_filtering/priority_sorter.js?v=16.1"></script>
+  <script src="js/state_filtering/bulk_operations.js?v=16.1"></script>
 
-  <script src="js/mission-control.js?v=16.0"></script>
-  <script src="js/app.js?v=16.0"></script>
+  <!-- UI CONTROLLERS -->
+  <script src="js/parlor.js?v=16.1"></script>
+  <script src="js/assembler.js?v=16.1"></script>
+  <script src="js/sandbox.js?v=16.1"></script>
+  <script src="js/omni-search.js?v=16.1"></script>
+
+  <script src="js/mission-control.js?v=16.1"></script>
+  <script src="js/app.js?v=16.1"></script>
 </body>
 
 </html>

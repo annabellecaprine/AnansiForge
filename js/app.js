@@ -1238,7 +1238,7 @@
           sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
           buffer = [];
         }
-        currentKey = headerMap[foundKey];
+        currentKey = headerMap[foundKey] || foundKey;
       } else {
         buffer.push(line);
       }
@@ -1283,6 +1283,7 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
+  const esc = escapeHTML;
 
   // --- Boot ---
 

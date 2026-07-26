@@ -51,12 +51,16 @@
     btnInspectToggle.addEventListener('click', toggleInspector);
     document.getElementById('btn-sandbox-export').addEventListener('click', exportChatLog);
 
-    // Auto-save notes to the active project
+    // Auto-save notes to the active project (debounced)
     if (playtestNotes) {
-      playtestNotes.addEventListener('input', async (e) => {
+      let notesTimer;
+      playtestNotes.addEventListener('input', (e) => {
         if (!activeProject) return;
         activeProject.notes = e.target.value;
-        await window.ForgeDB.saveProject(activeProject);
+        clearTimeout(notesTimer);
+        notesTimer = setTimeout(async () => {
+          await window.ForgeDB.saveProject(activeProject);
+        }, 500);
       });
     }
 
@@ -334,8 +338,8 @@
   function addMessageBubble(role, rawContent, index, animate = true) {
     const bubble = document.createElement('div');
     
-    // Reasoning Separation
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
+    // Reasoning Separation (supports unclosed <think> tags)
+    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/i;
     let dialogue = rawContent;
     let reasoningText = '';
 
@@ -630,15 +634,17 @@
     inspectorPanel.classList.toggle('collapsed');
   }
 
-  // Helper to replace standard User and Char placeholders
+  // Helper to replace standard User and Char placeholders safely (avoiding $ replacement patterns)
   function replaceUserPlaceholders(text, personaName) {
     if (!text) return '';
     const charName = (activeProject && (activeProject.name || activeProject.compiledCard?.data?.name)) || 'Character';
+    const pName = personaName || 'User';
+    const cName = charName || 'Character';
     return text
-      .replace(/\{\{user\}\}/gi, personaName)
-      .replace(/\{user\}/gi, personaName)
-      .replace(/\{\{char\}\}/gi, charName)
-      .replace(/\{char\}/gi, charName);
+      .replace(/\{\{user\}\}/gi, () => pName)
+      .replace(/\{user\}/gi, () => pName)
+      .replace(/\{\{char\}\}/gi, () => cName)
+      .replace(/\{char\}/gi, () => cName);
   }
 
   function formatMarkdown(str) {

@@ -266,7 +266,7 @@
     
     const now = new Date().toISOString();
     const cat = comp.category || existing?.category || 'character';
-    const tracker = comp.tracker || existing?.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] };
+    const tracker = { ...(existing?.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] }), ...(comp.tracker || {}) };
 
     const record = {
       ...(existing || {}),
@@ -552,12 +552,15 @@
         if (existing && existing.metrics && rec.metrics) {
           const oldM = existing.metrics.messages || 0;
           const oldC = existing.metrics.uniqueChats || 0;
+          const oldF = existing.metrics.favorites || 0;
           const newM = rec.metrics.messages || 0;
           const newC = rec.metrics.uniqueChats || 0;
-          if (oldM !== newM || oldC !== newC) {
+          const newF = rec.metrics.favorites || 0;
+          if (oldM !== newM || oldC !== newC || oldF !== newF) {
             previousMetrics = {
               messages: oldM,
               uniqueChats: oldC,
+              favorites: oldF,
               updatedAt: existing.updatedAt || now
             };
           }
@@ -594,7 +597,7 @@
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
-      metrics: rec.metrics || { messages: 0, uniqueChats: 0 },
+      metrics: rec.metrics || { messages: 0, uniqueChats: 0, favorites: 0 },
       // stub-specific
       intendedCategory: rec.intendedCategory || 'character',
       promotedToVaultId: rec.promotedToVaultId || null,
@@ -826,15 +829,17 @@
 
     try {
       const db = dbInstance || await initDB();
-      const txRead = db.transaction('activity_log', 'readonly');
-      const storeRead = txRead.objectStore('activity_log');
-      
-      const count = await promisify(storeRead.count());
+      const count = await new Promise((resolve, reject) => {
+        const tx = db.transaction('activity_log', 'readonly');
+        const req = tx.objectStore('activity_log').count();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
       if (count <= keepCount) return;
 
-      const index = storeRead.index('timestamp');
       const entries = await new Promise((resolve, reject) => {
-        const req = index.getAll();
+        const tx = db.transaction('activity_log', 'readonly');
+        const req = tx.objectStore('activity_log').index('timestamp').getAll();
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
@@ -1041,13 +1046,20 @@
     
     let component_versions = [];
     let activity_log = [];
+    let covers = [];
+    let universes = [];
     try {
       const db = dbInstance || await initDB();
-      const tx = db.transaction(['component_versions', 'activity_log'], 'readonly');
-      component_versions = await promisify(tx.objectStore('component_versions').getAll());
-      activity_log = await promisify(tx.objectStore('activity_log').getAll());
+      const storeNames = ['component_versions', 'activity_log', 'covers', 'universes'].filter(s => db.objectStoreNames.contains(s));
+      if (storeNames.length > 0) {
+        const tx = db.transaction(storeNames, 'readonly');
+        if (storeNames.includes('component_versions')) component_versions = await promisify(tx.objectStore('component_versions').getAll());
+        if (storeNames.includes('activity_log')) activity_log = await promisify(tx.objectStore('activity_log').getAll());
+        if (storeNames.includes('covers')) covers = await promisify(tx.objectStore('covers').getAll());
+        if (storeNames.includes('universes')) universes = await promisify(tx.objectStore('universes').getAll());
+      }
     } catch (e) {
-      console.warn('Could not export versions/activity', e);
+      console.warn('Could not export versions/activity/covers/universes', e);
     }
 
     return {
@@ -1058,7 +1070,9 @@
       personas,
       trackerRecords,
       component_versions,
-      activity_log
+      activity_log,
+      covers,
+      universes
     };
   }
 
@@ -1066,8 +1080,8 @@
     if (!bundle || (bundle._version !== 1 && bundle._version !== 2 && bundle._version !== 3)) throw new Error('Unrecognised backup format.');
     const db = dbInstance || await initDB();
 
-    const stores = ['vault_components', 'projects', 'personas', 'tracker_records', 'component_versions', 'activity_log'];
-    const keys   = ['components',       'projects',  'personas', 'trackerRecords',  'component_versions', 'activity_log'];
+    const stores = ['vault_components', 'projects', 'personas', 'tracker_records', 'component_versions', 'activity_log', 'covers', 'universes'];
+    const keys   = ['components',       'projects',  'personas', 'trackerRecords',  'component_versions', 'activity_log', 'covers', 'universes'];
 
     for (let i = 0; i < stores.length; i++) {
       const storeName = stores[i];

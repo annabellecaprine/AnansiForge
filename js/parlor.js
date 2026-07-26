@@ -199,6 +199,11 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
           if (anchoredItems.some(a => a.id === id)) {
             anchoredItems = anchoredItems.filter(a => a.id !== id);
           } else {
+            let contentText = target.item.content;
+            if (!contentText && target.type === 'project') {
+              const compCount = (target.item.componentIds || []).length;
+              contentText = `Project: "${target.name}" (${compCount} components staged).\nNotes: ${target.item.notes || 'None'}`;
+            }
             anchoredItems.push({
               id: target.id,
               type: target.type,
@@ -207,13 +212,24 @@ Ensure it is structured clearly, emphasizing how it interacts with characters an
               role: target.role,
               universe: target.universe,
               lineage: target.lineage,
-              content: target.item.content || JSON.stringify(target.item)
+              content: contentText || target.name
             });
           }
           renderContextChips();
           renderList(searchInput.value);
         });
       });
+    };
+
+    // Close button & Backdrop click listener binding
+    const closeBtn = modal.querySelector('.modal-header button');
+    const footerCloseBtn = modal.querySelector('.modal-footer button');
+    const closeModal = () => modal.classList.add('hidden');
+    
+    if (closeBtn) closeBtn.onclick = closeModal;
+    if (footerCloseBtn) footerCloseBtn.onclick = closeModal;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
     };
 
     renderList();

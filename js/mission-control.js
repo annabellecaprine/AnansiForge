@@ -10,7 +10,7 @@
 
   // ─── Constants ───────────────────────────────────────────────────────────────
 
-  const PIPELINE_STEPS = {
+  const PIPELINE_STEPS = (typeof window !== 'undefined' && window.MissionControlMath && window.MissionControlMath.PIPELINE_STEPS) || {
     character: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
     scenario: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
     bio: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
@@ -100,21 +100,33 @@
   // ─── Readiness Scoring ────────────────────────────────────────────────────────
 
   function calcReadiness(pipeline, category) {
+    if (typeof window !== 'undefined' && window.MissionControlMath && window.MissionControlMath.calcReadiness) {
+      return window.MissionControlMath.calcReadiness(pipeline, category);
+    }
     const steps = PIPELINE_STEPS[category] || PIPELINE_STEPS.character;
-    if (!steps.length) return 0;
+    if (!steps || !steps.length) return 0;
     const checked = steps.filter(s => pipeline && pipeline[s]).length;
     return checked / steps.length;
   }
 
   function calcReadinessForVault(comp) {
+    if (typeof window !== 'undefined' && window.MissionControlMath && window.MissionControlMath.calcReadinessForVault) {
+      return window.MissionControlMath.calcReadinessForVault(comp);
+    }
     return calcReadiness(comp.tracker?.pipeline, comp.category);
   }
 
   function calcReadinessForRecord(rec) {
+    if (typeof window !== 'undefined' && window.MissionControlMath && window.MissionControlMath.calcReadinessForRecord) {
+      return window.MissionControlMath.calcReadinessForRecord(rec);
+    }
     return calcReadiness(rec.pipeline, rec.assetType);
   }
 
   function priorityBoost(priority) {
+    if (typeof window !== 'undefined' && window.MissionControlMath && window.MissionControlMath.priorityBoost) {
+      return window.MissionControlMath.priorityBoost(priority);
+    }
     return priority === 'P1' ? 0.005 : priority === 'P2' ? 0.003 : priority === 'P3' ? 0.001 : 0;
   }
 
@@ -280,7 +292,7 @@
     const src = source || 'manual';
     const label = RELEASE_SOURCES[src] || src;
     const c = RELEASE_SOURCE_COLORS[src] || '#6b7280';
-    return `<span class="mc-badge mc-badge--source" style="background:${c}18; color:${c}; border:1px solid ${c}44;" title="Release Source: ${esc(label)}">${label}</span>`;
+    return `<span class="mc-badge mc-badge--source" style="background:${c}18; color:${c}; border:1px solid ${c}44;" title="Release Source: ${esc(label)}">${esc(label)}</span>`;
   }
 
   function storyStatusBadge(status) {
@@ -786,8 +798,8 @@
           const releases = allCandidates.sort((a, b) => {
             const aMsgs = a.metrics?.messages || 0;
             const bMsgs = b.metrics?.messages || 0;
-            const aHasMetrics = aMsgs > 0 || (a.metrics?.uniqueChats || 0) > 0;
-            const bHasMetrics = bMsgs > 0 || (b.metrics?.uniqueChats || 0) > 0;
+            const aHasMetrics = aMsgs > 0 || (a.metrics?.uniqueChats || 0) > 0 || (a.metrics?.favorites || 0) > 0;
+            const bHasMetrics = bMsgs > 0 || (b.metrics?.uniqueChats || 0) > 0 || (b.metrics?.favorites || 0) > 0;
 
             if (aHasMetrics && !bHasMetrics) return -1;
             if (!aHasMetrics && bHasMetrics) return 1;
@@ -1472,7 +1484,7 @@ Write-Host "Done! tracker-import.json created."</pre>
       <hr class="mc-modal-divider">
       <p class="mc-modal-section-label">📈 Post-Release Metrics</p>
       <div class="mc-metrics-read-only-banner" style="margin-top:12px; padding:10px; background:var(--bg-secondary); border-radius:6px; font-size:0.8rem; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center;">
-        <span>📈 Cached Metrics: <strong>${(r.metrics?.messages || 0).toLocaleString()} msgs</strong>, <strong>${(r.metrics?.uniqueChats || 0).toLocaleString()} chats</strong></span>
+        <span>📈 Cached Metrics: <strong>${(r.metrics?.messages || 0).toLocaleString()} msgs</strong>, <strong>${(r.metrics?.uniqueChats || 0).toLocaleString()} chats</strong>, <strong>${(r.metrics?.favorites || 0).toLocaleString()} favs</strong></span>
         <button type="button" class="mc-btn mc-btn-sm mc-btn-secondary" onclick="if(window.MissionControl) window.MissionControl.openQuickMetricsModal('${r.id}')">⚡ Record Metric Snapshot</button>
       </div>` : ''}
     `;
@@ -1583,139 +1595,151 @@ Write-Host "Done! tracker-import.json created."</pre>
     document.getElementById('mc-asset-name')?.focus();
   }
 
-  async function submitQuickAsset(category) {
-    const name = document.getElementById('mc-asset-name')?.value?.trim();
-    if (!name) return showToast('Name is required.', 'error');
+  async function submitQuickAsset() {
+    try {
+      const category = document.getElementById('mc-btn-submit-quick-asset')?.dataset.cat || 'character';
+      const name = document.getElementById('mc-asset-name')?.value?.trim();
+      const universe = document.getElementById('mc-asset-universe')?.value || '';
+      const role = document.getElementById('mc-asset-role')?.value || '';
+      const lineage = document.getElementById('mc-asset-lineage')?.value?.trim() || '';
+      const content = document.getElementById('mc-asset-content')?.value || '';
+      const tags = (document.getElementById('mc-asset-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
 
-    const universe = document.getElementById('mc-asset-universe')?.value || '';
-    const role = document.getElementById('mc-asset-role')?.value || 'Other';
-    const lineage = document.getElementById('mc-asset-lineage')?.value?.trim() || '';
-    const content = document.getElementById('mc-asset-content')?.value || '';
-    const tags = (document.getElementById('mc-asset-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+      if (!name) { showToast('Asset Name is required.', 'error'); return; }
 
-    const compId = crypto.randomUUID();
-    const comp = {
-      id: compId,
-      name,
-      category,
-      content,
-      lineage,
-      tags,
-      tracker: {
-        universe,
-        role,
-        project: '',
-        priority: null,
-        pipeline: window.ForgeDB ? window.ForgeDB.defaultTrackerPipeline(category) : {},
-        trackerTags: []
-      },
-      createdAt: new Date().toISOString(),
-      modifiedAt: new Date().toISOString()
-    };
+      const compId = crypto.randomUUID();
+      const comp = {
+        id: compId,
+        name,
+        category,
+        content,
+        lineage,
+        tags,
+        tracker: {
+          universe,
+          role,
+          project: '',
+          priority: null,
+          pipeline: window.ForgeDB ? window.ForgeDB.defaultTrackerPipeline(category) : {},
+          trackerTags: []
+        },
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString()
+      };
 
-    if (window.ForgeDB && window.ForgeDB.saveComponent) {
-      await window.ForgeDB.saveComponent(comp);
+      if (window.ForgeDB && window.ForgeDB.saveComponent) {
+        await window.ForgeDB.saveComponent(comp);
+      }
+
+      if (window.AnansiEvents) {
+        await window.AnansiEvents.logActivity('Asset Created', category, compId, `Created ${category}: ${name}`);
+      }
+
+      await loadAll();
+      await renderCurrentTab();
+      document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+      showToast(`Saved "${name}" to Vault!`, 'success');
+    } catch (err) {
+      console.error('Failed to submit quick asset:', err);
+      showToast(`Failed to save asset: ${err.message}`, 'error');
     }
-
-    if (window.AnansiEvents) {
-      await window.AnansiEvents.logActivity('Asset Created', category, compId, `Created ${category}: ${name}`);
-    }
-
-    await loadAll();
-    await renderCurrentTab();
-    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
-    showToast(`Saved "${name}" to Vault!`, 'success');
   }
 
   async function saveModalRecord() {
-    const r = state.editingRecord;
-    if (!r) return;
+    try {
+      const r = state.editingRecord;
+      if (!r) return;
 
-    const name = document.getElementById('mc-rec-name')?.value?.trim();
-    if (!name) { showToast('Name is required.', 'error'); return; }
+      const name = document.getElementById('mc-rec-name')?.value?.trim();
+      if (!name) { showToast('Name is required.', 'error'); return; }
 
-    const universe = document.getElementById('mc-rec-universe')?.value || '';
-    const priority = document.getElementById('mc-rec-priority')?.value || null;
-    const project = document.getElementById('mc-rec-project')?.value?.trim() || '';
-    const tags = (document.getElementById('mc-rec-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
-    const notes = document.getElementById('mc-rec-notes')?.value || '';
+      const universe = document.getElementById('mc-rec-universe')?.value || '';
+      const priority = document.getElementById('mc-rec-priority')?.value || null;
+      const project = document.getElementById('mc-rec-project')?.value?.trim() || '';
+      const tags = (document.getElementById('mc-rec-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+      const notes = document.getElementById('mc-rec-notes')?.value || '';
 
-    const updated = {
-      ...r, name, universe, priority, project, tags, notes,
-      pipeline: r.pipeline || window.ForgeDB.defaultTrackerPipeline(r.assetType)
-    };
+      const updated = {
+        ...r, name, universe, priority, project, tags, notes,
+        pipeline: r.pipeline || window.ForgeDB.defaultTrackerPipeline(r.assetType)
+      };
 
-    if (r.assetType === 'story') {
-      updated.status = document.getElementById('mc-rec-status')?.value || 'Active';
-    }
-
-    if (r.assetType === 'concept_stub') {
-      updated.intendedCategory = document.getElementById('mc-stub-category')?.value || 'character';
-    }
-    if (r.assetType === 'release') {
-      updated.releaseSource = document.getElementById('mc-rec-release-source')?.value || 'manual';
-      updated.projectId = document.getElementById('mc-rec-project-id')?.value || null;
-      updated.visibility = document.getElementById('mc-rec-visibility')?.value || null;
-      const privDateVal = document.getElementById('mc-rec-private-date')?.value;
-      if (privDateVal) {
-        updated.privateLaunchDate = new Date(privDateVal).toISOString();
-      } else if (updated.visibility === 'Private' && !updated.privateLaunchDate) {
-        updated.privateLaunchDate = new Date().toISOString();
+      if (r.assetType === 'story') {
+        updated.status = document.getElementById('mc-rec-status')?.value || 'Active';
       }
-      updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
 
-      // Auto-check pipeline steps if an assembled project is linked
-      if (updated.projectId) {
-        const proj = state.allProjects.find(p => p.id === updated.projectId);
-        if (proj && proj.componentIds && proj.componentIds.length) {
-          const comps = state.allComponents.filter(c => proj.componentIds.includes(c.id));
-          if (comps.some(c => c.category === 'bio')) updated.pipeline.bio = true;
-          if (comps.some(c => c.category === 'scenario')) updated.pipeline.scenario = true;
-          if (comps.some(c => c.category === 'initial_message')) updated.pipeline.initialMessage = true;
+      if (r.assetType === 'concept_stub') {
+        updated.intendedCategory = document.getElementById('mc-stub-category')?.value || 'character';
+      }
+      if (r.assetType === 'release') {
+        updated.releaseSource = document.getElementById('mc-rec-release-source')?.value || 'manual';
+        updated.projectId = document.getElementById('mc-rec-project-id')?.value || null;
+        updated.visibility = document.getElementById('mc-rec-visibility')?.value || null;
+        const privDateVal = document.getElementById('mc-rec-private-date')?.value;
+        if (privDateVal) {
+          updated.privateLaunchDate = new Date(privDateVal).toISOString();
+        } else if (updated.visibility === 'Private' && !updated.privateLaunchDate) {
+          updated.privateLaunchDate = new Date().toISOString();
         }
-      }
-      // Retain existing metrics untouched when saving metadata
-      updated.metrics = r.metrics || null;
-    }
+        updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
 
-    const isNew = !r.id;
-    const wasPublished = isReleasePublished(r);
-    const isNowPublished = isReleasePublished(updated);
-
-    const metricsChanged = updated.metrics && (
-      updated.metrics.messages !== (r.metrics?.messages || 0) ||
-      updated.metrics.uniqueChats !== (r.metrics?.uniqueChats || 0) ||
-      updated.metrics.date !== r.metrics?.date
-    );
-
-    const dateChanged = updated.scheduledDate !== r.scheduledDate;
-
-    await window.ForgeDB.saveTrackerRecord(updated);
-
-    if (window.ForgeDB?.logActivity) {
-      let act = isNew ? 'created' : 'updated';
-
-      if (metricsChanged) {
-        act = 'metrics_updated';
-      } else if (!wasPublished && isNowPublished) {
-        act = 'published';
-      } else if (dateChanged && updated.scheduledDate) {
-        act = 'scheduled';
+        // Auto-check pipeline steps if an assembled project is linked
+        if (updated.projectId) {
+          const proj = state.allProjects.find(p => p.id === updated.projectId);
+          if (proj && proj.componentIds && proj.componentIds.length) {
+            const comps = state.allComponents.filter(c => proj.componentIds.includes(c.id));
+            if (comps.some(c => c.category === 'bio')) updated.pipeline.bio = true;
+            if (comps.some(c => c.category === 'scenario')) updated.pipeline.scenario = true;
+            if (comps.some(c => c.category === 'initial_message')) updated.pipeline.initialMessage = true;
+          }
+        }
+        // Retain existing metrics untouched when saving metadata
+        updated.metrics = r.metrics || null;
       }
 
-      window.ForgeDB.logActivity({
-        action: act,
-        targetType: r.assetType || 'record',
-        targetId: updated.id,
-        targetName: updated.name,
-        details: act === 'metrics_updated' ? `${updated.metrics?.messages || 0} msgs` : ''
-      }).catch(e => console.error(e));
-    }
+      const isNew = !r.id;
+      const wasPublished = isReleasePublished(r);
+      const isNowPublished = isReleasePublished(updated);
 
-    await loadAll();
-    closeModal();
-    renderCurrentTab();
-    showToast(`${updated.name} saved.`, 'success');
+      const metricsChanged = updated.metrics && (
+        updated.metrics.messages !== (r.metrics?.messages || 0) ||
+        updated.metrics.uniqueChats !== (r.metrics?.uniqueChats || 0) ||
+        updated.metrics.favorites !== (r.metrics?.favorites || 0) ||
+        updated.metrics.date !== r.metrics?.date
+      );
+
+      const dateChanged = updated.scheduledDate !== r.scheduledDate;
+
+      await window.ForgeDB.saveTrackerRecord(updated);
+
+      if (window.ForgeDB?.logActivity) {
+        let act = isNew ? 'created' : 'updated';
+
+        if (metricsChanged) {
+          act = 'metrics_updated';
+        } else if (!wasPublished && isNowPublished) {
+          act = 'published';
+        } else if (dateChanged && updated.scheduledDate) {
+          act = 'scheduled';
+        }
+
+        window.ForgeDB.logActivity({
+          action: act,
+          targetType: r.assetType || 'record',
+          targetId: updated.id,
+          targetName: updated.name,
+          details: act === 'metrics_updated' ? `${updated.metrics?.messages || 0} msgs` : ''
+        }).catch(e => console.error(e));
+      }
+
+      await loadAll();
+      closeModal();
+      renderCurrentTab();
+      showToast(`${updated.name} saved.`, 'success');
+    } catch (err) {
+      console.error('Failed to save record:', err);
+      showToast(`Failed to save record: ${err.message}`, 'error');
+    }
   }
 
   function closeModal() {
@@ -1883,99 +1907,114 @@ Write-Host "Done! tracker-import.json created."</pre>
   // ─── Story Creative Hub & Spawning Engine ──────────────────────────────────────
 
   async function spawnReleaseFromStory(storyId) {
-    const story = state.allTrackerRecords.find(r => r.id === storyId) || await window.ForgeDB.getTrackerRecord(storyId);
-    if (!story) return;
+    if (state.isSpawningRelease) return;
+    state.isSpawningRelease = true;
 
-    const releaseCount = (story.releaseIds || []).length + 1;
-    const customLabel = prompt(`Enter release iteration label for "${story.name}":`, `Release #${releaseCount}`);
-    if (customLabel === null) return;
-    const iterationLabel = customLabel.trim() || `Release #${releaseCount}`;
-    const releaseName = `${story.name} (${iterationLabel})`;
+    try {
+      const story = state.allTrackerRecords.find(r => r.id === storyId) || await window.ForgeDB.getTrackerRecord(storyId);
+      if (!story) throw new Error('Story record not found');
 
-    // Map story pipeline -> release pipeline
-    const releasePipeline = window.ForgeDB.defaultTrackerPipeline('release');
-    if (story.pipeline?.concept) releasePipeline.staged = true;
-    if (story.pipeline?.bio) releasePipeline.bio = true;
-    if (story.pipeline?.initialMessage) releasePipeline.initialMessage = true;
+      const releaseCount = (story.releaseIds || []).length + 1;
+      const customLabel = prompt(`Enter release iteration label for "${story.name}":`, `Release #${releaseCount}`);
+      if (customLabel === null) return;
+      const iterationLabel = customLabel.trim() || `Release #${releaseCount}`;
+      const releaseName = `${story.name} (${iterationLabel})`;
 
-    const newRelease = {
-      assetType: 'release',
-      name: releaseName,
-      iterationLabel: iterationLabel,
-      universe: story.universe || '',
-      project: story.project || '',
-      priority: story.priority || null,
-      tags: story.tags ? [...story.tags] : [],
-      notes: story.notes ? `Spawned from Story "${story.name}".\n\n${story.notes}` : `Spawned from Story "${story.name}".`,
-      pipeline: releasePipeline,
-      releaseSource: 'story',
-      sourceStoryId: story.id,
-      linkedVaultIds: story.linkedVaultIds ? [...story.linkedVaultIds] : []
-    };
+      // Map story pipeline -> release pipeline
+      const releasePipeline = window.ForgeDB.defaultTrackerPipeline('release');
+      if (story.pipeline?.concept) releasePipeline.staged = true;
+      if (story.pipeline?.bio) releasePipeline.bio = true;
+      if (story.pipeline?.initialMessage) releasePipeline.initialMessage = true;
 
-    const savedRelease = await window.ForgeDB.saveTrackerRecord(newRelease);
+      const newRelease = {
+        assetType: 'release',
+        name: releaseName,
+        iterationLabel: iterationLabel,
+        universe: story.universe || '',
+        project: story.project || '',
+        priority: story.priority || null,
+        tags: story.tags ? [...story.tags] : [],
+        notes: story.notes ? `Spawned from Story "${story.name}".\n\n${story.notes}` : `Spawned from Story "${story.name}".`,
+        pipeline: releasePipeline,
+        releaseSource: 'story',
+        sourceStoryId: story.id,
+        linkedVaultIds: story.linkedVaultIds ? [...story.linkedVaultIds] : []
+      };
 
-    // Update story record
-    const updatedReleaseIds = Array.from(new Set([...(story.releaseIds || []), savedRelease.id]));
-    const updatedStory = {
-      ...story,
-      status: 'Promoted',
-      releaseIds: updatedReleaseIds
-    };
+      const savedRelease = await window.ForgeDB.saveTrackerRecord(newRelease);
 
-    await window.ForgeDB.saveTrackerRecord(updatedStory);
+      // Update story record
+      const updatedReleaseIds = Array.from(new Set([...(story.releaseIds || []), savedRelease.id]));
+      const updatedStory = {
+        ...story,
+        status: 'Promoted',
+        releaseIds: updatedReleaseIds
+      };
 
-    if (window.ForgeDB?.logActivity) {
-      window.ForgeDB.logActivity({
-        action: 'created',
-        targetType: 'release',
-        targetId: savedRelease.id,
-        targetName: savedRelease.name,
-        details: `Spawned from story: ${story.name}`
-      }).catch(e => console.error(e));
+      await window.ForgeDB.saveTrackerRecord(updatedStory);
+
+      if (window.ForgeDB?.logActivity) {
+        window.ForgeDB.logActivity({
+          action: 'created',
+          targetType: 'release',
+          targetId: savedRelease.id,
+          targetName: savedRelease.name,
+          details: `Spawned from story: ${story.name}`
+        }).catch(e => console.error(e));
+      }
+
+      await loadAll();
+      renderCurrentTab();
+      showToast(`🚀 Release "${savedRelease.name}" spawned from Story!`, 'success');
+    } catch (err) {
+      console.error('Failed to spawn release:', err);
+      showToast(`Failed to spawn release: ${err.message}`, 'error');
+    } finally {
+      state.isSpawningRelease = false;
     }
-
-    await loadAll();
-    renderCurrentTab();
-    showToast(`🚀 Release "${savedRelease.name}" spawned from Story!`, 'success');
   }
 
   async function promoteStubToStory(stubId) {
-    const stub = await window.ForgeDB.getTrackerRecord(stubId);
-    if (!stub) return;
+    try {
+      const stub = await window.ForgeDB.getTrackerRecord(stubId);
+      if (!stub) throw new Error('Concept stub not found');
 
-    const newStory = {
-      assetType: 'story',
-      name: stub.name,
-      universe: stub.universe || '',
-      project: stub.project || '',
-      priority: stub.priority || null,
-      tags: stub.tags || [],
-      notes: stub.notes || '',
-      status: 'Active',
-      releaseIds: [],
-      linkedVaultIds: []
-    };
+      const newStory = {
+        assetType: 'story',
+        name: stub.name,
+        universe: stub.universe || '',
+        project: stub.project || '',
+        priority: stub.priority || null,
+        tags: stub.tags || [],
+        notes: stub.notes || '',
+        status: 'Active',
+        releaseIds: [],
+        linkedVaultIds: []
+      };
 
-    const savedStory = await window.ForgeDB.saveTrackerRecord(newStory);
+      const savedStory = await window.ForgeDB.saveTrackerRecord(newStory);
 
-    // Mark stub as promoted
-    stub.promotedToVaultId = savedStory.id;
-    await window.ForgeDB.saveTrackerRecord(stub);
+      // Mark stub as promoted
+      stub.promotedToVaultId = savedStory.id;
+      await window.ForgeDB.saveTrackerRecord(stub);
 
-    if (window.ForgeDB?.logActivity) {
-      window.ForgeDB.logActivity({
-        action: 'created',
-        targetType: 'story',
-        targetId: savedStory.id,
-        targetName: savedStory.name,
-        details: 'Promoted from concept stub'
-      }).catch(e => console.error(e));
+      if (window.ForgeDB?.logActivity) {
+        window.ForgeDB.logActivity({
+          action: 'created',
+          targetType: 'story',
+          targetId: savedStory.id,
+          targetName: savedStory.name,
+          details: 'Promoted from concept stub'
+        }).catch(e => console.error(e));
+      }
+
+      await loadAll();
+      renderCurrentTab();
+      showToast(`📖 Concept "${stub.name}" promoted to Story!`, 'success');
+    } catch (err) {
+      console.error('Failed to promote stub:', err);
+      showToast(`Failed to promote stub: ${err.message}`, 'error');
     }
-
-    await loadAll();
-    renderCurrentTab();
-    showToast(`📖 Concept "${stub.name}" promoted to Story!`, 'success');
   }
 
   
@@ -2556,6 +2595,9 @@ ${releasesMd}
   // ─── Event Delegation ─────────────────────────────────────────────────────────
 
   function bindEvents(container) {
+    if (container._mcEventsBound) return;
+    container._mcEventsBound = true;
+
     container.addEventListener('click', async (e) => {
       const t = e.target;
 
@@ -2593,6 +2635,13 @@ ${releasesMd}
       const exportBriefBtn = t.closest('.mc-export-story-brief');
       if (exportBriefBtn) {
         exportStoryBrief(exportBriefBtn.dataset.storyId);
+        return;
+      }
+
+      // Close Modal helper
+      const closeModalBtn = t.closest('.mc-close-modal');
+      if (closeModalBtn) {
+        closeModal();
         return;
       }
 
@@ -2711,8 +2760,8 @@ ${releasesMd}
       // Open Quick Metrics Snapshot Modal
       const quickMetricsBtn = t.closest('.mc-open-quick-metrics');
       if (quickMetricsBtn) {
-        const recordId = quickMetricsBtn.dataset.recordId;
-        if (recordId) openQuickMetricsModal(recordId);
+        const recordId = quickMetricsBtn.dataset.recordId || null;
+        openQuickMetricsModal(recordId);
         return;
       }
 
@@ -3471,6 +3520,13 @@ ${releasesMd}
           </div>
         </div>
         <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:#f59e0b;">⭐</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${(m.favorites || 0).toLocaleString()}</div>
+            <div class="mc-kpi-label">Total Favorites</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
           <div class="mc-kpi-icon" style="color:var(--warning);">📐</div>
           <div class="mc-kpi-body">
             <div class="mc-kpi-value">${mpc}</div>
@@ -3500,65 +3556,85 @@ ${releasesMd}
   }
 
   function openQuickMetricsModal(botId) {
-    const bot = state.allTrackerRecords.find(r => r.id === botId);
-    if (!bot) return;
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
+    if (releases.length === 0) {
+      showToast('No release bots found to record metrics for.', 'warning');
+      return;
+    }
+
+    let bot = releases.find(r => r.id === botId) || releases[0];
 
     const modal = document.getElementById('mc-modal-overlay');
     const body = document.getElementById('mc-modal-body');
     const title = document.getElementById('mc-modal-title');
 
-    title.innerHTML = `⚡ Record Metric Snapshot: ${esc(bot.name)}`;
+    title.innerHTML = `⚡ Record Metric Snapshot`;
 
-    const last = bot.metrics || {};
+    const renderModalBody = (targetBot) => {
+      bot = targetBot;
+      const last = bot.metrics || {};
 
-    body.innerHTML = `
-      <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
-        Metric updates create an immutable, append-only performance snapshot with an automatic timestamp.
-      </div>
-      <div class="mc-form-row" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
-        <div class="form-group"><label>Messages</label>
-          <input type="number" id="mc-snap-msgs" value="${last.messages || 0}" class="mc-modal-input" min="0">
+      body.innerHTML = `
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; display:block;">Select Bot / Release</label>
+          <select id="mc-snap-bot-select" class="mc-modal-input" style="width:100%;">
+            ${releases.map(r => `<option value="${r.id}" ${r.id === bot.id ? 'selected' : ''}>${esc(r.name)}${r.universe ? ` (${esc(r.universe)})` : ''}</option>`).join('')}
+          </select>
         </div>
-        <div class="form-group"><label>Unique Chats</label>
-          <input type="number" id="mc-snap-chats" value="${last.uniqueChats || 0}" class="mc-modal-input" min="0">
+        <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
+          Metric updates create an immutable, append-only performance snapshot with an automatic timestamp.
         </div>
-        <div class="form-group"><label>Favorites</label>
-          <input type="number" id="mc-snap-favs" value="${last.favorites || 0}" class="mc-modal-input" min="0">
+        <div class="mc-form-row" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+          <div class="form-group"><label>Messages</label>
+            <input type="number" id="mc-snap-msgs" value="${last.messages || 0}" class="mc-modal-input" min="0">
+          </div>
+          <div class="form-group"><label>Unique Chats</label>
+            <input type="number" id="mc-snap-chats" value="${last.uniqueChats || 0}" class="mc-modal-input" min="0">
+          </div>
+          <div class="form-group"><label>Favorites</label>
+            <input type="number" id="mc-snap-favs" value="${last.favorites || 0}" class="mc-modal-input" min="0">
+          </div>
         </div>
-      </div>
-      <div style="padding:10px; background:var(--bg-secondary); border-radius:6px; font-size:0.8rem; margin-bottom:16px;">
-        <div><strong>Live Derived Preview:</strong></div>
-        <div id="mc-snap-preview" style="display:flex; gap:16px; margin-top:6px; color:var(--accent);">
-          <span>MpC: <strong id="mc-prev-mpc">—</strong></span>
-          <span>Fav / Chat: <strong id="mc-prev-favchat">—</strong></span>
-          <span>Fav / 100 Msg: <strong id="mc-prev-favmsg">—</strong></span>
+        <div style="padding:10px; background:var(--bg-secondary); border-radius:6px; font-size:0.8rem; margin-bottom:16px;">
+          <div><strong>Live Derived Preview:</strong></div>
+          <div id="mc-snap-preview" style="display:flex; gap:16px; margin-top:6px; color:var(--accent);">
+            <span>MpC: <strong id="mc-prev-mpc">—</strong></span>
+            <span>Fav / Chat: <strong id="mc-prev-favchat">—</strong></span>
+            <span>Fav / 100 Msg: <strong id="mc-prev-favmsg">—</strong></span>
+          </div>
         </div>
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
-        <button class="mc-btn mc-btn-primary" id="mc-btn-submit-snapshot" data-bot-id="${bot.id}">📈 Record Snapshot</button>
-      </div>
-    `;
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
+          <button class="mc-btn mc-btn-primary" id="mc-btn-submit-snapshot" data-bot-id="${bot.id}">📈 Record Snapshot</button>
+        </div>
+      `;
 
-    modal.classList.remove('hidden');
+      const updatePreview = () => {
+        const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
+        const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
+        const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
 
-    const updatePreview = () => {
-      const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
-      const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
-      const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
+        const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs) : null;
+        if (calc) {
+          document.getElementById('mc-prev-mpc').textContent = calc.mpc;
+          document.getElementById('mc-prev-favchat').textContent = calc.favPerChat;
+          document.getElementById('mc-prev-favmsg').textContent = calc.favPer100Msg;
+        }
+      };
 
-      const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs) : null;
-      if (calc) {
-        document.getElementById('mc-prev-mpc').textContent = calc.mpc;
-        document.getElementById('mc-prev-favchat').textContent = calc.favPerChat;
-        document.getElementById('mc-prev-favmsg').textContent = calc.favPer100Msg;
-      }
+      document.getElementById('mc-snap-bot-select')?.addEventListener('change', (e) => {
+        const selected = releases.find(r => r.id === e.target.value);
+        if (selected) renderModalBody(selected);
+      });
+
+      document.getElementById('mc-snap-msgs')?.addEventListener('input', updatePreview);
+      document.getElementById('mc-snap-chats')?.addEventListener('input', updatePreview);
+      document.getElementById('mc-snap-favs')?.addEventListener('input', updatePreview);
+      updatePreview();
     };
 
-    document.getElementById('mc-snap-msgs')?.addEventListener('input', updatePreview);
-    document.getElementById('mc-snap-chats')?.addEventListener('input', updatePreview);
-    document.getElementById('mc-snap-favs')?.addEventListener('input', updatePreview);
-    updatePreview();
+    renderModalBody(bot);
+    modal.classList.remove('hidden');
   }
 
   async function submitMetricSnapshot(botId) {
@@ -3573,9 +3649,15 @@ ${releasesMd}
       ? bot.metricSnapshots[bot.metricSnapshots.length - 1]
       : null;
 
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
     const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs, prevSnap) : {
-      messages: msgs, chats, favorites: favs, mpc: chats > 0 ? parseFloat((msgs / chats).toFixed(2)) : 0, timestamp: new Date().toISOString()
+      messages: msgs, chats, favorites: favs, mpc: chats > 0 ? parseFloat((msgs / chats).toFixed(2)) : 0, timestamp: now.toISOString()
     };
+    calc.date = dateStr;
+    calc.time = timeStr;
 
     bot.metricSnapshots = bot.metricSnapshots || [];
     bot.metricSnapshots.push(calc);
@@ -3586,9 +3668,11 @@ ${releasesMd}
       uniqueChats: chats,
       favorites: favs,
       msgPerChat: calc.mpc,
-      lastUpdated: calc.timestamp
+      date: dateStr,
+      time: timeStr,
+      lastUpdated: now.toISOString()
     };
-    bot.latestSnapshotReference = calc.timestamp;
+    bot.latestSnapshotReference = now.toISOString();
 
     await window.ForgeDB.saveTrackerRecord(bot);
 
@@ -3604,24 +3688,26 @@ ${releasesMd}
 
   function renderMetrics() {
     const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
-    const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0);
-    const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0));
+    const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0 || r.metrics?.favorites > 0);
+    const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0) && !(r.metrics?.favorites > 0));
 
     const sortMode = state.leaderboardSort || 'messages';
     const getSortVal = (r) => {
       const m = r.metrics || {};
       if (sortMode === 'chats') return m.uniqueChats || 0;
       if (sortMode === 'mpc') return m.uniqueChats > 0 ? (m.messages / m.uniqueChats) : 0;
+      if (sortMode === 'favorites') return m.favorites || 0;
       return m.messages || 0;
     };
 
     // Sort descending by active metric selection
     const sorted = [...withMetrics].sort((a, b) => getSortVal(b) - getSortVal(a));
-    const sortLabel = sortMode === 'chats' ? 'Unique Chats' : sortMode === 'mpc' ? 'Msg / Chat (MpC)' : 'Messages';
+    const sortLabel = sortMode === 'chats' ? 'Unique Chats' : sortMode === 'mpc' ? 'Msg / Chat (MpC)' : sortMode === 'favorites' ? 'Favorites' : 'Messages';
 
     // Totals
     const totalMsgs = sorted.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
     const totalChats = sorted.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
+    const totalFavs = sorted.reduce((s, r) => s + (r.metrics?.favorites || 0), 0);
     const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
     const topBot = sorted[0];
 
@@ -3647,16 +3733,19 @@ ${releasesMd}
       // Calculate deltas if previousMetrics exists
       let deltaMsgHtml = '';
       let deltaChatsHtml = '';
+      let deltaFavsHtml = '';
       let deltaMpcHtml = '';
 
-      if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined)) {
+      if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined || prev.favorites !== undefined)) {
         const dMsg = (m.messages || 0) - (prev.messages || 0);
         const dChats = (m.uniqueChats || 0) - (prev.uniqueChats || 0);
+        const dFavs = (m.favorites || 0) - (prev.favorites || 0);
         const prevMpcNum = prev.uniqueChats > 0 ? (prev.messages / prev.uniqueChats) : 0;
         const dMpc = mpcNum - prevMpcNum;
 
         if (dMsg > 0) deltaMsgHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.messages || 0).toLocaleString()}">▲ +${dMsg.toLocaleString()}</span>`;
         if (dChats > 0) deltaChatsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.uniqueChats || 0).toLocaleString()}">▲ +${dChats.toLocaleString()}</span>`;
+        if (dFavs > 0) deltaFavsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.favorites || 0).toLocaleString()}">▲ +${dFavs.toLocaleString()}</span>`;
         if (dMpc > 0) deltaMpcHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous MpC: ${prevMpcNum.toFixed(2)}">▲ +${dMpc.toFixed(2)}</span>`;
       }
 
@@ -3678,6 +3767,10 @@ ${releasesMd}
           ${(m.uniqueChats || 0).toLocaleString()}
           ${deltaChatsHtml}
         </td>
+        <td class="mc-metrics-num">
+          ${(m.favorites || 0).toLocaleString()}
+          ${deltaFavsHtml}
+        </td>
         <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">
           ${mpc}
           ${deltaMpcHtml}
@@ -3685,7 +3778,7 @@ ${releasesMd}
         <td class="mc-metrics-date">${m.date ? `${m.date}${m.time ? ' ' + m.time : ''}` : '—'}</td>
         <td class="mc-cell-actions">
           <button class="mc-action-btn mc-open-bot-analytics" data-record-id="${rec.id}" title="View Performance & Trajectory Chart">📊</button>
-          <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit metrics">✏️</button>
+          <button class="mc-action-btn mc-open-quick-metrics" data-record-id="${rec.id}" title="Record / Edit Metrics">✏️</button>
         </td>
       </tr>`;
     };
@@ -3694,6 +3787,7 @@ ${releasesMd}
       <div class="mc-kpi-grid" style="margin-bottom:20px;">
         ${kpiCard('💬', totalMsgs.toLocaleString(), 'Total Messages across all bots')}
         ${kpiCard('👥', totalChats.toLocaleString(), 'Total Unique Chats', 'var(--success)')}
+        ${kpiCard('⭐', totalFavs.toLocaleString(), 'Total Favorites across all bots', '#f59e0b')}
         ${kpiCard('📐', avgMPC, 'Avg Msg / Chat (all bots)', 'var(--warning)')}
         ${topBot ? kpiCard('🏆', esc(topBot.name), `Top bot · ${(topBot.metrics?.messages || 0).toLocaleString()} msgs`, '#f59e0b') : ''}
       </div>
@@ -3712,6 +3806,10 @@ ${releasesMd}
           chartTitle = '👥 Total Unique Chats Growth';
           chartColor = '#6366f1';
           targetMax = totalChats;
+        } else if (metric === 'favorites') {
+          chartTitle = '⭐ Total Favorites Growth';
+          chartColor = '#f59e0b';
+          targetMax = totalFavs;
         } else if (metric === 'mpc') {
           chartTitle = '📐 Average MpC Trajectory';
           chartColor = '#f59e0b';
@@ -3731,23 +3829,26 @@ ${releasesMd}
             dStr,
             d,
             msgs: r.metrics?.messages || 0,
-            chats: r.metrics?.uniqueChats || r.metrics?.chats || 0
+            chats: r.metrics?.uniqueChats || r.metrics?.chats || 0,
+            favs: r.metrics?.favorites || 0
           };
         }).filter(r => r.dStr && !isNaN(r.d)).sort((a, b) => a.d - b.d);
 
         const monthsMap = {};
-        let cumMsgs = 0, cumChats = 0, cumBots = 0;
+        let cumMsgs = 0, cumChats = 0, cumFavs = 0, cumBots = 0;
 
         datedReleases.forEach(r => {
           cumBots++;
           cumMsgs += r.msgs;
           cumChats += r.chats;
+          cumFavs += r.favs;
           const label = r.d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
           const mpcVal = cumChats > 0 ? parseFloat((cumMsgs / cumChats).toFixed(2)) : 0;
           monthsMap[label] = {
             label,
             messages: cumMsgs,
             chats: cumChats,
+            favorites: cumFavs,
             mpc: mpcVal,
             bots: cumBots
           };
@@ -3757,6 +3858,7 @@ ${releasesMd}
         timelinePoints.forEach(p => {
           let val = p.messages;
           if (metric === 'chats') val = p.chats;
+          else if (metric === 'favorites') val = p.favorites;
           else if (metric === 'mpc') val = p.mpc;
           else if (metric === 'bots') val = p.bots;
           dataPoints.push({ label: p.label, value: val });
@@ -3778,6 +3880,7 @@ ${releasesMd}
               <div class="mc-pill-group">
                 ${pill('messages', '💬 Messages')}
                 ${pill('chats', '👥 Unique Chats')}
+                ${pill('favorites', '⭐ Favorites')}
                 ${pill('mpc', '📐 Avg MpC')}
                 ${pill('bots', '🤖 Published Bots')}
               </div>
@@ -3789,10 +3892,14 @@ ${releasesMd}
 
       <div class="mc-metrics-section">
         <div class="mc-card-header-with-pills" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-          <h3 class="mc-section-title" style="margin-bottom:0;">📊 Leaderboard — by ${sortLabel}</h3>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <h3 class="mc-section-title" style="margin-bottom:0;">📊 Leaderboard — by ${sortLabel}</h3>
+            <button type="button" class="mc-btn mc-btn-primary mc-btn-sm mc-open-quick-metrics" title="Record Metric Snapshot for any release bot">⚡ Record Metric Snapshot</button>
+          </div>
           <div class="mc-pill-group">
             <button class="mc-leaderboard-pill${sortMode === 'messages' ? ' active' : ''}" data-sort="messages">💬 By Messages</button>
             <button class="mc-leaderboard-pill${sortMode === 'chats' ? ' active' : ''}" data-sort="chats">👥 By Unique Chats</button>
+            <button class="mc-leaderboard-pill${sortMode === 'favorites' ? ' active' : ''}" data-sort="favorites">⭐ By Favorites</button>
             <button class="mc-leaderboard-pill${sortMode === 'mpc' ? ' active' : ''}" data-sort="mpc">📐 By MpC</button>
           </div>
         </div>
@@ -3808,6 +3915,7 @@ ${releasesMd}
                   <th>Priority</th>
                   <th>Messages</th>
                   <th>Unique Chats</th>
+                  <th>Favorites</th>
                   <th>Msg / Chat</th>
                   <th>Snapshot</th>
                   <th></th>
@@ -3835,7 +3943,7 @@ ${releasesMd}
                   <td><button class="mc-name-link mc-edit-record" data-record-id="${r.id}">${esc(r.name)}</button></td>
                   <td>${universeBadge(r.universe)}</td>
                   <td>${formatDate(r.scheduledDate)}</td>
-                  <td><button class="mc-action-btn mc-edit-record" data-record-id="${r.id}" title="Add metrics">+ Add Metrics</button></td>
+                  <td><button class="mc-action-btn mc-open-quick-metrics" data-record-id="${r.id}" title="Record / Edit Metrics">+ Add Metrics</button></td>
                 </tr>`).join('')}
             </tbody>
           </table>

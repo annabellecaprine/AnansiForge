@@ -238,6 +238,7 @@
   function unstageComponent(id) {
     stagedIds = stagedIds.filter(x => x !== id);
     delete mappings[id];
+    delete contentOverrides[id];
     relationships = relationships.filter(r => r.sourceId !== id && r.targetId !== id);
     
     renderDrawer();
@@ -249,6 +250,7 @@
   function clearDrawer() {
     stagedIds = [];
     mappings = {};
+    contentOverrides = {};
     relationships = [];
     activeProjectId = null;
     coverDataUrl = null;
@@ -867,13 +869,13 @@
       }
     }).join('\n\n');
 
-    const scenarioText = fields.scenario.map(c => c.content.trim()).join('\n\n');
-    const firstMesText = fields.first_mes.map(c => c.content.trim()).join('\n\n');
+    const scenarioText = fields.scenario.map(c => (c.content || '').trim()).join('\n\n');
+    const firstMesText = fields.first_mes.map(c => (c.content || '').trim()).join('\n\n');
 
-    let systemPromptText = fields.system_prompt.map(c => c.content.trim()).join('\n\n');
+    let systemPromptText = fields.system_prompt.map(c => (c.content || '').trim()).join('\n\n');
 
-    const postHistoryText = fields.post_history_instructions.map(c => c.content.trim()).join('\n\n');
-    const examplesText = fields.mes_example.map(c => c.content.trim()).join('\n\n');
+    const postHistoryText = fields.post_history_instructions.map(c => (c.content || '').trim()).join('\n\n');
+    const examplesText = fields.mes_example.map(c => (c.content || '').trim()).join('\n\n');
 
     return {
       spec: 'chara_card_v2',
@@ -1099,7 +1101,6 @@
       const drawCanvasContent = (ctx, callback) => {
         if (coverDataUrl) {
           const img = new Image();
-          img.src = coverDataUrl;
           img.onload = () => {
             // Draw custom cover scaled to cover canvas (object-fit: cover)
             const scale = Math.max(400 / img.width, 600 / img.height);
@@ -1112,6 +1113,7 @@
             drawFallbackGrid(ctx);
             callback();
           };
+          img.src = coverDataUrl;
         } else {
           drawFallbackGrid(ctx);
           callback();

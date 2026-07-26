@@ -20,7 +20,7 @@
     const key = config.apiKey || '';
     const maxTokens = config.maxTokens || 4096;
 
-    if (!key && provider !== 'lmstudio' && provider !== 'kobold') {
+    if (!key && !['lmstudio', 'kobold', 'custom', 'chutes', 'local'].includes(provider)) {
       throw new Error(`API key is missing for provider: ${provider}. Please configure it in API settings.`);
     }
 
@@ -28,10 +28,12 @@
     if (provider === 'gemini') {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
       
-      const contents = history.map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }]
-      }));
+      const contents = history && history.length > 0
+        ? history.map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.content || ' ' }]
+          }))
+        : [{ role: 'user', parts: [{ text: 'Please proceed.' }] }];
 
       const body = {
         contents: contents,
@@ -61,7 +63,11 @@
       }
 
       const data = await resp.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '(No response)';
+      const candidate = data.candidates?.[0];
+      if (candidate?.finishReason === 'SAFETY') {
+        return '⚠️ Output was blocked by Gemini safety filters.';
+      }
+      return candidate?.content?.parts?.[0]?.text || '(No response)';
     }
 
     // 2. OpenAI / OpenRouter / Chutes / LM Studio / Custom Endpoints
