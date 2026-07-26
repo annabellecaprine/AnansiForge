@@ -477,7 +477,7 @@
 
     return `<div class="mc-toolbar">
       <div class="mc-toolbar-left">
-        <input type="text" id="mc-search" class="mc-search" placeholder="Search…" value="${esc(state.filters.search)}">
+        <input type="search" id="mc-search" name="mc-search" class="mc-search" placeholder="Search…" value="${esc(state.filters.search)}" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         <select id="mc-filter-universe" class="mc-filter-select">
           ${universeFilterOptionsHTML(state.filters.universe)}
         </select>
@@ -2108,7 +2108,7 @@ Write-Host "Done! tracker-import.json created."</pre>
 
       let html = `
         <div class="mc-vault-picker-header" style="margin-bottom:14px;">
-          <input type="text" id="mc-vault-picker-search" class="mc-modal-input" placeholder="🔍 Search Vault components by name or tag…" style="margin-bottom:10px;">
+          <input type="search" id="mc-vault-picker-search" name="vault-picker-search" class="mc-modal-input" placeholder="🔍 Search Vault components by name or tag…" style="margin-bottom:10px;" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
           <div style="font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
             <span>Linked Assets: <strong style="color:var(--text-primary);">${tempLinkedIds.length} item(s) selected</strong></span>
             <button type="button" id="mc-btn-clear-linked-vault" class="mc-btn mc-btn-ghost mc-btn-sm" style="color:#fca5a5;">Clear All</button>
@@ -2502,7 +2502,7 @@ ${releasesMd}
 
     body.innerHTML = `
       <div style="margin-bottom:12px;">
-        <input type="text" id="mc-link-vault-search" class="mc-search" placeholder="Search Vault components to link..." style="width:100%;">
+        <input type="search" id="mc-link-vault-search" name="link-vault-search" class="mc-search" placeholder="Search Vault components to link..." style="width:100%;" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div id="mc-link-vault-list" style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
         ${Object.keys(categoryGroups).map(catKey => {

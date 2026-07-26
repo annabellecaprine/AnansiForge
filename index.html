@@ -55,7 +55,7 @@
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          <input type="text" id="vault-search" placeholder="Search Vault components..." autocomplete="off">
+          <input type="search" id="vault-search" name="vault-search" placeholder="Search Vault components..." autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
       </div>
 
@@ -847,7 +847,7 @@
         </div>
         <div id="api-key-group" class="form-group">
           <label for="api-key">API Key</label>
-          <input type="password" id="api-key" placeholder="Enter API Key">
+          <input type="password" id="api-key" name="api-key" placeholder="Enter API Key" autocomplete="new-password" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
       </div>
       <div class="modal-footer" style="display:flex; gap:8px; justify-content:space-between; align-items:center;">
@@ -900,8 +900,8 @@
       </div>
       <div class="modal-body">
         <div class="form-group" style="margin-bottom:12px;">
-          <input type="text" id="parlor-attach-search" class="mc-search" placeholder="Search items to attach…"
-            style="width:100%;" aria-label="Search items to attach">
+          <input type="search" id="parlor-attach-search" name="parlor-attach-search" class="mc-search" placeholder="Search items to attach…"
+            style="width:100%;" aria-label="Search items to attach" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
         <div id="parlor-attach-list" class="parlor-attach-list"
           style="max-height: 320px; overflow-y: auto; display:flex; flex-direction:column; gap:6px;"></div>

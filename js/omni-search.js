@@ -18,7 +18,7 @@
             <div class="omni-panel">
                 <div class="omni-input-wrap">
                     <span class="omni-search-icon">🔍</span>
-                    <input type="text" id="omni-input" class="omni-input" placeholder="Search components, projects, releases…" autocomplete="off">
+                    <input type="search" id="omni-input" name="omni-search" class="omni-input" placeholder="Search components, projects, releases…" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
                     <kbd class="omni-kbd">ESC</kbd>
                 </div>
                 <div id="omni-results" class="omni-results"></div>
