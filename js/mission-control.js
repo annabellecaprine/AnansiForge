@@ -1481,7 +1481,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     title.textContent = isNew ? `New ${assetType === 'story' ? 'Story' : 'Release'}` : `Edit: ${r.name}`;
     body.innerHTML = `
       <div class="form-group"><label>Name</label>
-        <input type="text" id="mc-rec-name" value="${esc(r.name)}" placeholder="Name…" class="mc-modal-input">
+        <input type="text" id="mc-rec-name" value="${esc(r.name)}" placeholder="Name…" class="mc-modal-input" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       ${assetType === 'story' ? `
       <div class="form-group"><label>Status</label>
@@ -1519,10 +1519,10 @@ Write-Host "Done! tracker-import.json created."</pre>
         </div>
       </div>
       <div class="form-group"><label>Project / Group</label>
-        <input type="text" id="mc-rec-project" value="${esc(r.project || '')}" class="mc-modal-input" placeholder="e.g. Young Justice">
+        <input type="text" id="mc-rec-project" value="${esc(r.project || '')}" class="mc-modal-input" placeholder="e.g. Young Justice" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div class="form-group"><label>Tags (comma separated)</label>
-        <input type="text" id="mc-rec-tags" value="${esc((r.tags || []).join(', '))}" class="mc-modal-input" placeholder="e.g. hero, DC, tested">
+        <input type="text" id="mc-rec-tags" value="${esc((r.tags || []).join(', '))}" class="mc-modal-input" placeholder="e.g. hero, DC, tested" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div class="form-group"><label>Notes</label>
         <textarea id="mc-rec-notes" class="mc-modal-input" rows="3">${esc(r.notes || '')}</textarea>
@@ -1575,7 +1575,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     title.textContent = 'New Concept Stub';
     body.innerHTML = `
       <div class="form-group"><label>Name</label>
-        <input type="text" id="mc-rec-name" class="mc-modal-input" placeholder="e.g. Kamala Khan">
+        <input type="text" id="mc-rec-name" class="mc-modal-input" placeholder="e.g. Kamala Khan" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div class="mc-form-row">
         <div class="form-group"><label>Category</label>
@@ -1600,10 +1600,10 @@ Write-Host "Done! tracker-import.json created."</pre>
         </div>
       </div>
       <div class="form-group"><label>Project / Group</label>
-        <input type="text" id="mc-rec-project" class="mc-modal-input" placeholder="e.g. Ant-Man">
+        <input type="text" id="mc-rec-project" class="mc-modal-input" placeholder="e.g. Ant-Man" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div class="form-group"><label>Tags (comma separated)</label>
-        <input type="text" id="mc-rec-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel">
+        <input type="text" id="mc-rec-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div class="form-group"><label>Notes</label>
         <textarea id="mc-rec-notes" class="mc-modal-input" rows="2"></textarea>
@@ -1631,7 +1631,7 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     body.innerHTML = `
       <div class="form-group"><label>Name</label>
-        <input type="text" id="mc-asset-name" class="mc-modal-input" placeholder="e.g. ${category === 'character' ? 'Kamala Khan' : category === 'scenario' ? 'Welcome to Xavier\'s' : 'New ' + label}">
+        <input type="text" id="mc-asset-name" class="mc-modal-input" placeholder="e.g. ${category === 'character' ? 'Kamala Khan' : category === 'scenario' ? 'Welcome to Xavier\'s' : 'New ' + label}" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div class="mc-form-row">
         <div class="form-group"><label>Universe</label>
@@ -1650,14 +1650,14 @@ Write-Host "Done! tracker-import.json created."</pre>
           </select>
         </div>` : ''}
         <div class="form-group"><label>Lineage / Version</label>
-          <input type="text" id="mc-asset-lineage" class="mc-modal-input" placeholder="e.g. v1.0">
+          <input type="text" id="mc-asset-lineage" class="mc-modal-input" placeholder="e.g. v1.0" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
       </div>
       <div class="form-group"><label>Content / Details</label>
         <textarea id="mc-asset-content" class="mc-modal-input" rows="3" placeholder="Enter ${label.toLowerCase()} content or notes..."></textarea>
       </div>
       <div class="form-group"><label>Tags (comma separated)</label>
-        <input type="text" id="mc-asset-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel">
+        <input type="text" id="mc-asset-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
         <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
@@ -1872,7 +1872,7 @@ Write-Host "Done! tracker-import.json created."</pre>
           <div class="mc-uni-add-card" style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.2); border-radius:var(--radius-md); padding:14px; margin-bottom:20px;">
             <h4 style="font-size:0.85rem; font-weight:600; color:var(--accent); margin-bottom:10px;">➕ Add New Universe</h4>
             <div class="mc-form-row" style="grid-template-columns: 1.2fr 1fr 60px auto; gap:8px; align-items:center;">
-              <input type="text" id="mc-new-uni-name" class="mc-modal-input" placeholder="Universe Name (e.g. Invincible)">
+              <input type="text" id="mc-new-uni-name" class="mc-modal-input" placeholder="Universe Name (e.g. Invincible)" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
               <select id="mc-new-uni-genre" class="mc-modal-input">
                 ${genreOptions.map(g => `<option value="${g}">${g}</option>`).join('')}
               </select>
@@ -1880,7 +1880,7 @@ Write-Host "Done! tracker-import.json created."</pre>
               <button id="mc-btn-add-universe" class="mc-btn mc-btn-primary mc-btn-sm">Add</button>
             </div>
             <div id="mc-new-uni-custom-genre-wrap" style="display:none; margin-top:8px;">
-              <input type="text" id="mc-new-uni-custom-genre" class="mc-modal-input" placeholder="Type custom genre name...">
+              <input type="text" id="mc-new-uni-custom-genre" class="mc-modal-input" placeholder="Type custom genre name..." autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
           </div>
 
@@ -3071,6 +3071,10 @@ ${releasesMd}
         input.className = 'mc-modal-input';
         input.style.cssText = 'padding:2px 6px; font-size:0.8rem; height:24px; width:110px; display:inline-block;';
         input.value = currentVal;
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('data-1p-ignore', 'true');
+        input.setAttribute('data-lpignore', 'true');
+        input.setAttribute('data-bwignore', 'true');
 
         t.replaceWith(input);
         input.focus();

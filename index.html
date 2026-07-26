@@ -305,7 +305,7 @@
               <div class="form-row" style="display:flex; gap:10px; margin-bottom:12px;">
                 <div class="form-group" style="flex:2;">
                   <label for="forge-output-name">Asset Name</label>
-                  <input type="text" id="forge-output-name" placeholder="Name of your creation..." autocomplete="off">
+                  <input type="text" id="forge-output-name" placeholder="Name of your creation..." autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
                 </div>
                 <div class="form-group" style="flex:1; min-width:120px;">
                   <label for="forge-output-category">Category</label>
@@ -321,7 +321,7 @@
               <div class="form-group" style="margin-bottom:12px;">
                 <label for="forge-output-lineage">Lineage</label>
                 <input type="text" id="forge-output-lineage" placeholder="e.g., Dick Grayson, Bruce Wayne"
-                  autocomplete="off">
+                  autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
               </div>
               <div class="form-group" style="flex-grow:1; display:flex; flex-direction:column; margin-bottom:12px;">
                 <label for="forge-output-content" style="display:flex; justify-content:space-between;">
@@ -373,7 +373,7 @@
             <div class="form-group" style="margin-bottom: 12px;">
               <label for="comp-name">Component Name</label>
               <input type="text" id="comp-name" placeholder="e.g., Gotham City, Joker Persona..." required
-                autocomplete="off">
+                autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
 
             <!-- Editor Tabs (Form vs Raw Code) -->
@@ -516,21 +516,21 @@
             </div>
             <div class="form-group">
               <label for="comp-faction">Faction / Affiliation</label>
-              <input type="text" id="comp-faction" placeholder="e.g., X-Men, Avengers, Sinister Six">
+              <input type="text" id="comp-faction" placeholder="e.g., X-Men, Avengers, Sinister Six" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
             <div class="form-group">
               <label for="comp-lineage">Lineage (Character Identity Group)</label>
               <input type="text" id="comp-lineage" placeholder="e.g., Dick Grayson, Bruce Wayne"
-                list="lineage-suggestions" autocomplete="off">
+                list="lineage-suggestions" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
               <datalist id="lineage-suggestions"></datalist>
             </div>
             <div class="form-group">
               <label for="comp-scenarios">Scenarios Associated (comma separated)</label>
-              <input type="text" id="comp-scenarios" placeholder="e.g., Young Justice, Bat Family, Teen Titans">
+              <input type="text" id="comp-scenarios" placeholder="e.g., Young Justice, Bat Family, Teen Titans" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
             <div class="form-group">
               <label for="comp-tags">Tags (comma separated)</label>
-              <input type="text" id="comp-tags" placeholder="e.g., hero, dark, sci-fi">
+              <input type="text" id="comp-tags" placeholder="e.g., hero, dark, sci-fi" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
             <div class="form-group is-template-group">
               <label class="checkbox-label">
@@ -581,7 +581,7 @@
               <div class="preview-card">
                 <div class="form-group">
                   <label for="breakout-comp-name">Target Name</label>
-                  <input type="text" id="breakout-comp-name">
+                  <input type="text" id="breakout-comp-name" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
                 </div>
                 <div class="form-group">
                   <label for="breakout-comp-category">Target Category</label>
@@ -595,7 +595,7 @@
                 </div>
                 <div class="form-group">
                   <label for="breakout-comp-lineage">Lineage</label>
-                  <input type="text" id="breakout-comp-lineage" placeholder="e.g., Dick Grayson">
+                  <input type="text" id="breakout-comp-lineage" placeholder="e.g., Dick Grayson" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
                 </div>
                 <div class="form-group">
                   <label>Content Snippet</label>
@@ -642,7 +642,7 @@
             <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
               <div>
                 <label for="proj-name">Project / Bot Name</label>
-                <input type="text" id="proj-name" placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off">
+                <input type="text" id="proj-name" placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
               </div>
               <div>
                 <label for="assembler-link-target">Link to Story / Release</label>
@@ -839,11 +839,11 @@
         </div>
         <div id="api-url-group" class="form-group" style="display:none;">
           <label for="api-url">Base URL</label>
-          <input type="text" id="api-url" placeholder="e.g., http://localhost:1234/v1">
+          <input type="text" id="api-url" placeholder="e.g., http://localhost:1234/v1" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
         <div class="form-group">
           <label for="api-model">Model Name</label>
-          <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o">
+          <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
         <div id="api-key-group" class="form-group">
           <label for="api-key">API Key</label>
@@ -874,7 +874,7 @@
         <hr style="border:0; border-top:1px solid var(--border-color); margin: 15px 0;">
         <div class="form-group">
           <label for="persona-name">Persona Name</label>
-          <input type="text" id="persona-name" placeholder="e.g., Alex Cromwell, The Protagonist" required>
+          <input type="text" id="persona-name" placeholder="e.g., Alex Cromwell, The Protagonist" required autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
         </div>
         <div class="form-group">
           <label for="persona-description">Persona Description (Details, traits, powers, relations)</label>
