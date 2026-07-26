@@ -627,7 +627,7 @@
             ${matchingProjects.map(p => `
               <div class="dep-item">
                 <span class="dep-item-name">🤖 ${esc(p.name)}</span>
-                <button class="btn btn-ghost btn-sm dep-open-btn" data-project-id="${p.id}">Open ↗</button>
+                <button class="btn btn-ghost btn-sm dep-open-btn" data-project-id="${esc(p.id)}">Open ↗</button>
               </div>
             `).join('')}
           </div>

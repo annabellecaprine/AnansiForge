@@ -473,7 +473,7 @@
       errBubble.className = 'chat-bubble character error';
       errBubble.innerHTML = `
         <div class="chat-bubble-name">System Error</div>
-        <div style="color:#fca5a5;">Failed to generate response: "${err.message}". Verify your API configuration.</div>
+        <div style="color:#fca5a5;">Failed to generate response: "${escapeHTML(err.message)}". Verify your API configuration.</div>
       `;
       chatLog.appendChild(errBubble);
       chatLog.scrollTop = chatLog.scrollHeight;

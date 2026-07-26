@@ -8,6 +8,16 @@
     let filteredResults = [];
     let selectedIndex = -1;
 
+    function escapeHTML(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function init() {
         // Create DOM
         const overlay = document.createElement('div');
@@ -176,28 +186,28 @@
         let html = '';
         
         groups.forEach(group => {
-            html += `<div class="omni-category-header">${group.icon} ${group.category}</div>`;
+            html += `<div class="omni-category-header">${group.icon} ${escapeHTML(group.category)}</div>`;
             group.items.forEach(item => {
                 const globalIndex = filteredResults.length;
                 filteredResults.push(item);
-                
+
                 let metaHtml = '';
                 if (item._uiType === 'component') {
-                    if (item.category) metaHtml += `<span class="omni-result-meta">${item.category}</span>`;
-                    if (item.universe) metaHtml += `<span class="omni-result-meta">${item.universe}</span>`;
+                    if (item.category) metaHtml += `<span class="omni-result-meta">${escapeHTML(item.category)}</span>`;
+                    if (item.universe) metaHtml += `<span class="omni-result-meta">${escapeHTML(item.universe)}</span>`;
                 } else if (item._uiType === 'project') {
                     if (item.componentCount !== undefined) {
-                        metaHtml += `<span class="omni-result-meta">${item.componentCount} components</span>`;
+                        metaHtml += `<span class="omni-result-meta">${escapeHTML(String(item.componentCount))} components</span>`;
                     }
                 } else if (item._uiType === 'release') {
-                    if (item.universe) metaHtml += `<span class="omni-result-meta">${item.universe}</span>`;
+                    if (item.universe) metaHtml += `<span class="omni-result-meta">${escapeHTML(item.universe)}</span>`;
                 } else if (item._uiType === 'concept') {
-                    if (item.intendedCategory) metaHtml += `<span class="omni-result-meta">${item.intendedCategory}</span>`;
+                    if (item.intendedCategory) metaHtml += `<span class="omni-result-meta">${escapeHTML(item.intendedCategory)}</span>`;
                 }
 
                 html += `
-                    <div class="omni-result" data-index="${globalIndex}" data-type="${item._uiType}" data-id="${item.id}">
-                        <div class="omni-result-name">${item.name || 'Unnamed'}</div>
+                    <div class="omni-result" data-index="${globalIndex}" data-type="${escapeHTML(item._uiType)}" data-id="${escapeHTML(item.id)}">
+                        <div class="omni-result-name">${escapeHTML(item.name) || 'Unnamed'}</div>
                         ${metaHtml ? `<div>${metaHtml}</div>` : ''}
                     </div>
                 `;
