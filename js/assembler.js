@@ -277,13 +277,16 @@
 
     btnStageAssemble.disabled = false;
 
-    for (const id of stagedIds) {
-      const comp = await window.ForgeDB.getComponent(id);
-      if (!comp) continue;
+    // Batch all component reads in parallel instead of serial awaits
+    const components = await Promise.all(stagedIds.map(id => window.ForgeDB.getComponent(id)));
+
+    components.forEach((comp, i) => {
+      if (!comp) return;
+      const id = stagedIds[i];
 
       const pill = document.createElement('div');
       pill.className = 'drawer-item-pill';
-      
+
       const categoryIcon = getCategoryIcon(comp.category);
       pill.innerHTML = `
         <span>${categoryIcon} ${escapeHTML(comp.name)}</span>
@@ -300,7 +303,7 @@
       });
 
       drawerItemsContainer.appendChild(pill);
-    }
+    });
   }
 
   // --- Cover Image Handlers ---
@@ -357,20 +360,25 @@
     currentTweakId = null;
   }
 
+  let _autoSaveTimer = null;
   async function autoSaveProjectRecord() {
     if (!activeProjectId) return;
-    try {
-      const proj = await window.ForgeDB.getProject(activeProjectId);
-      if (proj) {
-        proj.contentOverrides = contentOverrides;
-        // Re-compile project data structure to keep compiledCard up-to-date!
-        const card = await compileCardData();
-        proj.compiledCard = card;
-        await window.ForgeDB.saveProject(proj);
+    // Debounce: coalesce rapid calls (mapping changes, tweak saves) into one write per 400ms
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(async () => {
+      try {
+        const proj = await window.ForgeDB.getProject(activeProjectId);
+        if (proj) {
+          proj.contentOverrides = contentOverrides;
+          // Re-compile project data structure to keep compiledCard up-to-date!
+          const card = await compileCardData();
+          proj.compiledCard = card;
+          await window.ForgeDB.saveProject(proj);
+        }
+      } catch (err) {
+        console.error('Failed to auto-save project overrides:', err);
       }
-    } catch (err) {
-      console.error('Failed to auto-save project overrides:', err);
-    }
+    }, 400);
   }
 
   // --- Assembler Workspace View ---

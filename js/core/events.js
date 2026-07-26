@@ -15,38 +15,27 @@
      * Log human-readable workflow event to Activity Log
      */
     logActivity: async function (action, entityType, entityId, details = '') {
-      if (!window.ForgeDB) return;
-      const entry = {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
+      if (!window.ForgeDB || !window.ForgeDB.logActivity) return;
+      await window.ForgeDB.logActivity({
         action,
         targetType: entityType,
         targetId: entityId,
         targetName: details
-      };
-      if (window.ForgeDB.saveActivityLogEntry) {
-        await window.ForgeDB.saveActivityLogEntry(entry);
-      }
+      });
     },
 
     /**
-     * Log field-level change history to Audit Log
+     * Log field-level change history.
+     * Stored as a structured activity log entry until a dedicated audit store is added.
      */
     logAudit: async function (entityType, entityId, field, previousValue, newValue, author = 'user') {
-      if (!window.ForgeDB) return;
-      const entry = {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        entityType,
-        entityId,
-        field,
-        previousValue,
-        newValue,
-        author
-      };
-      if (window.ForgeDB.saveAuditLogEntry) {
-        await window.ForgeDB.saveAuditLogEntry(entry);
-      }
+      if (!window.ForgeDB || !window.ForgeDB.logActivity) return;
+      await window.ForgeDB.logActivity({
+        action: 'field_changed',
+        targetType: entityType,
+        targetId: entityId,
+        targetName: `${field}: ${String(previousValue)} → ${String(newValue)} (by ${author})`
+      });
     }
   };
 

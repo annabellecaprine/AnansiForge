@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 10;
+  const DB_VERSION = 11;
   
   let dbInstance = null;
 
@@ -184,6 +184,13 @@
           const alStore = db.createObjectStore('activity_log', { keyPath: 'id' });
           alStore.createIndex('timestamp', 'timestamp', { unique: false });
           alStore.createIndex('targetType', 'targetType', { unique: false });
+          alStore.createIndex('targetId', 'targetId', { unique: false });
+        } else {
+          // v11: add targetId index if missing
+          const alStore = event.target.transaction.objectStore('activity_log');
+          if (!alStore.indexNames.contains('targetId')) {
+            alStore.createIndex('targetId', 'targetId', { unique: false });
+          }
         }
 
         // 9. Snapshots
@@ -828,19 +835,13 @@
     const db = dbInstance || await initDB();
     const tx = db.transaction('activity_log', 'readonly');
     const store = tx.objectStore('activity_log');
+    // Use the targetId index for an O(log n) lookup instead of a full table scan
+    const index = store.index('targetId');
     return new Promise((resolve) => {
-      const results = [];
-      const req = store.openCursor();
-      req.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) {
-          if (cursor.value.targetId === targetId) {
-            results.push(cursor.value);
-          }
-          cursor.continue();
-        } else {
-          resolve(results.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
-        }
+      const req = index.getAll(targetId);
+      req.onsuccess = () => {
+        const results = (req.result || []).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        resolve(results);
       };
       req.onerror = () => resolve([]);
     });
@@ -1115,10 +1116,23 @@
 
       if (!db.objectStoreNames.contains(storeName)) continue;
 
+      // Shape-check: reject records with non-string ids or HTML-like name fields
+      const safeRecords = records.filter(rec => {
+        if (!rec || typeof rec !== 'object') return false;
+        if (rec.id !== undefined && typeof rec.id !== 'string') return false;
+        // Reject names/titles that contain angle brackets (basic HTML injection guard)
+        const nameLike = rec.name || rec.title || '';
+        if (typeof nameLike === 'string' && /<[^>]+>/.test(nameLike)) {
+          console.warn('[importVault] Skipping record with HTML-like name:', nameLike);
+          return false;
+        }
+        return true;
+      });
+
       await new Promise((resolve, reject) => {
         const tx    = db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
-        records.forEach(rec => store.put(rec));
+        safeRecords.forEach(rec => store.put(rec));
         tx.oncomplete = resolve;
         tx.onerror    = () => reject(tx.error);
       });
