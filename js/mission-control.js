@@ -4292,6 +4292,94 @@ ${releasesMd}
         `;
       })()}
 
+      <!-- MpC Distribution across all bots -->
+      ${(() => {
+        const mpcBots = withMetrics.map(r => ({
+          name: r.name,
+          mpc: r.metrics.uniqueChats > 0
+            ? parseFloat((r.metrics.messages / r.metrics.uniqueChats).toFixed(2))
+            : null
+        })).filter(b => b.mpc !== null && b.mpc > 0);
+
+        if (mpcBots.length === 0) return '';
+
+        const buckets = [
+          { label: '0 – 10',  min: 0,  max: 10,         color: '#6366f1' },
+          { label: '10 – 15', min: 10, max: 15,          color: '#10b981' },
+          { label: '15 – 20', min: 15, max: 20,          color: '#f59e0b' },
+          { label: '20 – 30', min: 20, max: 30,          color: '#ec4899' },
+          { label: '30+',     min: 30, max: Infinity,    color: '#ef4444' }
+        ];
+
+        const grouped = buckets.map(b => ({
+          ...b,
+          bots: mpcBots.filter(b2 => b2.mpc >= b.min && b2.mpc < b.max)
+        }));
+
+        const maxCount = Math.max(...grouped.map(g => g.bots.length), 1);
+
+        // SVG dimensions
+        const barW = 90, gap = 24, padL = 36, padB = 40, padT = 28;
+        const svgW = padL + grouped.length * (barW + gap) + 20;
+        const chartH = 160;
+        const svgH = chartH + padT + padB;
+
+        // Y-axis gridlines & labels (0, 25%, 50%, 75%, 100% of maxCount)
+        const gridLines = [0, 0.25, 0.5, 0.75, 1].map(frac => {
+          const val = Math.round(frac * maxCount);
+          const y = padT + chartH - Math.round(frac * chartH);
+          return `
+            <line x1="${padL - 4}" y1="${y}" x2="${svgW - 10}" y2="${y}"
+              stroke="rgba(148,163,184,0.12)" stroke-width="1"/>
+            <text x="${padL - 8}" y="${y + 4}" text-anchor="end"
+              font-size="9" fill="#64748b">${val}</text>`;
+        }).join('');
+
+        const bars = grouped.map((g, i) => {
+          const count = g.bots.length;
+          const h = count > 0 ? Math.max(4, Math.round((count / maxCount) * chartH)) : 2;
+          const x = padL + i * (barW + gap);
+          const y = padT + chartH - h;
+          const tipNames = g.bots.map(b => `${b.name} (${b.mpc})`).join('\n');
+          return `
+            <g>
+              <title>${g.label}: ${count} bot${count !== 1 ? 's' : ''}${tipNames ? '\n' + tipNames : ''}</title>
+              <rect x="${x}" y="${y}" width="${barW}" height="${h}"
+                rx="5" fill="${g.color}" opacity="0.85"/>
+              ${count > 0 ? `
+                <text x="${x + barW / 2}" y="${y - 6}"
+                  text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">
+                  ${count}
+                </text>` : ''}
+              <text x="${x + barW / 2}" y="${svgH - padB + 16}"
+                text-anchor="middle" font-size="11" fill="#94a3b8">${g.label}</text>
+              <text x="${x + barW / 2}" y="${svgH - padB + 30}"
+                text-anchor="middle" font-size="9" fill="#64748b">msg/chat</text>
+            </g>`;
+        }).join('');
+
+        const medianMpc = [...mpcBots].sort((a, b) => a.mpc - b.mpc)[Math.floor(mpcBots.length / 2)]?.mpc;
+
+        return `
+        <div class="mc-overview-panel" style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <h3 class="mc-panel-title" style="margin-bottom:2px;">📊 MpC Distribution — All Bots</h3>
+              <span style="font-size:0.75rem; color:var(--text-muted);">
+                How consistently are your bots engaging? Hover a bar to see which bots fall there.
+                ${medianMpc !== undefined ? `&nbsp;·&nbsp; <strong style="color:var(--accent);">Median MpC: ${medianMpc}</strong>` : ''}
+              </span>
+            </div>
+            <span style="font-size:0.78rem; color:var(--text-secondary);">${mpcBots.length} bot${mpcBots.length !== 1 ? 's' : ''} with data</span>
+          </div>
+          <svg width="100%" viewBox="0 0 ${svgW} ${svgH}"
+            style="overflow:visible; display:block; max-width:820px;">
+            ${gridLines}
+            ${bars}
+          </svg>
+        </div>`;
+      })()}
+
       <div class="mc-metrics-section">
         <div class="mc-card-header-with-pills" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
