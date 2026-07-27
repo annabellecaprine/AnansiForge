@@ -4340,7 +4340,7 @@ ${releasesMd}
           const h = count > 0 ? Math.max(4, Math.round((count / maxCount) * chartH)) : 2;
           const x = padL + i * (barW + gap);
           const y = padT + chartH - h;
-          const tipNames = g.bots.map(b => `${b.name} (${b.mpc})`).join('\n');
+          const tipNames = [...g.bots].sort((a, b) => b.mpc - a.mpc).map(b => `${b.name} (${b.mpc})`).join('\n');
           return `
             <g>
               <title>${g.label}: ${count} bot${count !== 1 ? 's' : ''}${tipNames ? '\n' + tipNames : ''}</title>
