@@ -2131,19 +2131,20 @@ main#main-canvas {
 
 .mc-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
 }
 
 .mc-kpi-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   transition: border-color var(--transition-fast), transform var(--transition-fast);
+  min-width: 0;
 }
 
 .mc-kpi-card:hover {
@@ -2152,7 +2153,7 @@ main#main-canvas {
 }
 
 .mc-kpi-icon {
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -2165,19 +2166,23 @@ main#main-canvas {
 }
 
 .mc-kpi-value {
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   font-weight: 700;
   line-height: 1.2;
   color: var(--text-primary);
-}
-
-.mc-kpi-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mc-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  /* allow wrapping so labels never truncate */
+  white-space: normal;
+  word-break: break-word;
 }
 
 .mc-kpi-sub {
