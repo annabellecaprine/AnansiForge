@@ -3060,6 +3060,50 @@ ${releasesMd}
         return;
       }
 
+      // Token Count inline edit — click on the dashed span
+      const tokenCell = t.closest('.mc-token-count-cell');
+      if (tokenCell && t.classList.contains('mc-token-display')) {
+        const recId = tokenCell.dataset.recordId;
+        const rec = state.allTrackerRecords.find(r => r.id === recId);
+        if (!rec) return;
+        const currentVal = rec.tokenCount || '';
+        // Replace span with input
+        tokenCell.innerHTML = `<input type="number" class="mc-token-input" value="${currentVal}"
+          min="0" step="1" style="width:72px; font-size:0.82rem; text-align:center;
+          background:var(--bg-tertiary); border:1px solid var(--accent); border-radius:4px;
+          color:var(--text-primary); padding:2px 4px;" autocomplete="off"
+          data-1p-ignore="true" data-lpignore="true" data-bwignore="true">`;
+        const inp = tokenCell.querySelector('.mc-token-input');
+        inp.focus();
+        inp.select();
+
+        const save = async () => {
+          const v = parseInt(inp.value, 10);
+          const newVal = isNaN(v) || v <= 0 ? null : v;
+          rec.tokenCount = newVal;
+          await window.ForgeDB.saveTrackerRecord(rec);
+          // Re-render just this cell without full tab refresh
+          tokenCell.innerHTML = `<span class="mc-token-display" title="Click to set token count"
+            style="cursor:pointer; font-size:0.82rem; color:${newVal ? 'var(--text-primary)' : 'var(--text-muted)'};
+            padding:2px 6px; border-radius:4px; display:inline-block; min-width:32px; text-align:center;
+            border:1px dashed ${newVal ? 'var(--border-color)' : 'rgba(148,163,184,0.3)'}; transition:border-color 0.15s;">
+            ${newVal ? newVal.toLocaleString() : '—'}</span>`;
+        };
+
+        inp.addEventListener('blur', save);
+        inp.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+          if (ev.key === 'Escape') {
+            tokenCell.innerHTML = `<span class="mc-token-display" title="Click to set token count"
+              style="cursor:pointer; font-size:0.82rem; color:${currentVal ? 'var(--text-primary)' : 'var(--text-muted)'};
+              padding:2px 6px; border-radius:4px; display:inline-block; min-width:32px; text-align:center;
+              border:1px dashed ${currentVal ? 'var(--border-color)' : 'rgba(148,163,184,0.3)'}; transition:border-color 0.15s;">
+              ${currentVal ? parseInt(currentVal).toLocaleString() : '—'}</span>`;
+          }
+        });
+        return;
+      }
+
       // Overview Role / Faction mode pill
       const rolePill = t.closest('.mc-overview-role-pill');
       if (rolePill) {
@@ -3818,7 +3862,67 @@ ${releasesMd}
             <div class="mc-kpi-label">Avg Msg / Chat</div>
           </div>
         </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:#ec4899;">💝</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${totalChats > 0 ? ((m.favorites || 0) / totalChats).toFixed(3) : '—'}</div>
+            <div class="mc-kpi-label">Fav / Chat</div>
+          </div>
+        </div>
       </div>
+
+      <!-- MpC Distribution Chart -->
+      ${(() => {
+        const snaps = rec.metricSnapshots && rec.metricSnapshots.length > 0
+          ? rec.metricSnapshots
+          : (rec.previousMetrics && rec.previousMetrics.uniqueChats > 0
+              ? [rec.previousMetrics, m]
+              : (m.uniqueChats > 0 ? [m] : []));
+
+        // Collect all MpC data points from snapshots
+        const mpcValues = snaps
+          .map(s => s.uniqueChats > 0 ? parseFloat((s.messages / s.uniqueChats).toFixed(2)) : null)
+          .filter(v => v !== null && v > 0);
+
+        // Also include a synthetic "current" point if not a snapshot
+        if (totalChats > 0 && mpcValues.length === 0) mpcValues.push(parseFloat(mpc));
+
+        const buckets = [
+          { label: '0 – 10',   min: 0,  max: 10,  color: '#6366f1' },
+          { label: '10 – 15',  min: 10, max: 15,  color: '#10b981' },
+          { label: '15 – 20',  min: 15, max: 20,  color: '#f59e0b' },
+          { label: '20 – 30',  min: 20, max: 30,  color: '#ec4899' },
+          { label: '30+',      min: 30, max: Infinity, color: '#ef4444' }
+        ];
+
+        const counts = buckets.map(b => mpcValues.filter(v => v >= b.min && v < b.max).length);
+        const maxCount = Math.max(...counts, 1);
+        const barW = 60, gap = 18, svgW = buckets.length * (barW + gap) + 20;
+        const svgH = 120;
+        const labelH = 20;
+        const chartH = svgH - labelH - 24; // space for bottom labels and top axis
+
+        const bars = buckets.map((b, i) => {
+          const h = counts[i] > 0 ? Math.max(4, Math.round((counts[i] / maxCount) * chartH)) : 2;
+          const x = 10 + i * (barW + gap);
+          const y = svgH - labelH - h;
+          return `
+            <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="${b.color}" opacity="0.85"/>
+            ${counts[i] > 0 ? `<text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" font-size="11" fill="#e2e8f0">${counts[i]}</text>` : ''}
+            <text x="${x + barW/2}" y="${svgH - 4}" text-anchor="middle" font-size="10" fill="#94a3b8">${b.label}</text>
+          `;
+        }).join('');
+
+        return mpcValues.length > 0 ? `
+        <div class="mc-overview-panel" style="margin-bottom:14px;">
+          <h4 class="mc-panel-title" style="margin-bottom:8px;">📊 MpC Distribution by Snapshot</h4>
+          <p style="font-size:0.78rem; color:var(--text-muted); margin:0 0 10px;">How often this bot's Msg/Chat ratio fell into each range across recorded snapshots.</p>
+          <svg width="100%" viewBox="0 0 ${svgW} ${svgH}" style="overflow:visible; max-width:520px; display:block; margin:0 auto;">
+            ${bars}
+          </svg>
+          ${mpcValues.length < 3 ? '<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:4px;">⚠️ Record more snapshots over time for a meaningful distribution.</p>' : ''}
+        </div>` : '';
+      })()}
 
       ${noLaunchDate ? `
       <div style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:12px 16px; margin-bottom:14px; color:var(--warning); font-size:0.85rem;">
@@ -4047,7 +4151,9 @@ ${releasesMd}
           <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
         </td>
         <td>${universeBadge(rec.universe)}</td>
-        <td>${priorityBadge(rec.priority)}</td>
+        <td class="mc-token-count-cell" data-record-id="${rec.id}">
+          <span class="mc-token-display" title="Click to set token count" style="cursor:pointer; font-size:0.82rem; color:${rec.tokenCount ? 'var(--text-primary)' : 'var(--text-muted)'}; padding:2px 6px; border-radius:4px; display:inline-block; min-width:32px; text-align:center; border:1px dashed ${rec.tokenCount ? 'var(--border-color)' : 'rgba(148,163,184,0.3)'}; transition:border-color 0.15s;">${rec.tokenCount ? rec.tokenCount.toLocaleString() : '—'}</span>
+        </td>
         <td class="mc-metrics-bar-cell">
           <div class="mc-metrics-bar-wrap">
             <div class="mc-metrics-bar" style="width:${barPct}%;"></div>
@@ -4081,6 +4187,7 @@ ${releasesMd}
         ${kpiCard('👥', totalChats.toLocaleString(), 'Total Unique Chats', 'var(--success)')}
         ${kpiCard('⭐', totalFavs.toLocaleString(), 'Total Favorites across all bots', '#f59e0b')}
         ${kpiCard('📐', avgMPC, 'Avg Msg / Chat (all bots)', 'var(--warning)')}
+        ${kpiCard('💝', totalChats > 0 ? (totalFavs / totalChats).toFixed(3) : '—', 'Avg Fav / Chat', '#ec4899')}
         ${topBot ? kpiCard('🏆', esc(topBot.name), `Top bot · ${(topBot.metrics?.messages || 0).toLocaleString()} msgs`, '#f59e0b') : ''}
       </div>
 
@@ -4204,7 +4311,7 @@ ${releasesMd}
                   <th>#</th>
                   <th>Name</th>
                   <th>Universe</th>
-                  <th>Priority</th>
+                  <th title="Click a value to edit">Tokens</th>
                   <th>Messages</th>
                   <th>Unique Chats</th>
                   <th>Favorites</th>
