@@ -3821,7 +3821,10 @@ ${releasesMd}
     const body = document.getElementById('mc-modal-body');
     const title = document.getElementById('mc-modal-title');
 
-    title.innerHTML = `📊 Analytics & Trajectory — ${esc(name)}`;
+    const noLaunchDate = rec.assetType === 'release' && !rec.scheduledDate && !rec.publishedDate;
+    const limitedData = allSnaps.length < 2;
+
+    title.innerHTML = `📊 Analytics &amp; Trajectory — ${esc(name)}`;
     body.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div style="display:flex; gap:8px; align-items:center;">
