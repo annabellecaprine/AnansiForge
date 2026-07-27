@@ -1564,7 +1564,7 @@ main#main-canvas {
 
 .modal-body {
   padding: 20px;
-  max-height: 400px;
+  max-height: 65vh;
   overflow-y: auto;
 }
 

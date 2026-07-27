@@ -499,7 +499,14 @@
       <div class="mc-toolbar-right">
         ${state.activeTagFilter ? `<button class="mc-tag-chip active" id="mc-clear-tag">✕ #${esc(state.activeTagFilter)}</button>` : ''}
         ${showAddRecord ? `<button class="mc-btn mc-btn-primary" id="mc-add-record" data-type="${recordType}">+ Add ${recordType === 'story' ? 'Story' : 'Release'}</button>` : ''}
-        <button class="mc-btn mc-btn-primary" id="mc-add-stub" title="Stub out a new Concept">+ Concept</button>
+        <div class="mc-split-btn" style="display:inline-flex; position:relative;">
+          <button class="mc-btn mc-btn-primary" id="mc-add-stub" title="Single concept stub">+ Concept</button>
+          <button class="mc-btn mc-btn-primary" id="mc-add-stub-caret" title="More concept options" style="padding:0 7px; border-left:1px solid rgba(255,255,255,0.2); border-radius:0 var(--radius-sm) var(--radius-sm) 0;">▾</button>
+          <div id="mc-stub-dropdown" style="display:none; position:absolute; top:calc(100% + 4px); right:0; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-md); min-width:160px; z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden;">
+            <button id="mc-add-stub-single" style="display:block; width:100%; text-align:left; padding:9px 14px; background:none; border:none; color:var(--text-primary); font-size:0.85rem; cursor:pointer;" onmouseover="this.style.background='rgba(99,102,241,0.12)'" onmouseout="this.style.background='none'">📝 Single Stub</button>
+            <button id="mc-add-stub-cast" style="display:block; width:100%; text-align:left; padding:9px 14px; background:none; border:none; color:var(--text-primary); font-size:0.85rem; cursor:pointer;" onmouseover="this.style.background='rgba(99,102,241,0.12)'" onmouseout="this.style.background='none'">🎬 Cast (Bulk)</button>
+          </div>
+        </div>
         ${quickAsset ? `<button class="mc-btn mc-btn-secondary mc-quick-add-asset" data-cat="${quickAsset.cat}">${quickAsset.label}</button>` : ''}
         <button class="mc-btn mc-btn-ghost" id="btn-mc-manage-universes" onclick="if(window.MissionControl && window.MissionControl.openUniverseManagerModal) window.MissionControl.openUniverseManagerModal();" title="Manage Universes & Genres">⚙️ Universes</button>
       </div>
@@ -1611,6 +1618,145 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     modal.classList.remove('hidden');
     document.getElementById('mc-rec-name').focus();
+  }
+
+  // ─── Cast (Bulk Stub) Modal ────────────────────────────────────────────────────
+
+  function openCastModal() {
+    const modal = document.getElementById('mc-modal-overlay');
+    const body  = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.textContent = '🎬 Cast — Bulk Concept Stubs';
+    state.editingRecord = null; // not a single-record edit
+
+    body.innerHTML = `
+      <p style="font-size:0.82rem; color:var(--text-muted); margin:0 0 14px;">
+        Set shared metadata once, then list every character name below — one per line (or comma-separated).
+        Each name becomes its own Concept Stub.
+      </p>
+
+      <div class="mc-form-row" style="grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-cast-universe" class="mc-modal-input">
+            ${universeSelectOptionsHTML('', 'No Universe')}
+          </select>
+        </div>
+        <div class="form-group"><label>Category</label>
+          <select id="mc-cast-category" class="mc-modal-input">
+            <option value="character" selected>Character</option>
+            <option value="organization">Organization</option>
+            <option value="scenario">Scenario</option>
+            <option value="bio">Bio</option>
+            <option value="initial_message">Initial Message</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mc-form-row" style="grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Group / Project</label>
+          <input type="text" id="mc-cast-project" class="mc-modal-input" placeholder="e.g. Young Justice"
+            autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="mc-cast-priority" class="mc-modal-input">
+            <option value="">—</option>
+            ${['P1','P2','P3','P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group"><label>Tags (shared, comma separated)</label>
+        <input type="text" id="mc-cast-tags" class="mc-modal-input" placeholder="e.g. hero, DC, tested"
+          autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+
+      <div class="form-group" style="margin-top:4px;">
+        <label style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span>Names <span style="font-weight:400; color:var(--text-muted);">(one per line or comma-separated)</span></span>
+          <span id="mc-cast-count" style="font-size:0.78rem; color:var(--accent); font-weight:700;"></span>
+        </label>
+        <textarea id="mc-cast-names" class="mc-modal-input" rows="8"
+          placeholder="Kamala Khan&#10;Carol Danvers&#10;Nick Fury&#10;…"
+          style="resize:vertical; font-family:var(--font-mono); font-size:0.83rem;"
+          autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true"></textarea>
+      </div>
+
+      <div id="mc-cast-preview" style="display:flex; flex-wrap:wrap; gap:5px; min-height:24px; margin-top:2px;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="mc-btn mc-btn-secondary mc-close-modal">Cancel</button>
+        <button class="mc-btn mc-btn-primary" id="mc-cast-submit">Add Stubs</button>
+      </div>`;
+
+    // Live preview as user types
+    const namesEl   = document.getElementById('mc-cast-names');
+    const countEl   = document.getElementById('mc-cast-count');
+    const previewEl = document.getElementById('mc-cast-preview');
+
+    function parseCastNames(raw) {
+      return raw
+        .split(/[\n,]+/)
+        .map(n => n.trim())
+        .filter(n => n.length > 0);
+    }
+
+    function updatePreview() {
+      const names = parseCastNames(namesEl.value);
+      countEl.textContent = names.length > 0 ? `${names.length} stub${names.length === 1 ? '' : 's'}` : '';
+      previewEl.innerHTML = names
+        .slice(0, 60) // cap chips at 60 to avoid layout explosion
+        .map(n => `<span style="background:rgba(99,102,241,0.18); color:var(--accent); padding:2px 8px; border-radius:12px; font-size:0.78rem; white-space:nowrap;">${esc(n)}</span>`)
+        .join('')
+        + (names.length > 60 ? `<span style="font-size:0.75rem; color:var(--text-muted); padding:2px 6px;">+${names.length - 60} more…</span>` : '');
+    }
+
+    namesEl.addEventListener('input', updatePreview);
+
+    // Submit handler
+    document.getElementById('mc-cast-submit').addEventListener('click', async () => {
+      const names    = parseCastNames(namesEl.value);
+      if (names.length === 0) { showToast('Enter at least one name.', 'error'); return; }
+
+      const universe = document.getElementById('mc-cast-universe').value || '';
+      const category = document.getElementById('mc-cast-category').value || 'character';
+      const project  = document.getElementById('mc-cast-project').value.trim();
+      const priority = document.getElementById('mc-cast-priority').value || null;
+      const tags     = (document.getElementById('mc-cast-tags').value || '')
+                         .split(',').map(t => t.trim()).filter(Boolean);
+
+      const submitBtn = document.getElementById('mc-cast-submit');
+      submitBtn.disabled = true;
+      submitBtn.textContent = `Saving…`;
+
+      try {
+        await Promise.all(names.map(name =>
+          window.ForgeDB.saveTrackerRecord({
+            assetType:        'concept_stub',
+            name,
+            universe,
+            project,
+            priority,
+            intendedCategory: category,
+            pipeline:         window.ForgeDB.defaultTrackerPipeline(category),
+            tags
+          })
+        ));
+
+        await loadAll();
+        await renderCurrentTab();
+        closeModal();
+        showToast(`${names.length} concept stub${names.length === 1 ? '' : 's'} created!`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Cast save failed: ' + err.message, 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Stubs';
+      }
+    });
+
+    modal.classList.remove('hidden');
+    namesEl.focus();
   }
 
   function openQuickAssetModal(category = 'character') {
@@ -3177,8 +3323,26 @@ ${releasesMd}
         return;
       }
 
-      // Add concept stub
-      if (t.id === 'mc-add-stub') { openStubModal(); return; }
+      // Add concept stub — single
+      if (t.id === 'mc-add-stub' || t.id === 'mc-add-stub-single') {
+        document.getElementById('mc-stub-dropdown')?.setAttribute('style', 'display:none; position:absolute; top:calc(100% + 4px); right:0; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-md); min-width:160px; z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden;');
+        openStubModal();
+        return;
+      }
+
+      // Add concept stub — caret dropdown toggle
+      if (t.id === 'mc-add-stub-caret') {
+        const dd = document.getElementById('mc-stub-dropdown');
+        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+        return;
+      }
+
+      // Add concept stubs — cast (bulk)
+      if (t.id === 'mc-add-stub-cast') {
+        document.getElementById('mc-stub-dropdown')?.setAttribute('style', 'display:none; position:absolute; top:calc(100% + 4px); right:0; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-md); min-width:160px; z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden;');
+        openCastModal();
+        return;
+      }
 
       // Add tracker record
       if (t.id === 'mc-add-record') { openRecordModal(null, t.dataset.type); return; }
@@ -4155,6 +4319,18 @@ ${releasesMd}
         if (modal && !modal.classList.contains('hidden')) {
           modal.classList.add('hidden');
         }
+        // Also close stub dropdown if open
+        const dd = document.getElementById('mc-stub-dropdown');
+        if (dd) dd.style.display = 'none';
+      }
+    });
+
+    // Close the Cast/Single dropdown when clicking outside of it
+    document.addEventListener('click', (e) => {
+      const dd = document.getElementById('mc-stub-dropdown');
+      if (!dd) return;
+      if (!e.target.closest('#mc-add-stub-caret') && !e.target.closest('#mc-stub-dropdown')) {
+        dd.style.display = 'none';
       }
     });
   }
