@@ -53,7 +53,7 @@
     experiment: '#f59e0b'
   };
 
-  
+
   const STORY_TO_RELEASE_STEP_MAP = {
     concept: 'staged',
     notesReady: 'bio',
@@ -864,69 +864,69 @@
 
         <!-- Rolling Release Performance Chart (Last 10 Releases with Stats) -->
         ${(() => {
-          const allCandidates = state.allTrackerRecords.filter(r => r.assetType === 'release' || r.assetType === 'story');
+        const allCandidates = state.allTrackerRecords.filter(r => r.assetType === 'release' || r.assetType === 'story');
 
-          const getReleasePublishTimestamp = (rec) => {
-            const dStr = rec.scheduledDate || rec.publishedDate || rec.privateLaunchDate || rec.metrics?.date || rec.createdAt;
-            if (dStr) {
-              const parsed = new Date(dStr).getTime();
-              if (!isNaN(parsed) && parsed > 0) return parsed;
-            }
-            return 0;
+        const getReleasePublishTimestamp = (rec) => {
+          const dStr = rec.scheduledDate || rec.publishedDate || rec.privateLaunchDate || rec.metrics?.date || rec.createdAt;
+          if (dStr) {
+            const parsed = new Date(dStr).getTime();
+            if (!isNaN(parsed) && parsed > 0) return parsed;
+          }
+          return 0;
+        };
+
+        const releases = allCandidates.sort((a, b) => {
+          const aMsgs = a.metrics?.messages || 0;
+          const bMsgs = b.metrics?.messages || 0;
+          const aHasMetrics = aMsgs > 0 || (a.metrics?.uniqueChats || 0) > 0 || (a.metrics?.favorites || 0) > 0;
+          const bHasMetrics = bMsgs > 0 || (b.metrics?.uniqueChats || 0) > 0 || (b.metrics?.favorites || 0) > 0;
+
+          if (aHasMetrics && !bHasMetrics) return -1;
+          if (!aHasMetrics && bHasMetrics) return 1;
+
+          return getReleasePublishTimestamp(b) - getReleasePublishTimestamp(a);
+        }).slice(0, 10);
+
+        const items = releases.map(r => {
+          const pubDateStr = r.scheduledDate || r.publishedDate || r.privateLaunchDate || r.metrics?.date || r.createdAt;
+          const dateFormatted = pubDateStr ? new Date(pubDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '';
+          return {
+            id: r.id,
+            label: `${r.name}${dateFormatted ? ` (${dateFormatted})` : ''}`,
+            value: r.metrics?.messages || 0,
+            unit: 'msgs',
+            color: 'linear-gradient(90deg, #6366f1, #a855f7)',
+            badgeHtml: r.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(r.iterationLabel)}</span>` : ''
           };
+        });
 
-          const releases = allCandidates.sort((a, b) => {
-            const aMsgs = a.metrics?.messages || 0;
-            const bMsgs = b.metrics?.messages || 0;
-            const aHasMetrics = aMsgs > 0 || (a.metrics?.uniqueChats || 0) > 0 || (a.metrics?.favorites || 0) > 0;
-            const bHasMetrics = bMsgs > 0 || (b.metrics?.uniqueChats || 0) > 0 || (b.metrics?.favorites || 0) > 0;
-
-            if (aHasMetrics && !bHasMetrics) return -1;
-            if (!aHasMetrics && bHasMetrics) return 1;
-
-            return getReleasePublishTimestamp(b) - getReleasePublishTimestamp(a);
-          }).slice(0, 10);
-
-          const items = releases.map(r => {
-            const pubDateStr = r.scheduledDate || r.publishedDate || r.privateLaunchDate || r.metrics?.date || r.createdAt;
-            const dateFormatted = pubDateStr ? new Date(pubDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '';
-            return {
-              id: r.id,
-              label: `${r.name}${dateFormatted ? ` (${dateFormatted})` : ''}`,
-              value: r.metrics?.messages || 0,
-              unit: 'msgs',
-              color: 'linear-gradient(90deg, #6366f1, #a855f7)',
-              badgeHtml: r.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${esc(r.iterationLabel)}</span>` : ''
-            };
-          });
-
-          return renderHorizontalBarChart(items, '🚀 Rolling Release Performance', 'Last 10 Releases · Sorted by actual bot release dates');
-        })()}
+        return renderHorizontalBarChart(items, '🚀 Rolling Release Performance', 'Last 10 Releases · Sorted by actual bot release dates');
+      })()}
 
         <!-- Universe Health Distribution Chart -->
         ${(() => {
-          const uniCounts = {};
-          (state.allUniverses || []).forEach(u => { uniCounts[u.name] = { name: u.name, msgs: 0, color: u.color }; });
+        const uniCounts = {};
+        (state.allUniverses || []).forEach(u => { uniCounts[u.name] = { name: u.name, msgs: 0, color: u.color }; });
 
-          state.allTrackerRecords.forEach(r => {
-            const uName = r.universe || 'Other';
-            if (!uniCounts[uName]) uniCounts[uName] = { name: uName, msgs: 0, color: '#6b7280' };
-            uniCounts[uName].msgs += (r.metrics?.messages || 0);
-          });
+        state.allTrackerRecords.forEach(r => {
+          const uName = r.universe || 'Other';
+          if (!uniCounts[uName]) uniCounts[uName] = { name: uName, msgs: 0, color: '#6b7280' };
+          uniCounts[uName].msgs += (r.metrics?.messages || 0);
+        });
 
-          const items = Object.values(uniCounts)
-            .filter(u => u.msgs > 0)
-            .sort((a, b) => b.msgs - a.msgs)
-            .slice(0, 8)
-            .map(u => ({
-              label: u.name,
-              value: u.msgs,
-              unit: 'msgs',
-              color: u.color || '#6366f1'
-            }));
+        const items = Object.values(uniCounts)
+          .filter(u => u.msgs > 0)
+          .sort((a, b) => b.msgs - a.msgs)
+          .slice(0, 8)
+          .map(u => ({
+            label: u.name,
+            value: u.msgs,
+            unit: 'msgs',
+            color: u.color || '#6366f1'
+          }));
 
-          return renderHorizontalBarChart(items, '🌌 Universe Health Distribution', 'Total Messages by Universe · Have you neglected a universe lately?');
-        })()}
+        return renderHorizontalBarChart(items, '🌌 Universe Health Distribution', 'Total Messages by Universe · Have you neglected a universe lately?');
+      })()}
 
         <!-- Activity Feed Timeline -->
         <div class="mc-overview-panel">
@@ -1238,10 +1238,13 @@
     let releases = filterTrackerRecords(state.allTrackerRecords.filter(r => r.assetType === 'release'));
     releases = sortByReadiness(releases, calcReadinessForRecord, r => r.priority, state.sortDir);
 
-    const readyItems = releases.filter(r => steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r) && r.visibility !== 'Private');
-    const inTesting = releases.filter(r => r.visibility === 'Private' && !isReleasePublished(r));
-    const inProgress = releases.filter(r => !steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r) && r.visibility !== 'Private');
-    const released = releases.filter(isReleasePublished);
+    const activeReleases = releases.filter(r => r.status !== 'Archived');
+    const archivedReleases = releases.filter(r => r.status === 'Archived');
+
+    const readyItems = activeReleases.filter(r => steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r) && r.visibility !== 'Private');
+    const inTesting = activeReleases.filter(r => r.visibility === 'Private' && !isReleasePublished(r));
+    const inProgress = activeReleases.filter(r => !steps.every(s => r.pipeline?.[s]) && !isReleasePublished(r) && r.visibility !== 'Private');
+    const released = activeReleases.filter(isReleasePublished);
 
     const releaseSection = (title, items, showReady = false) => {
       if (!items.length && !showReady) return '';
@@ -1272,7 +1275,7 @@
       </div>`;
     };
 
-    const calendarHTML = renderCalendar(releases);
+    const calendarHTML = renderCalendar(activeReleases);
 
     return `
       ${toolbarHTML(false, true, 'release')}
@@ -1283,6 +1286,7 @@
       ${releaseSection('🧪 In Testing (Private Build)', inTesting)}
       ${releaseSection('🔄 In Progress', inProgress)}
       ${releaseSection('✅ Released', released)}
+      ${releaseSection('📦 Archived / Retired', archivedReleases)}
       ${calendarHTML}`;
   }
 
@@ -1311,10 +1315,10 @@
         </select>
       </td>
       <td class="mc-cell-date" style="font-size:0.75rem; color:var(--text-secondary);">
-        ${rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'2-digit'}) : '—'}
+        ${rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
       </td>
       <td class="mc-cell-date" style="font-size:0.75rem; color:var(--text-secondary);">
-        ${rec.privateLaunchDate ? new Date(rec.privateLaunchDate).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'2-digit'}) : (rec.visibility === 'Private' ? 'Auto-stamped' : '—')}
+        ${rec.privateLaunchDate ? new Date(rec.privateLaunchDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : (rec.visibility === 'Private' ? 'Auto-stamped' : '—')}
       </td>
       <td class="mc-cell-date">
         <input type="date" class="mc-date-input" data-id="${rec.id}" value="${rec.scheduledDate || ''}" title="Scheduled Public Launch (manual entry)">
@@ -1326,6 +1330,7 @@
           <button class="mc-action-btn mc-open-sandbox" data-project-id="${rec.projectId}" title="Playtest in Sandbox">🧪 Playtest</button>
         ` : ''}
         <button class="mc-action-btn mc-edit-record" data-record-id="${rec.id}" title="Edit">✏️</button>
+        <button class="mc-action-btn mc-toggle-release-archive" data-release-id="${rec.id}" title="${rec.status === 'Archived' ? 'Reactivate Bot' : 'Archive/Retire Bot'}">${rec.status === 'Archived' ? '🔄' : '📦'}</button>
         <button class="mc-action-btn mc-delete-record" data-record-id="${rec.id}" title="Delete">🗑</button>
       </td>
     </tr>`;
@@ -1445,7 +1450,7 @@ Write-Host "Done! tracker-import.json created."</pre>
 
   async function exportCompleteBackup() {
     if (!window.ForgeDB) return showToast('Database connection error.', 'error');
-    
+
     const components = await window.ForgeDB.getAllComponents();
     const trackerRecords = await window.ForgeDB.getAllTrackerRecords();
     const projects = await window.ForgeDB.getAllProjects();
@@ -1551,7 +1556,7 @@ Write-Host "Done! tracker-import.json created."</pre>
           </select>
         </div>
         <div class="form-group"><label>Created Date</label>
-          <input type="text" class="mc-modal-input" value="${r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—'}" readonly disabled style="opacity:0.75;">
+          <input type="text" class="mc-modal-input" value="${r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}" readonly disabled style="opacity:0.75;">
         </div>
       </div>
       <div class="mc-form-row">
@@ -1624,7 +1629,7 @@ Write-Host "Done! tracker-import.json created."</pre>
 
   function openCastModal() {
     const modal = document.getElementById('mc-modal-overlay');
-    const body  = document.getElementById('mc-modal-body');
+    const body = document.getElementById('mc-modal-body');
     const title = document.getElementById('mc-modal-title');
 
     title.textContent = '🎬 Cast — Bulk Concept Stubs';
@@ -1661,7 +1666,7 @@ Write-Host "Done! tracker-import.json created."</pre>
         <div class="form-group"><label>Priority</label>
           <select id="mc-cast-priority" class="mc-modal-input">
             <option value="">—</option>
-            ${['P1','P2','P3','P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
+            ${['P1', 'P2', 'P3', 'P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -1690,8 +1695,8 @@ Write-Host "Done! tracker-import.json created."</pre>
       </div>`;
 
     // Live preview as user types
-    const namesEl   = document.getElementById('mc-cast-names');
-    const countEl   = document.getElementById('mc-cast-count');
+    const namesEl = document.getElementById('mc-cast-names');
+    const countEl = document.getElementById('mc-cast-count');
     const previewEl = document.getElementById('mc-cast-preview');
 
     function parseCastNames(raw) {
@@ -1715,15 +1720,15 @@ Write-Host "Done! tracker-import.json created."</pre>
 
     // Submit handler
     document.getElementById('mc-cast-submit').addEventListener('click', async () => {
-      const names    = parseCastNames(namesEl.value);
+      const names = parseCastNames(namesEl.value);
       if (names.length === 0) { showToast('Enter at least one name.', 'error'); return; }
 
       const universe = document.getElementById('mc-cast-universe').value || '';
       const category = document.getElementById('mc-cast-category').value || 'character';
-      const project  = document.getElementById('mc-cast-project').value.trim();
+      const project = document.getElementById('mc-cast-project').value.trim();
       const priority = document.getElementById('mc-cast-priority').value || null;
-      const tags     = (document.getElementById('mc-cast-tags').value || '')
-                         .split(',').map(t => t.trim()).filter(Boolean);
+      const tags = (document.getElementById('mc-cast-tags').value || '')
+        .split(',').map(t => t.trim()).filter(Boolean);
 
       const submitBtn = document.getElementById('mc-cast-submit');
       submitBtn.disabled = true;
@@ -1732,13 +1737,13 @@ Write-Host "Done! tracker-import.json created."</pre>
       try {
         await Promise.all(names.map(name =>
           window.ForgeDB.saveTrackerRecord({
-            assetType:        'concept_stub',
+            assetType: 'concept_stub',
             name,
             universe,
             project,
             priority,
             intendedCategory: category,
-            pipeline:         window.ForgeDB.defaultTrackerPipeline(category),
+            pipeline: window.ForgeDB.defaultTrackerPipeline(category),
             tags
           })
         ));
@@ -2237,7 +2242,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     }
   }
 
-  
+
   function openManageLinkedVaultModal(storyId) {
     const story = state.allTrackerRecords.find(r => r.id === storyId);
     if (!story) return;
@@ -2363,7 +2368,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     modal.classList.remove('hidden');
   }
 
-  
+
   function exportStoryBrief(storyId) {
     const story = state.allTrackerRecords.find(r => r.id === storyId);
     if (!story) return;
@@ -2500,7 +2505,7 @@ ${releasesMd}
     const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
     const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
     const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
-    
+
     // Find best bot and latest release
     const bestBot = releases.length > 0 ? [...releases].sort((a, b) => (b.metrics?.messages || 0) - (a.metrics?.messages || 0))[0] : null;
     const latestRelease = releases.length > 0 ? [...releases].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] : null;
@@ -2654,15 +2659,15 @@ ${releasesMd}
       </div>
       <div id="mc-link-vault-list" style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
         ${Object.keys(categoryGroups).map(catKey => {
-          const group = categoryGroups[catKey];
-          if (!group.items.length) return '';
-          return `
+      const group = categoryGroups[catKey];
+      if (!group.items.length) return '';
+      return `
             <div class="mc-vault-link-group">
               <h4 style="margin:0 0 8px 0; font-size:0.9rem; color:var(--accent);">${group.label} (${group.items.length})</h4>
               <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px;">
                 ${group.items.map(c => {
-                  const isLinked = linkedIds.has(c.id);
-                  return `
+        const isLinked = linkedIds.has(c.id);
+        return `
                     <div class="mc-vault-link-card" data-name="${esc(c.name).toLowerCase()}" style="padding:8px 12px; background:var(--bg-secondary); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
                       <span style="font-size:0.85rem; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:140px;" title="${esc(c.name)}">${esc(c.name)}</span>
                       <button class="mc-btn mc-btn-sm ${isLinked ? 'mc-btn-danger mc-unlink-vault-item' : 'mc-btn-primary mc-link-vault-item'}" data-story-id="${story.id}" data-comp-id="${c.id}">
@@ -2670,11 +2675,11 @@ ${releasesMd}
                       </button>
                     </div>
                   `;
-                }).join('')}
+      }).join('')}
               </div>
             </div>
           `;
-        }).join('')}
+    }).join('')}
       </div>
       <div style="margin-top:16px; display:flex; justify-content:flex-end;">
         <button class="mc-btn mc-btn-secondary" onclick="if(window.MissionControl) window.MissionControl.openStoryHubModal('${story.id}')">← Return to Story Hub</button>
@@ -2969,6 +2974,20 @@ ${releasesMd}
           await loadAll();
           await renderCurrentTab();
           showToast(`Story status set to ${newStatus}.`, 'info');
+        }
+        return;
+      }
+
+      // Archive / Reactivate release toggle
+      if (t.matches('.mc-toggle-release-archive')) {
+        const releaseId = t.dataset.releaseId;
+        const release = state.allTrackerRecords.find(r => r.id === releaseId);
+        if (release) {
+          const newStatus = release.status === 'Archived' ? 'Active' : 'Archived';
+          await window.ForgeDB.saveTrackerRecord({ ...release, status: newStatus });
+          await loadAll();
+          await renderCurrentTab();
+          showToast(`Release status set to ${newStatus}.`, 'info');
         }
         return;
       }
@@ -3656,7 +3675,7 @@ ${releasesMd}
 
   // ─── Metrics Tab ──────────────────────────────────────────────────────────────
 
-  
+
   // ─── Visual Performance & Analytics Charts ────────────────────────────────────
 
   function renderSVGLineChart(dataPoints, width = 500, height = 180, color = '#6366f1') {
@@ -3751,9 +3770,9 @@ ${releasesMd}
         </div>
         <div style="display:flex; flex-direction:column; gap:10px;">
           ${items.map(item => {
-            const pct = Math.round((item.value / maxVal) * 100);
-            const barColor = item.color || 'var(--accent)';
-            return `
+      const pct = Math.round((item.value / maxVal) * 100);
+      const barColor = item.color || 'var(--accent)';
+      return `
               <div style="display:flex; flex-direction:column; gap:3px;">
                 <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
                   <span style="font-weight:600; color:var(--text-primary); cursor:pointer;" class="mc-open-bot-analytics" data-record-id="${item.id || ''}">${esc(item.label)} ${item.badgeHtml || ''}</span>
@@ -3764,7 +3783,7 @@ ${releasesMd}
                 </div>
               </div>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
     `;
@@ -3879,8 +3898,8 @@ ${releasesMd}
         const snaps = rec.metricSnapshots && rec.metricSnapshots.length > 0
           ? rec.metricSnapshots
           : (rec.previousMetrics && rec.previousMetrics.uniqueChats > 0
-              ? [rec.previousMetrics, m]
-              : (m.uniqueChats > 0 ? [m] : []));
+            ? [rec.previousMetrics, m]
+            : (m.uniqueChats > 0 ? [m] : []));
 
         // Collect all MpC data points from snapshots
         const mpcValues = snaps
@@ -3891,11 +3910,11 @@ ${releasesMd}
         if (totalChats > 0 && mpcValues.length === 0) mpcValues.push(parseFloat(mpc));
 
         const buckets = [
-          { label: '0 – 10',   min: 0,  max: 10,  color: '#6366f1' },
-          { label: '10 – 15',  min: 10, max: 15,  color: '#10b981' },
-          { label: '15 – 20',  min: 15, max: 20,  color: '#f59e0b' },
-          { label: '20 – 30',  min: 20, max: 30,  color: '#ec4899' },
-          { label: '30+',      min: 30, max: Infinity, color: '#ef4444' }
+          { label: '0 – 10', min: 0, max: 10, color: '#6366f1' },
+          { label: '10 – 15', min: 10, max: 15, color: '#10b981' },
+          { label: '15 – 20', min: 15, max: 20, color: '#f59e0b' },
+          { label: '20 – 30', min: 20, max: 30, color: '#ec4899' },
+          { label: '30+', min: 30, max: Infinity, color: '#ef4444' }
         ];
 
         const counts = buckets.map(b => mpcValues.filter(v => v >= b.min && v < b.max).length);
@@ -3911,8 +3930,8 @@ ${releasesMd}
           const y = svgH - labelH - h;
           return `
             <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="${b.color}" opacity="0.85"/>
-            ${counts[i] > 0 ? `<text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" font-size="11" fill="#e2e8f0">${counts[i]}</text>` : ''}
-            <text x="${x + barW/2}" y="${svgH - 4}" text-anchor="middle" font-size="10" fill="#94a3b8">${b.label}</text>
+            ${counts[i] > 0 ? `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="11" fill="#e2e8f0">${counts[i]}</text>` : ''}
+            <text x="${x + barW / 2}" y="${svgH - 4}" text-anchor="middle" font-size="10" fill="#94a3b8">${b.label}</text>
           `;
         }).join('');
 
@@ -4304,11 +4323,11 @@ ${releasesMd}
         if (mpcBots.length === 0) return '';
 
         const buckets = [
-          { label: '0 – 10',  min: 0,  max: 10,         color: '#6366f1' },
-          { label: '10 – 15', min: 10, max: 15,          color: '#10b981' },
-          { label: '15 – 20', min: 15, max: 20,          color: '#f59e0b' },
-          { label: '20 – 30', min: 20, max: 30,          color: '#ec4899' },
-          { label: '30+',     min: 30, max: Infinity,    color: '#ef4444' }
+          { label: '0 – 10', min: 0, max: 10, color: '#6366f1' },
+          { label: '10 – 15', min: 10, max: 15, color: '#10b981' },
+          { label: '15 – 20', min: 15, max: 20, color: '#f59e0b' },
+          { label: '20 – 30', min: 20, max: 30, color: '#ec4899' },
+          { label: '30+', min: 30, max: Infinity, color: '#ef4444' }
         ];
 
         const grouped = buckets.map(b => ({

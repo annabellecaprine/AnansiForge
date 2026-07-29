@@ -11,7 +11,7 @@
 (() => {
   const DB_NAME = 'anansi-forge';
   const DB_VERSION = 11;
-  
+
   let dbInstance = null;
 
   // UUID generator
@@ -60,17 +60,17 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction('vault_components', 'readwrite');
       const store = tx.objectStore('vault_components');
-      
+
       store.openCursor().onsuccess = (e) => {
         const cursor = e.target.result;
         if (!cursor) {
           resolve();
           return;
         }
-        
+
         const rec = cursor.value;
         let changed = false;
-        
+
         // Migrate cluster → scenarios array
         if (rec.cluster !== undefined) {
           if (!rec.scenarios) {
@@ -98,13 +98,13 @@
           rec.tracker.pipeline = defaultTrackerPipeline(rec.category || 'character');
           changed = true;
         }
-        
+
         if (changed) {
           cursor.update(rec);
         }
         cursor.continue();
       };
-      
+
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -124,7 +124,7 @@
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
         const oldVersion = event.oldVersion;
-        
+
         // 1. Vault Components Store
         if (!db.objectStoreNames.contains('vault_components')) {
           const store = db.createObjectStore('vault_components', { keyPath: 'id' });
@@ -141,14 +141,14 @@
             store.deleteIndex('cluster');
           }
         }
-        
+
         // 2. Projects Store
         if (!db.objectStoreNames.contains('projects')) {
           const store = db.createObjectStore('projects', { keyPath: 'id' });
           store.createIndex('name', 'name', { unique: false });
           store.createIndex('modifiedAt', 'modifiedAt', { unique: false });
         }
-        
+
         // 3. Chat History Store
         if (!db.objectStoreNames.contains('chat_history')) {
           db.createObjectStore('chat_history', { keyPath: 'projectId' });
@@ -178,7 +178,7 @@
           cvStore.createIndex('componentId', 'componentId', { unique: false });
           cvStore.createIndex('timestamp', 'timestamp', { unique: false });
         }
-        
+
         // 8. Activity Log
         if (!db.objectStoreNames.contains('activity_log')) {
           const alStore = db.createObjectStore('activity_log', { keyPath: 'id' });
@@ -215,7 +215,7 @@
           try {
             const uniTx = event.target.transaction.objectStore('universes');
             DEFAULT_UNIVERSES.forEach(u => uniTx.put(u));
-          } catch(e) {}
+          } catch (e) { }
         }
       };
 
@@ -241,7 +241,7 @@
     const tx = db.transaction('vault_components', 'readonly');
     const store = tx.objectStore('vault_components');
     const index = store.index('modifiedAt');
-    
+
     return new Promise((resolve, reject) => {
       const results = [];
       const cursorReq = index.openCursor(null, 'prev'); // Most recent first
@@ -270,7 +270,7 @@
     const existing = comp.id ? await getComponent(comp.id) : null;
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
-    
+
     const now = new Date().toISOString();
     const cat = comp.category || existing?.category || 'character';
     const tracker = { ...(existing?.tracker || { universe: '', project: '', priority: null, pipeline: defaultTrackerPipeline(cat), publishedDate: null, trackerTags: [] }), ...(comp.tracker || {}) };
@@ -292,7 +292,7 @@
     };
     // Ensure old cluster key is not persisted
     delete record.cluster;
-    
+
     await promisify(store.put(record));
 
     // Activity Log
@@ -335,7 +335,7 @@
     const tx = db.transaction('projects', 'readonly');
     const store = tx.objectStore('projects');
     const index = store.index('modifiedAt');
-    
+
     return new Promise((resolve, reject) => {
       const results = [];
       const cursorReq = index.openCursor(null, 'prev');
@@ -363,7 +363,7 @@
     const db = dbInstance || await initDB();
     const tx = db.transaction('projects', 'readwrite');
     const store = tx.objectStore('projects');
-    
+
     const now = new Date().toISOString();
     const record = {
       ...project,
@@ -376,7 +376,7 @@
       createdAt: project.createdAt || now,
       modifiedAt: now
     };
-    
+
     await promisify(store.put(record));
     return record;
   }
@@ -456,14 +456,14 @@
     const db = dbInstance || await initDB();
     const tx = db.transaction('personas', 'readwrite');
     const store = tx.objectStore('personas');
-    
+
     const record = {
       ...persona,
       id: persona.id || generateId(),
       name: (persona.name || 'Unnamed Persona').trim(),
       description: persona.description || ''
     };
-    
+
     await promisify(store.put(record));
     return record;
   }
@@ -508,6 +508,9 @@
       if (rec.sourceStoryId === undefined) {
         rec.sourceStoryId = null;
       }
+      if (!rec.status || (rec.status !== 'Active' && rec.status !== 'Archived')) {
+        rec.status = 'Active';
+      }
     }
 
     // Common defaults
@@ -544,6 +547,8 @@
     let status = rec.status;
     if (aType === 'story') {
       status = VALID_STORY_STATUSES.has(status) ? status : 'Active';
+    } else if (aType === 'release') {
+      status = (status === 'Active' || status === 'Archived') ? status : 'Active';
     }
 
     let releaseSource = rec.releaseSource;
@@ -574,7 +579,7 @@
             };
           }
         }
-      } catch(e) {
+      } catch (e) {
         console.warn('Could not fetch existing record for metrics history:', e);
       }
     }
@@ -636,7 +641,7 @@
     const tx = db.transaction('vault_components', 'readwrite');
     const store = tx.objectStore('vault_components');
     await promisify(store.put(comp));
-    
+
     logActivity({
       action: 'tracker_updated',
       targetType: 'component',
@@ -644,7 +649,7 @@
       targetName: comp.name,
       details: Object.keys(trackerPatch).join(', ')
     });
-    
+
     return comp;
   }
 
@@ -871,7 +876,7 @@
       });
       entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       if (entries.length <= keepCount) return;
-      
+
       const toDelete = entries.slice(keepCount);
       const txDelete = db.transaction('activity_log', 'readwrite');
       const storeDelete = txDelete.objectStore('activity_log');
@@ -891,7 +896,7 @@
     let publishedVault = 0;
     const byCategory = {};
     const universes = {};
-    
+
     components.forEach(c => {
       if (c.tracker && c.tracker.pipeline && c.tracker.pipeline.published) {
         publishedVault++;
@@ -926,7 +931,7 @@
     const publishedCount = publishedVault + publishedReleases;
 
     const db = dbInstance || await initDB();
-    
+
     // Check if snapshot for today exists
     const txCheck = db.transaction('snapshots', 'readonly');
     const storeCheck = txCheck.objectStore('snapshots');
@@ -950,7 +955,7 @@
       universes,
       timestamp: new Date().toISOString()
     };
-    
+
     await saveSnapshot(snapshot);
     return snapshot;
   }
@@ -990,7 +995,7 @@
     const store = tx.objectStore('auto_backups');
     const record = { id: generateId(), bundle: bundleJSON, createdAt: new Date().toISOString() };
     await promisify(store.put(record));
-    
+
     const all = await getAllAutoBackups();
     if (all.length > 3) {
       const toDelete = all.slice(3);
@@ -1051,7 +1056,7 @@
   function findSimilarComponents(name, components, threshold = 0.8) {
     const normName = normalizeForComparison(name);
     if (!normName) return [];
-    
+
     return components.filter(c => {
       const normC = normalizeForComparison(c.name);
       if (!normC) return false;
@@ -1065,11 +1070,11 @@
   // --- Vault Backup / Restore ---
 
   async function exportVault() {
-    const components     = await getAllComponents();
-    const projects       = await getAllProjects();
-    const personas       = await getAllPersonas();
+    const components = await getAllComponents();
+    const projects = await getAllProjects();
+    const personas = await getAllPersonas();
     const trackerRecords = await getAllTrackerRecords();
-    
+
     let component_versions = [];
     let activity_log = [];
     let covers = [];
@@ -1107,11 +1112,11 @@
     const db = dbInstance || await initDB();
 
     const stores = ['vault_components', 'projects', 'personas', 'tracker_records', 'component_versions', 'activity_log', 'covers', 'universes'];
-    const keys   = ['components',       'projects',  'personas', 'trackerRecords',  'component_versions', 'activity_log', 'covers', 'universes'];
+    const keys = ['components', 'projects', 'personas', 'trackerRecords', 'component_versions', 'activity_log', 'covers', 'universes'];
 
     for (let i = 0; i < stores.length; i++) {
       const storeName = stores[i];
-      const records   = bundle[keys[i]] || [];
+      const records = bundle[keys[i]] || [];
       if (!records.length) continue;
 
       if (!db.objectStoreNames.contains(storeName)) continue;
@@ -1130,16 +1135,16 @@
       });
 
       await new Promise((resolve, reject) => {
-        const tx    = db.transaction(storeName, 'readwrite');
+        const tx = db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
         safeRecords.forEach(rec => store.put(rec));
         tx.oncomplete = resolve;
-        tx.onerror    = () => reject(tx.error);
+        tx.onerror = () => reject(tx.error);
       });
     }
   }
 
-  
+
   // --- Relationship Integrity Helpers ---
 
   async function linkReleaseToStory(storyId, releaseId) {
@@ -1177,7 +1182,7 @@
     await saveTrackerRecord({ ...story, releaseIds: actualIds });
   }
 
-// Expose APIs globally
+  // Expose APIs globally
   window.ForgeDB = {
     generateId,
     initDB,
