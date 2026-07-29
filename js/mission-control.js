@@ -572,7 +572,7 @@
     const scenarios = byCategory('scenario');
     const stubs = records.filter(r => r.assetType === 'concept_stub' && !r.promotedToVaultId);
     const stories = records.filter(r => r.assetType === 'story');
-    const releases = records.filter(r => r.assetType === 'release');
+    const releases = records.filter(r => r.assetType === 'release' && r.status !== 'Archived');
     const publishedReleases = releases.filter(isReleasePublished);
     const readyToLaunch = releases.filter(r => {
       const steps = PIPELINE_STEPS.release;
@@ -1203,7 +1203,7 @@
     return `<tr class="mc-row ${rec.status === 'Promoted' ? 'mc-row--promoted' : ''}" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
       <td class="mc-cell-name">
         <button class="mc-name-link mc-open-story-hub" data-story-id="${rec.id}" title="Open Story Creative Hub">📖 ${esc(rec.name)}</button>
-        ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)) > 0 ? `<span class="mc-badge mc-trophy-badge" title="Top performer">🏆 ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)).toLocaleString()} msgs</span>` : ''}
+        ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)) > 0 ? `<span class="mc-badge mc-trophy-badge" title="Top performer">🏆 ${(state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived' && (r.sourceStoryId === rec.id || (rec.releaseIds || []).includes(r.id))).reduce((s, r) => s + (r.metrics?.messages || 0), 0)).toLocaleString()} msgs</span>` : ''}
       </td>
       <td>${storyStatusBadge(rec.status)}</td>
       <td>${universeBadge(rec.universe)}</td>
@@ -2374,7 +2374,7 @@ Write-Host "Done! tracker-import.json created."</pre>
     if (!story) return;
 
     const linkedComps = (story.linkedVaultIds || []).map(id => state.compMap.get(id)).filter(Boolean);
-    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id)));
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id)));
     const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
     const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
     const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
@@ -2499,7 +2499,7 @@ ${releasesMd}
 
     // Spawned releases & aggregated lifecycle metrics
     const releases = state.allTrackerRecords.filter(r =>
-      r.assetType === 'release' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id))
+      r.assetType === 'release' && r.status !== 'Archived' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id))
     );
 
     const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
@@ -3974,7 +3974,7 @@ ${releasesMd}
   }
 
   function openQuickMetricsModal(botId) {
-    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived');
     if (releases.length === 0) {
       showToast('No release bots found to record metrics for.', 'warning');
       return;
@@ -4105,7 +4105,7 @@ ${releasesMd}
   }
 
   function renderMetrics() {
-    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived');
     const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0 || r.metrics?.favorites > 0);
     const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0) && !(r.metrics?.favorites > 0));
 
