@@ -5,7 +5,7 @@
 (() => {
   // Staged component IDs
   let stagedIds = [];
-  
+
   // Custom mappings: componentId -> cardField Key
   let mappings = {};
 
@@ -20,6 +20,9 @@
 
   // Active cover image data URL
   let coverDataUrl = null;
+
+  // Selected Universe ID for export merge
+  let selectedUniverseId = null;
 
   // Tweak Modal elements
   let tweakModalOverlay;
@@ -53,13 +56,10 @@
   const btnStageAssemble = document.getElementById('btn-stage-assemble');
 
   const TARGET_FIELDS = [
-    { key: 'description', label: 'Character Bio' },
     { key: 'personality', label: 'Personality (Traits / W++)' },
     { key: 'scenario', label: 'Scenario Context (Starting setting)' },
+    { key: 'description', label: 'Character Bio' },
     { key: 'first_mes', label: 'Initial Message' },
-    { key: 'system_prompt', label: 'System Instructions' },
-    { key: 'post_history_instructions', label: 'Post-History Prompt' },
-    { key: 'mes_example', label: 'Example Dialogues' },
     { key: 'ignore', label: '❌ Ignore (Do not compile)' }
   ];
 
@@ -75,7 +75,7 @@
       localStorage.setItem('anansi_warning_threshold', warningThresholdInput.value);
       updateTokensEstimate();
     });
-    
+
     // Wire assembly exports
     document.getElementById('btn-assembler-export-json').addEventListener('click', exportAsJSON);
     document.getElementById('btn-assembler-export-png').addEventListener('click', exportAsPNG);
@@ -91,6 +91,20 @@
     // Cover Image selector events
     document.getElementById('btn-assembler-change-cover').addEventListener('click', () => coverFileInput.click());
     coverFileInput.addEventListener('change', handleCoverFileSelect);
+
+    // Universe selector
+    const uniSelect = document.getElementById('assembler-universe-select');
+    if (uniSelect) {
+      uniSelect.addEventListener('change', (e) => {
+        selectedUniverseId = e.target.value || null;
+        updateTokensEstimate();
+      });
+    }
+    document.getElementById('btn-assembler-edit-universe')?.addEventListener('click', () => {
+      if (window.MissionControlUniverseModal?.openModal) {
+        window.MissionControlUniverseModal.openModal();
+      }
+    });
 
     // Tweak Modal DOM references
     tweakModalOverlay = document.getElementById('tweak-modal-overlay');
@@ -111,24 +125,24 @@
       if (!currentTweakId) return;
       const text = tweakContentArea.value.trim();
       contentOverrides[currentTweakId] = text;
-      
+
       closeTweakModal();
       renderAssemblerScreen();
       updateTokensEstimate();
       if (window.showToast) window.showToast('Project tweak saved!', 'success');
-      
+
       await autoSaveProjectRecord();
     });
 
     btnRevertTweak.addEventListener('click', async () => {
       if (!currentTweakId) return;
       delete contentOverrides[currentTweakId];
-      
+
       closeTweakModal();
       renderAssemblerScreen();
       updateTokensEstimate();
       if (window.showToast) window.showToast('Reverted to default component content.', 'info');
-      
+
       await autoSaveProjectRecord();
     });
 
@@ -140,7 +154,7 @@
       try {
         const comp = await window.ForgeDB.getComponent(currentTweakId);
         const defaultName = comp ? `${comp.name.split(' - ')[0]} (Scenario Tweak)` : 'Tweaked Component';
-        
+
         const newName = prompt('Enter a name to save this tweaked version to your Vault:', defaultName);
         if (!newName || !newName.trim()) return;
 
@@ -161,19 +175,19 @@
         if (swap) {
           // Store old mapping value
           const oldMapValue = mappings[currentTweakId];
-          
+
           // Unstage old
           unstageComponent(currentTweakId);
-          
+
           // Stage new
           stageComponent(savedComp.id);
-          
+
           // Apply mapping to new
           mappings[savedComp.id] = oldMapValue || 'personality';
-          
+
           // Clean up the override
           delete contentOverrides[currentTweakId];
-          
+
           closeTweakModal();
           renderAssemblerScreen();
           updateTokensEstimate();
@@ -218,17 +232,18 @@
       return;
     }
     stagedIds.push(id);
-    
+
     // Auto-map based on category
     window.ForgeDB.getComponent(id).then(comp => {
       if (comp) {
         if (comp.category === 'character') mappings[id] = 'personality';
+        else if (comp.category === 'organization') mappings[id] = 'personality';
+        else if (comp.category === 'scenario') mappings[id] = 'scenario';
         else if (comp.category === 'bio') mappings[id] = 'description';
         else if (comp.category === 'initial_message') mappings[id] = 'first_mes';
-        else if (comp.category === 'setting') mappings[id] = 'scenario';
-        else if (comp.category === 'rules') mappings[id] = 'system_prompt';
-        else mappings[id] = 'description';
-        
+        else if (comp.category === 'setting' || comp.category === 'rules') mappings[id] = 'scenario';
+        else mappings[id] = 'personality';
+
         renderDrawer();
         if (window.showToast) window.showToast(`Staged "${comp.name}"`, 'success');
       }
@@ -240,7 +255,7 @@
     delete mappings[id];
     delete contentOverrides[id];
     relationships = relationships.filter(r => r.sourceId !== id && r.targetId !== id);
-    
+
     renderDrawer();
     if (assemblerView.classList.contains('active')) {
       renderAssemblerScreen();
@@ -316,7 +331,7 @@
     reader.onload = async (event) => {
       coverDataUrl = event.target.result;
       updateCoverPreview();
-      
+
       // Auto-save Cover using project ID as key
       if (!activeProjectId) {
         activeProjectId = window.ForgeDB.generateId();
@@ -343,7 +358,7 @@
   function openTweakModal(id, name, defaultContent) {
     currentTweakId = id;
     tweakModalTitle.textContent = `Tweak "${name.split(' - ')[0]}" for Project`;
-    
+
     if (contentOverrides[id] !== undefined) {
       tweakContentArea.value = contentOverrides[id];
       btnRevertTweak.style.display = 'inline-flex';
@@ -351,7 +366,7 @@
       tweakContentArea.value = defaultContent;
       btnRevertTweak.style.display = 'none';
     }
-    
+
     tweakModalOverlay.classList.remove('hidden');
   }
 
@@ -395,8 +410,9 @@
         mappings = { ...project.mappings };
         relationships = [...project.relationships];
         contentOverrides = { ...(project.contentOverrides || {}) };
+        selectedUniverseId = project.universeId || null;
         projNameInput.value = project.name;
-        
+
         // Fetch cover from library under project ID
         const savedCover = await window.ForgeDB.getCover(project.id);
         if (savedCover) {
@@ -432,7 +448,7 @@
         }
       }
     }
-    
+
     projNameInput.value = characterNames.length > 0 ? characterNames.join(' & ') : 'New Assembled Bot';
 
     // Auto-fetch original cover artwork if saved under matched lineage
@@ -470,7 +486,7 @@
         html += '</optgroup>';
       }
       select.innerHTML = html;
-    } catch(e) { console.error('Failed to populate Assembler link targets:', e); }
+    } catch (e) { console.error('Failed to populate Assembler link targets:', e); }
   }
 
   async function linkProjectToTargetRecord(projectId) {
@@ -488,8 +504,50 @@
     }
   }
 
+  async function populateUniverseSelect() {
+    const uniSelect = document.getElementById('assembler-universe-select');
+    if (!uniSelect || !window.ForgeDB?.getAllUniverses) return;
+    try {
+      const universes = await window.ForgeDB.getAllUniverses();
+
+      // Auto-detect universe from staged components if none selected
+      if (!selectedUniverseId && stagedIds.length > 0) {
+        for (const id of stagedIds) {
+          const comp = await window.ForgeDB.getComponent(id);
+          if (comp && comp.universe) {
+            selectedUniverseId = comp.universe;
+            break;
+          }
+        }
+      }
+
+      let html = '<option value="">— No Universe —</option>';
+      const grouped = {};
+      universes.forEach(u => {
+        const g = u.genre || 'General';
+        if (!grouped[g]) grouped[g] = [];
+        grouped[g].push(u);
+      });
+
+      Object.keys(grouped).sort().forEach(g => {
+        html += `<optgroup label="${g}">`;
+        grouped[g].forEach(u => {
+          const sel = u.id === selectedUniverseId ? 'selected' : '';
+          const hasRules = u.content && u.content.trim().length > 0 ? ' 📄' : '';
+          html += `<option value="${u.id}" ${sel}>${u.name}${hasRules}</option>`;
+        });
+        html += `</optgroup>`;
+      });
+
+      uniSelect.innerHTML = html;
+    } catch (err) {
+      console.error('Failed to populate Universe select:', err);
+    }
+  }
+
   async function renderAssemblerScreen() {
     populateLinkTargets();
+    populateUniverseSelect();
     stagedCountBadge.textContent = stagedIds.length;
     stagedListCanvas.innerHTML = '';
     mappingsContainer.innerHTML = '';
@@ -514,7 +572,7 @@
 
       const mapRow = document.createElement('div');
       mapRow.className = 'assembler-mapping-row';
-      
+
       let optionsHtml = '';
       TARGET_FIELDS.forEach(field => {
         const isSelected = mappings[id] === field.key;
@@ -560,24 +618,24 @@
 
   function renderRelationships() {
     relationsContainer.innerHTML = '';
-    
+
     relationships.forEach((rel, idx) => {
       const row = document.createElement('div');
       row.className = 'relation-row';
 
       let sourceOptions = '';
       let targetOptions = '';
-      
+
       stagedIds.forEach(id => {
         window.ForgeDB.getComponent(id).then(comp => {
           if (comp && ['character', 'organization'].includes(comp.category)) {
             const cleanName = comp.name.split(' - ')[0];
             const isSrcSelected = rel.sourceId === id;
             const isTgtSelected = rel.targetId === id;
-            
+
             const srcOpt = `<option value="${id}" ${isSrcSelected ? 'selected' : ''}>${escapeHTML(cleanName)}</option>`;
             const tgtOpt = `<option value="${id}" ${isTgtSelected ? 'selected' : ''}>${escapeHTML(cleanName)}</option>`;
-            
+
             row.querySelector('.src-select').innerHTML += srcOpt;
             row.querySelector('.tgt-select').innerHTML += tgtOpt;
           }
@@ -641,6 +699,7 @@
     if (cat === 'bio') return '📝';
     if (cat === 'initial_message') return '💬';
     if (cat === 'organization') return '🤝';
+    if (cat === 'scenario') return '🎬';
     if (cat === 'setting') return '🌍';
     if (cat === 'rules') return '📜';
     return '📦';
@@ -652,7 +711,7 @@
     healthContainer.innerHTML = '';
 
     const checks = [];
-    
+
     // Count mappings
     const counts = {
       description: 0,
@@ -806,7 +865,7 @@
 
   async function compileCardData() {
     const projName = projNameInput.value.trim() || 'Compiled Bot';
-    
+
     const fields = {
       description: [],
       personality: [],
@@ -862,8 +921,7 @@
     }
 
     const descriptionText = fields.description.map(c => {
-      const cleanContent = injectComponentRelationships(c, relsBySource[c.id]);
-      return `### ${c.name.split(' - ')[0]}\n${cleanContent}`;
+      return `### ${c.name.split(' - ')[0]}\n${(c.content || '').trim()}`;
     }).join('\n\n');
 
     const personalityText = fields.personality.map(c => {
@@ -878,12 +936,18 @@
     }).join('\n\n');
 
     const scenarioText = fields.scenario.map(c => (c.content || '').trim()).join('\n\n');
+    let finalScenarioText = scenarioText;
+    if (selectedUniverseId && window.ForgeDB?.getUniverse) {
+      const uni = await window.ForgeDB.getUniverse(selectedUniverseId);
+      if (uni && uni.content && uni.content.trim()) {
+        const uniRules = uni.content.trim();
+        finalScenarioText = scenarioText
+          ? `${uniRules}\n\n${scenarioText}`
+          : uniRules;
+      }
+    }
+
     const firstMesText = fields.first_mes.map(c => (c.content || '').trim()).join('\n\n');
-
-    let systemPromptText = fields.system_prompt.map(c => (c.content || '').trim()).join('\n\n');
-
-    const postHistoryText = fields.post_history_instructions.map(c => (c.content || '').trim()).join('\n\n');
-    const examplesText = fields.mes_example.map(c => (c.content || '').trim()).join('\n\n');
 
     return {
       spec: 'chara_card_v2',
@@ -892,12 +956,12 @@
         name: projName,
         description: descriptionText,
         personality: personalityText,
-        scenario: scenarioText,
+        scenario: finalScenarioText,
         first_mes: firstMesText,
-        mes_example: examplesText,
+        mes_example: '',
         creator_notes: 'Assembled inside Anansi Forge',
-        system_prompt: systemPromptText,
-        post_history_instructions: postHistoryText,
+        system_prompt: '',
+        post_history_instructions: '',
         alternate_greetings: [],
         tags: Array.from(tagsSet),
         creator: 'Anansi Forge',
@@ -906,7 +970,8 @@
           anansi_forge: {
             stagedComponentIds: stagedIds,
             mappings: mappings,
-            relationships: relationships
+            relationships: relationships,
+            universeId: selectedUniverseId
           }
         }
       }
@@ -1040,7 +1105,7 @@
   async function exportAsJSON() {
     try {
       const card = await compileCardData();
-      
+
       const projectRecord = {
         id: activeProjectId || window.ForgeDB.generateId(),
         name: card.data.name,
@@ -1063,7 +1128,7 @@
 
       const blob = new Blob([JSON.stringify(card, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
+
       const a = document.createElement('a');
       a.href = url;
       a.download = `${card.data.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_card.json`;
@@ -1071,7 +1136,7 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       if (window.showToast) window.showToast('JSON character card downloaded and project saved.', 'success');
     } catch (err) {
       console.error(err);
@@ -1102,7 +1167,7 @@
       }
 
       if (window.refreshProjectsList) window.refreshProjectsList();
-      
+
       const canvas = document.createElement('canvas');
       canvas.width = 400;
       canvas.height = 600;
@@ -1197,7 +1262,7 @@
   async function launchSandbox() {
     try {
       const card = await compileCardData();
-      
+
       const projectRecord = {
         id: activeProjectId || window.ForgeDB.generateId(),
         name: card.data.name,
@@ -1211,7 +1276,7 @@
       const savedProj = await window.ForgeDB.saveProject(projectRecord);
       activeProjectId = savedProj.id;
       await linkProjectToTargetRecord(savedProj.id);
-      
+
       if (coverDataUrl) {
         await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
       }
@@ -1391,12 +1456,13 @@
       if (comp) {
         if (!stagedIds.includes(compId)) {
           stagedIds.push(compId);
-          if (comp.category === 'character') mappings[compId] = 'description';
+          if (comp.category === 'character') mappings[compId] = 'personality';
+          else if (comp.category === 'organization') mappings[compId] = 'personality';
           else if (comp.category === 'scenario') mappings[compId] = 'scenario';
-          else if (comp.category === 'initial_message') mappings[compId] = 'first_mes';
           else if (comp.category === 'bio') mappings[compId] = 'description';
-          else if (comp.category === 'organization') mappings[compId] = 'description';
-          else mappings[compId] = 'description';
+          else if (comp.category === 'initial_message') mappings[compId] = 'first_mes';
+          else if (comp.category === 'setting' || comp.category === 'rules') mappings[compId] = 'scenario';
+          else mappings[compId] = 'personality';
         }
       }
     }

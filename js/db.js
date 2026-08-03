@@ -657,47 +657,47 @@
 
   const DEFAULT_UNIVERSES = [
     // Comics
-    { id: 'dc', name: 'DC', genre: 'Comics', color: '#2563eb' },
-    { id: 'marvel', name: 'Marvel', genre: 'Comics', color: '#dc2626' },
-    { id: 'hellboy', name: 'Hellboy', genre: 'Comics', color: '#b91c1c' },
-    { id: 'invincible', name: 'Invincible', genre: 'Comics', color: '#f59e0b' },
-    { id: 'oc', name: 'OC', genre: 'Comics', color: '#7c3aed' },
-    { id: 'mixed', name: 'Mixed', genre: 'Comics', color: '#d97706' },
+    { id: 'dc', name: 'DC', genre: 'Comics', color: '#2563eb', content: '' },
+    { id: 'marvel', name: 'Marvel', genre: 'Comics', color: '#dc2626', content: '' },
+    { id: 'hellboy', name: 'Hellboy', genre: 'Comics', color: '#b91c1c', content: '' },
+    { id: 'invincible', name: 'Invincible', genre: 'Comics', color: '#f59e0b', content: '' },
+    { id: 'oc', name: 'OC', genre: 'Comics', color: '#7c3aed', content: '' },
+    { id: 'mixed', name: 'Mixed', genre: 'Comics', color: '#d97706', content: '' },
     // Sci-Fi & Space Opera
-    { id: 'star_wars', name: 'Star Wars', genre: 'Sci-Fi & Space Opera', color: '#0284c7' },
-    { id: 'star_trek', name: 'Star Trek', genre: 'Sci-Fi & Space Opera', color: '#0369a1' },
-    { id: 'firefly', name: 'Firefly', genre: 'Sci-Fi & Space Opera', color: '#ea580c' },
-    { id: 'stargate', name: 'Stargate', genre: 'Sci-Fi & Space Opera', color: '#0891b2' },
-    { id: 'mass_effect', name: 'Mass Effect', genre: 'Sci-Fi & Space Opera', color: '#2563eb' },
-    { id: 'babylon_5', name: 'Babylon 5', genre: 'Sci-Fi & Space Opera', color: '#4f46e5' },
+    { id: 'star_wars', name: 'Star Wars', genre: 'Sci-Fi & Space Opera', color: '#0284c7', content: '' },
+    { id: 'star_trek', name: 'Star Trek', genre: 'Sci-Fi & Space Opera', color: '#0369a1', content: '' },
+    { id: 'firefly', name: 'Firefly', genre: 'Sci-Fi & Space Opera', color: '#ea580c', content: '' },
+    { id: 'stargate', name: 'Stargate', genre: 'Sci-Fi & Space Opera', color: '#0891b2', content: '' },
+    { id: 'mass_effect', name: 'Mass Effect', genre: 'Sci-Fi & Space Opera', color: '#2563eb', content: '' },
+    { id: 'babylon_5', name: 'Babylon 5', genre: 'Sci-Fi & Space Opera', color: '#4f46e5', content: '' },
     // Urban Fantasy
-    { id: 'supernatural', name: 'Supernatural', genre: 'Urban Fantasy', color: '#78350f' },
-    { id: 'buffy', name: 'Buffy', genre: 'Urban Fantasy', color: '#9333ea' },
-    { id: 'angel', name: 'Angel', genre: 'Urban Fantasy', color: '#6b21a8' },
-    { id: 'dresden_files', name: 'Dresden Files', genre: 'Urban Fantasy', color: '#1e293b' },
-    { id: 'grimm', name: 'Grimm', genre: 'Urban Fantasy', color: '#15803d' },
-    { id: 'constantine', name: 'Constantine', genre: 'Urban Fantasy', color: '#ca8a04' },
-    { id: 'daniel_faust', name: 'Daniel Faust', genre: 'Urban Fantasy', color: '#881337' },
+    { id: 'supernatural', name: 'Supernatural', genre: 'Urban Fantasy', color: '#78350f', content: '' },
+    { id: 'buffy', name: 'Buffy', genre: 'Urban Fantasy', color: '#9333ea', content: '' },
+    { id: 'angel', name: 'Angel', genre: 'Urban Fantasy', color: '#6b21a8', content: '' },
+    { id: 'dresden_files', name: 'Dresden Files', genre: 'Urban Fantasy', color: '#1e293b', content: '' },
+    { id: 'grimm', name: 'Grimm', genre: 'Urban Fantasy', color: '#15803d', content: '' },
+    { id: 'constantine', name: 'Constantine', genre: 'Urban Fantasy', color: '#ca8a04', content: '' },
+    { id: 'daniel_faust', name: 'Daniel Faust', genre: 'Urban Fantasy', color: '#881337', content: '' },
     // Fantasy
-    { id: 'lotr', name: 'LotR', genre: 'Fantasy', color: '#15803d' },
-    { id: 'dragon_age', name: 'Dragon Age', genre: 'Fantasy', color: '#991b1b' },
-    { id: 'elder_scrolls', name: 'Elder Scrolls', genre: 'Fantasy', color: '#854d0e' },
-    { id: 'dnd', name: 'D&D', genre: 'Fantasy', color: '#dc2626' },
-    { id: 'witcher', name: 'Witcher', genre: 'Fantasy', color: '#374151' },
+    { id: 'lotr', name: 'LotR', genre: 'Fantasy', color: '#15803d', content: '' },
+    { id: 'dragon_age', name: 'Dragon Age', genre: 'Fantasy', color: '#991b1b', content: '' },
+    { id: 'elder_scrolls', name: 'Elder Scrolls', genre: 'Fantasy', color: '#854d0e', content: '' },
+    { id: 'dnd', name: 'D&D', genre: 'Fantasy', color: '#dc2626', content: '' },
+    { id: 'witcher', name: 'Witcher', genre: 'Fantasy', color: '#374151', content: '' },
     // Adventure / Pulp
-    { id: 'indiana_jones', name: 'Indiana Jones', genre: 'Adventure / Pulp', color: '#d97706' },
-    { id: 'the_shadow', name: 'The Shadow', genre: 'Adventure / Pulp', color: '#111827' },
-    { id: 'the_phantom', name: 'The Phantom', genre: 'Adventure / Pulp', color: '#7c3aed' },
-    { id: 'doc_savage', name: 'Doc Savage', genre: 'Adventure / Pulp', color: '#ca8a04' },
-    { id: 'zorro', name: 'Zorro', genre: 'Adventure / Pulp', color: '#991b1b' },
-    { id: 'dick_tracy', name: 'Dick Tracy', genre: 'Adventure / Pulp', color: '#f59e0b' },
-    { id: 'the_rocketeer', name: 'The Rocketeer', genre: 'Adventure / Pulp', color: '#b91c1c' },
+    { id: 'indiana_jones', name: 'Indiana Jones', genre: 'Adventure / Pulp', color: '#d97706', content: '' },
+    { id: 'the_shadow', name: 'The Shadow', genre: 'Adventure / Pulp', color: '#111827', content: '' },
+    { id: 'the_phantom', name: 'The Phantom', genre: 'Adventure / Pulp', color: '#7c3aed', content: '' },
+    { id: 'doc_savage', name: 'Doc Savage', genre: 'Adventure / Pulp', color: '#ca8a04', content: '' },
+    { id: 'zorro', name: 'Zorro', genre: 'Adventure / Pulp', color: '#991b1b', content: '' },
+    { id: 'dick_tracy', name: 'Dick Tracy', genre: 'Adventure / Pulp', color: '#f59e0b', content: '' },
+    { id: 'the_rocketeer', name: 'The Rocketeer', genre: 'Adventure / Pulp', color: '#b91c1c', content: '' },
     // Detective
-    { id: 'sherlock', name: 'Sherlock', genre: 'Detective', color: '#475569' },
-    { id: 'lupin', name: 'Lupin', genre: 'Detective', color: '#c026d3' },
-    { id: 'columbo', name: 'Columbo', genre: 'Detective', color: '#854d0e' },
+    { id: 'sherlock', name: 'Sherlock', genre: 'Detective', color: '#475569', content: '' },
+    { id: 'lupin', name: 'Lupin', genre: 'Detective', color: '#c026d3', content: '' },
+    { id: 'columbo', name: 'Columbo', genre: 'Detective', color: '#854d0e', content: '' },
     // General
-    { id: 'other', name: 'Other', genre: 'General', color: '#6b7280' }
+    { id: 'other', name: 'Other', genre: 'General', color: '#6b7280', content: '' }
   ];
 
   async function getAllUniverses() {
@@ -739,6 +739,7 @@
       name,
       genre: (uni.genre || 'General').trim(),
       color: uni.color || '#6b7280',
+      content: (uni.content !== undefined ? uni.content : '').trim(),
       isCustom: uni.isCustom !== undefined ? uni.isCustom : true,
       updatedAt: new Date().toISOString()
     };

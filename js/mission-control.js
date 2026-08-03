@@ -1975,6 +1975,10 @@ Write-Host "Done! tracker-import.json created."</pre>
   // ─── Universe & Genre Manager Modal ───────────────────────────────────────
 
   async function openUniverseManagerModal() {
+    if (window.MissionControlUniverseModal && window.MissionControlUniverseModal.openModal) {
+      window.MissionControlUniverseModal.openModal();
+      return;
+    }
     try {
       if (window.ForgeDB && window.ForgeDB.getAllUniverses) {
         state.allUniverses = (await window.ForgeDB.getAllUniverses()) || [];

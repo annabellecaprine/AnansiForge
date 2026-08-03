@@ -647,18 +647,41 @@
         </div>
         <div class="view-content assembler-grid">
           <div class="assembler-main">
-            <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; align-items:end;">
               <div>
-                <label for="proj-name">Project / Bot Name</label>
-                <input type="text" id="proj-name" placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off"
-                  data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+                <label for="proj-name"
+                  style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">Project
+                  / Bot Name</label>
+                <input type="text" id="proj-name" class="mc-modal-input"
+                  style="height:40px; padding:6px 12px; box-sizing:border-box; font-size:0.88rem;"
+                  placeholder="e.g., Batman (Chamber of Secrets)" autocomplete="off" data-1p-ignore="true"
+                  data-lpignore="true" data-bwignore="true">
               </div>
               <div>
-                <label for="assembler-link-target">Link to Story / Release</label>
-                <select id="assembler-link-target" class="mc-modal-input" style="height:38px;"
+                <label for="assembler-link-target"
+                  style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">Link
+                  to Story / Release</label>
+                <select id="assembler-link-target" class="mc-modal-input"
+                  style="height:40px; padding:6px 12px; box-sizing:border-box; font-size:0.88rem; width:100%;"
                   title="Auto-link compiled project to Story or Release">
                   <option value="">— Link to Story / Release —</option>
                 </select>
+              </div>
+              <div>
+                <label for="assembler-universe-select"
+                  style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:block;">🌐
+                  Universe</label>
+                <div style="display:flex; gap:6px;">
+                  <select id="assembler-universe-select" class="mc-modal-input"
+                    style="height:40px; padding:6px 12px; box-sizing:border-box; font-size:0.88rem; flex:1;"
+                    title="Select Universe to merge with Scenario during export">
+                    <option value="">— No Universe —</option>
+                    <!-- Populated dynamically -->
+                  </select>
+                  <button id="btn-assembler-edit-universe" class="btn btn-secondary btn-icon"
+                    style="height:40px; width:40px; flex-shrink:0; padding:0; display:inline-flex; align-items:center; justify-content:center;"
+                    title="Manage Universes & World Rules">⚙️</button>
+                </div>
               </div>
             </div>
 
@@ -1042,6 +1065,70 @@
 
   <script src="js/mission-control.js?v=16.4"></script>
   <script src="js/app.js?v=16.4"></script>
+  <!-- UNIVERSE MANAGER MODAL -->
+  <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
+    <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">
+      <div class="mc-modal-header">
+        <h3>🌐 Universe Manager</h3>
+        <button class="mc-modal-close" id="btn-close-universe-modal">&times;</button>
+      </div>
+      <div class="mc-modal-body" style="flex:1; overflow:hidden; display:flex; gap:16px; padding:16px;">
+        <!-- Universe List Panel -->
+        <div class="universe-list-panel"
+          style="width:260px; overflow-y:auto; border-right:1px solid var(--border-color); padding-right:16px;">
+          <div style="margin-bottom:12px;">
+            <button id="btn-universe-add-new" class="btn btn-primary btn-sm btn-block">+ New Universe</button>
+          </div>
+          <div id="universe-list-container">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+        <!-- Universe Edit Panel -->
+        <div class="universe-edit-panel" style="flex:1; overflow-y:auto; padding-left:4px;">
+          <div id="universe-edit-empty" style="text-align:center; color:var(--text-muted); padding-top:40px;">
+            <p>Select a universe from the list to edit, or create a new one.</p>
+          </div>
+          <div id="universe-edit-form" style="display:none;">
+            <div
+              style="display:grid; grid-template-columns:1fr auto auto; gap:12px; margin-bottom:14px; align-items:end;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="universe-edit-name">Universe Name</label>
+                <input type="text" id="universe-edit-name" class="mc-modal-input" placeholder="e.g., Arrowverse"
+                  autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="universe-edit-genre">Genre</label>
+                <input type="text" id="universe-edit-genre" class="mc-modal-input" placeholder="e.g., Comics"
+                  autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="universe-edit-color">Color</label>
+                <input type="color" id="universe-edit-color" value="#6b7280"
+                  style="height:38px; width:50px; border:1px solid var(--border-color); border-radius:var(--radius-sm); cursor:pointer; background:transparent;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="universe-edit-content" style="display:flex; justify-content:space-between;">
+                <span>Universe Rules</span>
+                <button id="btn-universe-insert-template" class="btn btn-ghost btn-sm"
+                  style="font-size:0.7rem; padding:2px 8px;" title="Insert blank template structure">📋 Insert
+                  Template</button>
+              </label>
+              <textarea id="universe-edit-content" class="mc-modal-input"
+                style="min-height:340px; font-family:var(--font-mono); font-size:0.82rem; resize:vertical;" placeholder="Define the world's assumptions, rules, tone, and presentation guidance...
+
+Use the 'Insert Template' button above for a structured starting point."></textarea>
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+              <button id="btn-universe-delete" class="btn btn-danger btn-sm" style="margin-right:auto;">Delete</button>
+              <button id="btn-universe-save" class="btn btn-primary">Save Universe</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>
