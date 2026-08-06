@@ -53,6 +53,20 @@
     experiment: '#f59e0b'
   };
 
+  const SERIES_OPTIONS = {
+    standard: '📦 Standard Release',
+    workshop: '🔧 Workshop Piece',
+    experimental: '🧪 Experimental',
+    event_bot: '🎪 Event Bot'
+  };
+
+  const SERIES_COLORS = {
+    standard: '#6366f1',
+    workshop: '#10b981',
+    experimental: '#f59e0b',
+    event_bot: '#ec4899'
+  };
+
 
   const STORY_TO_RELEASE_STEP_MAP = {
     concept: 'staged',
@@ -87,11 +101,12 @@
     focusedRowIndex: -1,           // keyboard nav focused row
     sortDir: 'desc',               // 'desc' = most ready first
     groupByPriority: false,
-    filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '' },
+    filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '', series: 'all' },
     overviewFilters: { universeCat: 'all', roleMode: 'role' },
     leaderboardSort: 'messages',
     portfolioChartMetric: 'messages',
     isSpawningRelease: false,
+    metricsSeriesFilter: 'all',
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -176,6 +191,7 @@
     }
     if (universe !== 'all') items = items.filter(r => isMatchingUniverse(r.universe || r.tracker?.universe, universe));
     if (priority !== 'all') items = items.filter(r => (r.priority || null) === priority);
+    if (state.filters.series !== 'all') items = items.filter(r => (r.series || 'standard') === state.filters.series);
     if (activeTag) items = items.filter(r => (r.tags || []).includes(activeTag));
     return items;
   }
@@ -293,6 +309,13 @@
     const label = RELEASE_SOURCES[src] || src;
     const c = RELEASE_SOURCE_COLORS[src] || '#6b7280';
     return `<span class="mc-badge mc-badge--source" style="background:${c}18; color:${c}; border:1px solid ${c}44;" title="Release Source: ${esc(label)}">${esc(label)}</span>`;
+  }
+
+  function seriesBadge(series) {
+    const key = series || 'standard';
+    const label = SERIES_OPTIONS[key] || key;
+    const color = SERIES_COLORS[key] || '#6b7280';
+    return `<span class="mc-badge" style="background:${color}22; color:${color}; border:1px solid ${color}44; font-size:0.72rem;">${label}</span>`;
   }
 
   function storyStatusBadge(status) {
@@ -488,6 +511,10 @@
         <select id="mc-filter-priority" class="mc-filter-select">
           <option value="all">All Priorities</option>
           ${priorities.map(p => `<option value="${p}" ${state.filters.priority === p ? 'selected' : ''}>${p}</option>`).join('')}
+        </select>
+        <select id="mc-filter-series" class="mc-filter-select">
+          <option value="all">All Series</option>
+          ${Object.entries(SERIES_OPTIONS).map(([k, v]) => `<option value="${k}" ${state.filters.series === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
         <button class="mc-btn mc-btn-ghost mc-sort-btn" id="mc-sort-toggle" title="Toggle sort direction">
           ${state.sortDir === 'desc' ? '↓ Most Ready' : '↑ Least Ready'}
@@ -1256,6 +1283,7 @@
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Series</th>
                 <th>Universe</th>
                 <th>Priority</th>
                 ${steps.map(s => `<th class="mc-pipe-th" title="${STEP_LABELS[s] || s}">${(STEP_LABELS[s] || s).substring(0, 4)}</th>`).join('')}
@@ -1305,6 +1333,7 @@
         ${sourceStory ? `<div class="mc-linked-proj-tag mc-open-story-hub" data-story-id="${sourceStory.id}" style="cursor:pointer;" title="Click to view source Story Hub">📖 from: ${esc(sourceStory.name)}</div>` : ''}
         ${linkedProj ? `<div class="mc-linked-proj-tag" title="Linked to compiled project: ${esc(linkedProj.name)}">🤖 ${esc(linkedProj.name)} (${(linkedProj.componentIds || []).length} items)</div>` : ''}
       </td>
+      <td>${seriesBadge(rec.series)}</td>
       <td>${universeBadge(rec.universe)}</td>
       <td>${priorityBadge(rec.priority)}</td>
       ${pipelineCheckboxes(rec.pipeline, steps, rec.id, false)}
@@ -1507,6 +1536,11 @@ Write-Host "Done! tracker-import.json created."</pre>
         <div class="form-group"><label>Release Source</label>
           <select id="mc-rec-release-source" class="mc-modal-input">
             ${Object.keys(RELEASE_SOURCES).map(src => `<option value="${src}" ${(r.releaseSource || 'manual') === src ? 'selected' : ''}>${RELEASE_SOURCES[src]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Series</label>
+          <select id="mc-rec-series" class="mc-modal-input">
+            ${Object.entries(SERIES_OPTIONS).map(([k, v]) => `<option value="${k}" ${(r.series || 'standard') === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label>Linked Assembled Bot / Project</label>
@@ -1898,6 +1932,7 @@ Write-Host "Done! tracker-import.json created."</pre>
       }
       if (r.assetType === 'release') {
         updated.releaseSource = document.getElementById('mc-rec-release-source')?.value || 'manual';
+        updated.series = document.getElementById('mc-rec-series')?.value || 'standard';
         updated.projectId = document.getElementById('mc-rec-project-id')?.value || null;
         updated.visibility = document.getElementById('mc-rec-visibility')?.value || null;
         const privDateVal = document.getElementById('mc-rec-private-date')?.value;
@@ -3075,6 +3110,14 @@ ${releasesMd}
         return;
       }
 
+      // Series filter pill (Metrics tab)
+      const seriesPill = t.closest('.mc-series-filter-pill');
+      if (seriesPill) {
+        state.metricsSeriesFilter = seriesPill.dataset.seriesFilter || 'all';
+        await renderCurrentTab();
+        return;
+      }
+
       // Leaderboard sort pill
       const lbPill = t.closest('.mc-leaderboard-pill');
       if (lbPill) {
@@ -3550,6 +3593,9 @@ ${releasesMd}
 
       const roleSelect = t.id === 'mc-filter-role' ? t : t.closest('#mc-filter-role');
       if (roleSelect) { state.filters.role = roleSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
+
+      const seriesSelect = t.id === 'mc-filter-series' ? t : t.closest('#mc-filter-series');
+      if (seriesSelect) { state.filters.series = seriesSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
 
       // Bulk role set
       if (t.id === 'mc-bulk-role') {
@@ -4109,7 +4155,9 @@ ${releasesMd}
   }
 
   function renderMetrics() {
-    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived');
+    const seriesFilter = state.metricsSeriesFilter || 'all';
+    let releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived');
+    if (seriesFilter !== 'all') releases = releases.filter(r => (r.series || 'standard') === seriesFilter);
     const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0 || r.metrics?.favorites > 0);
     const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0) && !(r.metrics?.favorites > 0));
 
@@ -4176,6 +4224,7 @@ ${releasesMd}
         <td class="mc-cell-name">
           <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
         </td>
+        <td>${seriesBadge(rec.series)}</td>
         <td>${universeBadge(rec.universe)}</td>
         <td class="mc-token-count-cell" data-record-id="${rec.id}">
           <span class="mc-token-display" title="Click to set token count" style="cursor:pointer; font-size:0.82rem; color:${rec.tokenCount ? 'var(--text-primary)' : 'var(--text-muted)'}; padding:2px 6px; border-radius:4px; display:inline-block; min-width:32px; text-align:center; border:1px dashed ${rec.tokenCount ? 'var(--border-color)' : 'rgba(148,163,184,0.3)'}; transition:border-color 0.15s;">${rec.tokenCount ? rec.tokenCount.toLocaleString() : '—'}</span>
@@ -4416,6 +4465,11 @@ ${releasesMd}
             <button class="mc-leaderboard-pill${sortMode === 'mpc' ? ' active' : ''}" data-sort="mpc">📐 By MpC</button>
           </div>
         </div>
+        <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+          <span style="font-size:0.78rem; color:var(--text-muted); margin-right:4px;">Series:</span>
+          <button class="mc-leaderboard-pill mc-series-filter-pill${seriesFilter === 'all' ? ' active' : ''}" data-series-filter="all">All</button>
+          ${Object.entries(SERIES_OPTIONS).map(([k, v]) => `<button class="mc-leaderboard-pill mc-series-filter-pill${seriesFilter === k ? ' active' : ''}" data-series-filter="${k}">${v}</button>`).join('')}
+        </div>
         ${sorted.length === 0
         ? '<p class="mc-empty-state">No metrics recorded yet. Edit a release record to add data.</p>'
         : `<div class="mc-table-wrap">
@@ -4424,6 +4478,7 @@ ${releasesMd}
                 <tr>
                   <th>#</th>
                   <th>Name</th>
+                  <th>Series</th>
                   <th>Universe</th>
                   <th title="Click a value to edit">Tokens</th>
                   <th>Messages</th>

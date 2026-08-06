@@ -479,6 +479,7 @@
 
   const VALID_STORY_STATUSES = new Set(['Active', 'Promoted', 'Archived']);
   const VALID_RELEASE_SOURCES = new Set(['story', 'existing_bot', 'legacy_import', 'manual', 'experiment']);
+  const VALID_SERIES = new Set(['standard', 'workshop', 'experimental', 'event_bot']);
 
   /**
    * Normalizes a tracker record on read so legacy/uninitialized records never break UI state
@@ -510,6 +511,9 @@
       }
       if (!rec.status || (rec.status !== 'Active' && rec.status !== 'Archived')) {
         rec.status = 'Active';
+      }
+      if (!rec.series || !VALID_SERIES.has(rec.series)) {
+        rec.series = 'standard';
       }
     }
 
@@ -605,6 +609,7 @@
       releaseIds: Array.isArray(rec.releaseIds) ? rec.releaseIds : (rec.promotedToReleaseId ? [rec.promotedToReleaseId] : []),
       // release-specific
       releaseSource: releaseSource || 'manual',
+      series: (aType === 'release' && VALID_SERIES.has(rec.series)) ? rec.series : (aType === 'release' ? 'standard' : undefined),
       sourceStoryId: rec.sourceStoryId || null,
       iterationLabel: rec.iterationLabel || '',
       previousMetrics: previousMetrics,
