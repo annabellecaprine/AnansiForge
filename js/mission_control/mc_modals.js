@@ -1,0 +1,578 @@
+/**
+ * js/mission_control/mc_modals.js
+ * Anansi Forge Mission Control - Modal Dialog Renderers & Handlers
+ */
+
+(() => {
+    const getS = () => window.MissionControlState;
+    const getC = () => window.MissionControlCharts;
+
+    async function openBotAnalyticsModal(recordId) {
+        const S = getS();
+        const C = getC();
+        if (!S || !C) return;
+
+        const rec = S.state.allTrackerRecords.find(r => r.id === recordId) || S.state.allComponents.find(c => c.id === recordId);
+        if (!rec) return;
+
+        const name = rec.name;
+        const universe = rec.universe || (rec.tracker?.universe) || '';
+        const m = rec.metrics || {};
+        const prev = rec.previousMetrics || {};
+
+        const totalMsgs = m.messages || 0;
+        const totalChats = m.uniqueChats || 0;
+        const mpc = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+
+        const botEvents = [...(rec.lifecycleEvents || [])];
+        if (!botEvents.some(e => e.type === 'private_testing' || (e.label && e.label.includes('Private')))) {
+            const createTime = rec.createdAt || (rec.tracker && rec.tracker.createdAt);
+            if (createTime) {
+                botEvents.push({ type: 'private_testing', label: 'Private Testing', icon: '🧪', timestamp: createTime });
+            }
+        }
+        if (!botEvents.some(e => e.type === 'public_release' || (e.label && (e.label.includes('Release') || e.label.includes('Launch'))))) {
+            const releaseTime = rec.publishedDate || rec.scheduledDate;
+            if (releaseTime) {
+                botEvents.push({ type: 'public_release', label: 'Public Release', icon: '🚀', timestamp: releaseTime });
+            }
+        }
+        if (rec.status === 'Archived' && !botEvents.some(e => e.type === 'archived' || (e.label && e.label.includes('Archive')))) {
+            botEvents.push({ type: 'archived', label: 'Archived', icon: '📦', timestamp: rec.archivedAt || rec.updatedAt || new Date().toISOString() });
+        }
+        botEvents.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+        const dataPoints = [];
+        const mpcPoints = [];
+        const allSnaps = [];
+
+        if (rec.metricSnapshots && rec.metricSnapshots.length > 0) {
+            rec.metricSnapshots.forEach(s => {
+                const d = new Date(s.timestamp || Date.now());
+                const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                allSnaps.push({ label, messages: s.messages || 0, mpc: s.mpc || 0, timestamp: s.timestamp || d.toISOString() });
+            });
+        } else {
+            if (prev && (prev.messages > 0 || prev.uniqueChats > 0)) {
+                const prevMpc = prev.uniqueChats > 0 ? parseFloat((prev.messages / prev.uniqueChats).toFixed(2)) : 0;
+                const prevDate = prev.updatedAt ? new Date(prev.updatedAt) : null;
+                const prevLabel = (prevDate && !isNaN(prevDate)) ? prevDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Previous';
+                allSnaps.push({ label: prevLabel, messages: prev.messages || 0, mpc: prevMpc, timestamp: prev.updatedAt || new Date().toISOString() });
+            }
+            if (m && (m.messages > 0 || m.uniqueChats > 0)) {
+                const curMpc = totalChats > 0 ? parseFloat((totalMsgs / totalChats).toFixed(2)) : 0;
+                const curDateStr = m.date ? (m.time ? `${m.date} ${m.time}` : m.date) : 'Current';
+                const curDate = new Date(curDateStr);
+                const curLabel = (curDate && !isNaN(curDate)) ? curDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : (m.date || 'Current');
+                allSnaps.push({ label: curLabel, messages: totalMsgs, mpc: curMpc, timestamp: m.lastUpdated || (curDate && !isNaN(curDate) ? curDate.toISOString() : new Date().toISOString()) });
+            }
+        }
+
+        allSnaps.forEach(s => {
+            dataPoints.push({ label: s.label, value: s.messages, timestamp: s.timestamp });
+            mpcPoints.push({ label: s.label, value: s.mpc, timestamp: s.timestamp });
+        });
+
+        const modal = document.getElementById('mc-modal-overlay');
+        const body = document.getElementById('mc-modal-body');
+        const title = document.getElementById('mc-modal-title');
+
+        const noLaunchDate = rec.assetType === 'release' && !rec.scheduledDate && !rec.publishedDate;
+        const limitedData = allSnaps.length < 2;
+
+        title.innerHTML = `📊 Analytics &amp; Trajectory — ${S.esc(name)}`;
+        body.innerHTML = `
+      <div style="display:flex; justify-space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${S.universeBadge(universe)}
+          ${rec.priority ? S.priorityBadge(rec.priority) : ''}
+          ${rec.iterationLabel ? `<span class="mc-badge mc-iteration-badge">🏷️ ${S.esc(rec.iterationLabel)}</span>` : ''}
+        </div>
+        <span style="font-size:0.8rem; color:var(--text-muted);">Last Snapshot: ${m.date ? m.date : 'No date set'}</span>
+      </div>
+
+      <div class="mc-kpi-grid" style="margin-bottom:18px;">
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:var(--accent);">💬</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${totalMsgs.toLocaleString()}</div>
+            <div class="mc-kpi-label">Total Messages</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:var(--success);">👥</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${totalChats.toLocaleString()}</div>
+            <div class="mc-kpi-label">Unique Chats</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:#f59e0b;">⭐</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${(m.favorites || 0).toLocaleString()}</div>
+            <div class="mc-kpi-label">Total Favorites</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:var(--warning);">📐</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${mpc}</div>
+            <div class="mc-kpi-label">Avg Msg / Chat</div>
+          </div>
+        </div>
+        <div class="mc-kpi-card">
+          <div class="mc-kpi-icon" style="color:#ec4899;">💝</div>
+          <div class="mc-kpi-body">
+            <div class="mc-kpi-value">${totalChats > 0 ? ((m.favorites || 0) / totalChats).toFixed(3) : '—'}</div>
+            <div class="mc-kpi-label">Fav / Chat</div>
+          </div>
+        </div>
+      </div>
+
+      ${(() => {
+                const snaps = rec.metricSnapshots && rec.metricSnapshots.length > 0
+                    ? rec.metricSnapshots
+                    : (rec.previousMetrics && rec.previousMetrics.uniqueChats > 0
+                        ? [rec.previousMetrics, m]
+                        : (m.uniqueChats > 0 ? [m] : []));
+
+                const mpcValues = snaps
+                    .map(s => s.uniqueChats > 0 ? parseFloat((s.messages / s.uniqueChats).toFixed(2)) : null)
+                    .filter(v => v !== null && v > 0);
+
+                if (totalChats > 0 && mpcValues.length === 0) mpcValues.push(parseFloat(mpc));
+
+                const buckets = [
+                    { label: '0 – 10', min: 0, max: 10, color: '#6366f1' },
+                    { label: '10 – 15', min: 10, max: 15, color: '#10b981' },
+                    { label: '15 – 20', min: 15, max: 20, color: '#f59e0b' },
+                    { label: '20 – 30', min: 20, max: 30, color: '#ec4899' },
+                    { label: '30+', min: 30, max: Infinity, color: '#ef4444' }
+                ];
+
+                const counts = buckets.map(b => mpcValues.filter(v => v >= b.min && v < b.max).length);
+                const maxCount = Math.max(...counts, 1);
+                const barW = 60, gap = 18, svgW = buckets.length * (barW + gap) + 20;
+                const svgH = 120;
+                const labelH = 20;
+                const chartH = svgH - labelH - 24;
+
+                const bars = buckets.map((b, i) => {
+                    const h = counts[i] > 0 ? Math.max(4, Math.round((counts[i] / maxCount) * chartH)) : 2;
+                    const x = 10 + i * (barW + gap);
+                    const y = svgH - labelH - h;
+                    return `
+            <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="${b.color}" opacity="0.85"/>
+            ${counts[i] > 0 ? `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="11" fill="#e2e8f0">${counts[i]}</text>` : ''}
+            <text x="${x + barW / 2}" y="${svgH - 4}" text-anchor="middle" font-size="10" fill="#94a3b8">${b.label}</text>
+          `;
+                }).join('');
+
+                return mpcValues.length > 0 ? `
+        <div class="mc-overview-panel" style="margin-bottom:14px;">
+          <h4 class="mc-panel-title" style="margin-bottom:8px;">📊 MpC Distribution by Snapshot</h4>
+          <p style="font-size:0.78rem; color:var(--text-muted); margin:0 0 10px;">How often this bot's Msg/Chat ratio fell into each range across recorded snapshots.</p>
+          <svg width="100%" viewBox="0 0 ${svgW} ${svgH}" style="overflow:visible; max-width:520px; display:block; margin:0 auto;">
+            ${bars}
+          </svg>
+          ${mpcValues.length < 3 ? '<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:4px;">⚠️ Record more snapshots over time for a meaningful distribution.</p>' : ''}
+        </div>` : '';
+            })()}
+
+      ${noLaunchDate ? `
+      <div style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:12px 16px; margin-bottom:14px; color:var(--warning); font-size:0.85rem;">
+        📅 <strong>No Live / Launch Date set.</strong> Open the edit modal and set a <em>Live / Launch Date</em> to anchor the growth timeline.
+      </div>` : ''}
+
+      <div class="mc-overview-panel" style="margin-bottom:14px;">
+        <h4 class="mc-panel-title" style="margin-bottom:8px;">📈 Messages Growth Trajectory</h4>
+        ${C.renderSVGLineChart(dataPoints, 520, 180, '#6366f1', botEvents)}
+        ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
+      </div>
+
+      <div class="mc-overview-panel">
+        <h4 class="mc-panel-title" style="margin-bottom:8px;">🎯 MpC Engagement Trajectory (Msg / Chat)</h4>
+        ${C.renderSVGLineChart(mpcPoints, 520, 180, '#10b981', botEvents)}
+        ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
+      </div>
+
+      <div style="margin-top:16px; text-align:right;">
+        <button type="button" class="mc-btn mc-btn-primary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Close Analytics</button>
+      </div>
+    `;
+
+        modal.classList.remove('hidden');
+    }
+
+    function openQuickMetricsModal(botId) {
+        const S = getS();
+        if (!S) return;
+
+        const releases = S.state.allTrackerRecords.filter(r => r.assetType === 'release');
+        if (releases.length === 0) {
+            if (typeof showToast === 'function') showToast('No release bots found to record metrics for.', 'warning');
+            return;
+        }
+
+        let bot = releases.find(r => r.id === botId) || releases.find(r => r.status !== 'Archived') || releases[0];
+
+        const modal = document.getElementById('mc-modal-overlay');
+        const body = document.getElementById('mc-modal-body');
+        const title = document.getElementById('mc-modal-title');
+
+        title.innerHTML = `⚡ Record Metric Snapshot`;
+
+        const renderModalBody = (targetBot) => {
+            bot = targetBot;
+            const last = bot.metrics || {};
+
+            body.innerHTML = `
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; display:block;">Select Bot / Release</label>
+          <select id="mc-snap-bot-select" class="mc-modal-input" style="width:100%;">
+            ${releases.map(r => `<option value="${r.id}" ${r.id === bot.id ? 'selected' : ''}>${S.esc(r.name)}${r.status === 'Archived' ? ' [Archived]' : ''}${r.universe ? ` (${S.esc(r.universe)})` : ''}</option>`).join('')}
+          </select>
+        </div>
+        <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
+          Metric updates create an immutable, append-only performance snapshot with an automatic timestamp.
+        </div>
+        <div class="mc-form-row" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+          <div class="form-group"><label>Messages</label>
+            <input type="number" id="mc-snap-msgs" value="${last.messages || 0}" class="mc-modal-input" min="0">
+          </div>
+          <div class="form-group"><label>Unique Chats</label>
+            <input type="number" id="mc-snap-chats" value="${last.uniqueChats || 0}" class="mc-modal-input" min="0">
+          </div>
+          <div class="form-group"><label>Favorites</label>
+            <input type="number" id="mc-snap-favs" value="${last.favorites || 0}" class="mc-modal-input" min="0">
+          </div>
+        </div>
+        <div style="padding:10px; background:var(--bg-secondary); border-radius:6px; font-size:0.8rem; margin-bottom:16px;">
+          <div><strong>Live Derived Preview:</strong></div>
+          <div id="mc-snap-preview" style="display:flex; gap:16px; margin-top:6px; color:var(--accent);">
+            <span>MpC: <strong id="mc-prev-mpc">—</strong></span>
+            <span>Fav / Chat: <strong id="mc-prev-favchat">—</strong></span>
+            <span>Fav / 100 Msg: <strong id="mc-prev-favmsg">—</strong></span>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
+          <button class="mc-btn mc-btn-primary" id="mc-btn-submit-snapshot" data-bot-id="${bot.id}">📈 Record Snapshot</button>
+        </div>
+      `;
+
+            const updatePreview = () => {
+                const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
+                const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
+                const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
+
+                const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs) : null;
+                if (calc) {
+                    document.getElementById('mc-prev-mpc').textContent = calc.mpc;
+                    document.getElementById('mc-prev-favchat').textContent = calc.favPerChat;
+                    document.getElementById('mc-prev-favmsg').textContent = calc.favPer100Msg;
+                }
+            };
+
+            document.getElementById('mc-snap-bot-select')?.addEventListener('change', (e) => {
+                const selected = releases.find(r => r.id === e.target.value);
+                if (selected) renderModalBody(selected);
+            });
+
+            document.getElementById('mc-snap-msgs')?.addEventListener('input', updatePreview);
+            document.getElementById('mc-snap-chats')?.addEventListener('input', updatePreview);
+            document.getElementById('mc-snap-favs')?.addEventListener('input', updatePreview);
+            updatePreview();
+        };
+
+        renderModalBody(bot);
+        modal.classList.remove('hidden');
+    }
+
+    async function submitMetricSnapshot(botId) {
+        const S = getS();
+        if (!S) return;
+
+        const bot = S.state.allTrackerRecords.find(r => r.id === botId);
+        if (!bot) return;
+
+        const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
+        const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
+        const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
+
+        const prevSnap = (bot.metricSnapshots && bot.metricSnapshots.length > 0)
+            ? bot.metricSnapshots[bot.metricSnapshots.length - 1]
+            : null;
+
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        const calc = window.MissionControlMath ? window.MissionControlMath.calculateSnapshotMetrics(msgs, chats, favs, prevSnap) : {
+            messages: msgs, chats, favorites: favs, mpc: chats > 0 ? parseFloat((msgs / chats).toFixed(2)) : 0, timestamp: now.toISOString()
+        };
+        calc.date = dateStr;
+        calc.time = timeStr;
+
+        bot.metricSnapshots = bot.metricSnapshots || [];
+        bot.metricSnapshots.push(calc);
+
+        bot.previousMetrics = bot.metrics ? { ...bot.metrics } : null;
+        bot.metrics = {
+            messages: msgs,
+            uniqueChats: chats,
+            favorites: favs,
+            msgPerChat: calc.mpc,
+            date: dateStr,
+            time: timeStr,
+            lastUpdated: now.toISOString()
+        };
+        bot.latestSnapshotReference = now.toISOString();
+
+        await window.ForgeDB.saveTrackerRecord(bot);
+
+        if (window.AnansiEvents) {
+            await window.AnansiEvents.logActivity('Metrics Updated', 'bot', bot.id, `Recorded snapshot: ${msgs} msgs, ${chats} chats, ${favs} favs`);
+        }
+
+        await S.loadAll();
+        if (window.MissionControlController && window.MissionControlController.renderCurrentTab) {
+            await window.MissionControlController.renderCurrentTab();
+        }
+        document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+        if (typeof showToast === 'function') showToast(`Metric snapshot recorded for ${bot.name}!`, 'success');
+    }
+
+    function openStoryHubModal(storyId) {
+        const S = getS();
+        if (!S) return;
+
+        const story = S.state.allTrackerRecords.find(r => r.id === storyId);
+        if (!story) return;
+
+        const modal = document.getElementById('mc-modal-overlay');
+        const body = document.getElementById('mc-modal-body');
+        const title = document.getElementById('mc-modal-title');
+
+        title.innerHTML = `📖 Story Hub: ${S.esc(story.name)}`;
+
+        const linkedIds = story.linkedVaultIds || [];
+        const linkedComps = [];
+        const missingIds = [];
+
+        linkedIds.forEach(id => {
+            const c = S.state.compMap.get(id);
+            if (c) linkedComps.push(c);
+            else missingIds.push(id);
+        });
+
+        const chars = linkedComps.filter(c => c.category === 'character');
+        const scenarios = linkedComps.filter(c => c.category === 'scenario');
+        const bios = linkedComps.filter(c => c.category === 'bio');
+        const initMsgs = linkedComps.filter(c => c.category === 'initial_message');
+
+        const releases = S.state.allTrackerRecords.filter(r =>
+            r.assetType === 'release' && r.status !== 'Archived' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id))
+        );
+
+        const totalMsgs = releases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
+        const totalChats = releases.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
+        const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
+
+        body.innerHTML = `
+      <div class="mc-hub-header">
+        <div class="mc-hub-header-meta">
+          ${S.storyStatusBadge(story.status)}
+          ${S.universeBadge(story.universe)}
+          ${S.priorityBadge(story.priority)}
+          ${story.project ? `<span class="mc-linked-proj-tag">📁 ${S.esc(story.project)}</span>` : ''}
+        </div>
+        <div class="mc-hub-header-actions" style="margin-top:10px; display:flex; gap:8px;">
+          <button class="mc-btn mc-btn-primary mc-spawn-release" data-story-id="${story.id}">🚀 Spawn New Release</button>
+          <button class="mc-btn mc-btn-accent mc-create-project-from-story" data-story-id="${story.id}">🤖 Create Project</button>
+          <button class="mc-btn mc-btn-ghost mc-edit-record" data-record-id="${story.id}">✏️ Edit Metadata</button>
+          <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${story.id}">📄 Export Brief</button>
+        </div>
+      </div>
+
+      ${story.notes ? `<div class="mc-hub-notes" style="margin-top:12px; font-size:0.85rem; background:var(--bg-secondary); padding:10px; border-radius:6px; color:var(--text-secondary); white-space:pre-wrap;">${S.esc(story.notes)}</div>` : ''}
+
+      <hr class="mc-modal-divider">
+
+      <div class="mc-hub-section">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <h4 class="mc-modal-section-label" style="margin:0;">🔗 Related Vault Assets (${linkedIds.length})</h4>
+          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${story.id}">🔗 Manage Linked Vault Assets</button>
+        </div>
+
+        ${missingIds.length > 0 ? `
+        <div class="mc-hub-missing-banner" style="margin-bottom:10px; padding:8px 12px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; color:#fca5a5; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+          <span>⚠️ Warning: ${missingIds.length} linked Vault asset(s) no longer exist in the vault.</span>
+          <button class="mc-hub-clean-missing mc-btn mc-btn-ghost mc-btn-sm" data-story-id="${story.id}" style="color:#fca5a5; border-color:rgba(239,68,68,0.4);">Clean References</button>
+        </div>` : ''}
+        <div class="mc-hub-assets-grid">
+          <div class="mc-hub-asset-group">
+            <span class="mc-hub-group-title">👤 Characters (${chars.length})</span>
+            ${chars.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : chars.map(c => `
+              <div class="mc-hub-asset-chip">
+                <span>✓ ${S.esc(c.name)} ${linkedIds.filter(id => id === c.id).length > 1 ? `<span class="mc-badge" style="background:rgba(16,185,129,0.2); color:#10b981;">x${linkedIds.filter(id => id === c.id).length}</span>` : ''}</span>
+                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink one instance">&times;</button>
+              </div>`).join('')}
+          </div>
+
+          <div class="mc-hub-asset-group">
+            <span class="mc-hub-group-title">🎭 Scenarios (${scenarios.length})</span>
+            ${scenarios.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : scenarios.map(c => `
+              <div class="mc-hub-asset-chip">
+                <span>✓ ${S.esc(c.name)}</span>
+                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+              </div>`).join('')}
+          </div>
+
+          <div class="mc-hub-asset-group">
+            <span class="mc-hub-group-title">📋 Bios (${bios.length})</span>
+            ${bios.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : bios.map(c => `
+              <div class="mc-hub-asset-chip">
+                <span>✓ ${S.esc(c.name)}</span>
+                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+              </div>`).join('')}
+          </div>
+
+          <div class="mc-hub-asset-group">
+            <span class="mc-hub-group-title">💬 Initial Msgs (${initMsgs.length})</span>
+            ${initMsgs.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : initMsgs.map(c => `
+              <div class="mc-hub-asset-chip">
+                <span>✓ ${S.esc(c.name)}</span>
+                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <hr class="mc-modal-divider">
+
+      <div class="mc-hub-section">
+        <h4 class="mc-modal-section-label">🚀 Spawned Releases (${releases.length})</h4>
+        ${releases.length === 0 ? '<p class="mc-empty-state">No releases spawned yet. Click "Spawn New Release" above to start building towards Launch.</p>' : `
+          <div class="mc-hub-releases-list">
+            ${releases.map(r => {
+            const readiness = S.calcReadinessForRecord(r);
+            return `<div class="mc-hub-release-row">
+                <div style="flex:1;">
+                  <strong>${S.esc(r.name)}</strong>
+                  ${S.releaseSourceBadge(r.releaseSource)}
+                  <span style="font-size:0.75rem; color:var(--text-muted); margin-left:8px;">${S.readinessPct(readiness)} ready</span>
+                </div>
+                ${r.projectId ? `
+                  <button class="mc-action-btn mc-open-assembler" data-project-id="${r.projectId}">✏️ Assembler</button>
+                  <button class="mc-action-btn mc-open-sandbox" data-project-id="${r.projectId}">🧪 Playtest</button>
+                ` : ''}
+              </div>`;
+        }).join('')}
+          </div>`}
+      </div>
+
+      ${totalMsgs > 0 || totalChats > 0 ? `
+      <hr class="mc-modal-divider">
+      <div class="mc-hub-section">
+        <h4 class="mc-modal-section-label">📈 Aggregated Performance Metrics</h4>
+        <div style="display:flex; gap:16px; margin-top:8px;">
+          <div class="mc-kpi-subcard"><strong>${totalChats}</strong> unique chats</div>
+          <div class="mc-kpi-subcard"><strong>${totalMsgs}</strong> messages</div>
+          <div class="mc-kpi-subcard"><strong>${avgMPC}</strong> msg/chat avg</div>
+        </div>
+      </div>` : ''}
+    `;
+
+        modal.classList.remove('hidden');
+    }
+
+    function openLinkVaultModal(storyId) {
+        const S = getS();
+        if (!S) return;
+
+        const story = S.state.allTrackerRecords.find(r => r.id === storyId);
+        if (!story) return;
+
+        const modal = document.getElementById('mc-modal-overlay');
+        const body = document.getElementById('mc-modal-body');
+        const title = document.getElementById('mc-modal-title');
+
+        title.innerHTML = `🔗 Manage Linked Vault Assets: ${S.esc(story.name)}`;
+
+        const linkedIds = new Set(story.linkedVaultIds || []);
+        const comps = S.state.allComponents || [];
+
+        const categoryGroups = {
+            character: { label: '👤 Characters', items: [] },
+            scenario: { label: '🎭 Scenarios', items: [] },
+            bio: { label: '📋 Bios', items: [] },
+            initial_message: { label: '💬 Initial Messages', items: [] },
+            organization: { label: '🏢 Organizations', items: [] }
+        };
+
+        comps.forEach(c => {
+            const cat = c.category || 'character';
+            if (!categoryGroups[cat]) {
+                categoryGroups[cat] = { label: cat, items: [] };
+            }
+            categoryGroups[cat].items.push(c);
+        });
+
+        body.innerHTML = `
+      <div style="margin-bottom:12px;">
+        <input type="search" id="mc-link-vault-search" name="link-vault-search" class="mc-search" placeholder="Search Vault components to link..." style="width:100%;" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div id="mc-link-vault-list" style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
+        ${Object.keys(categoryGroups).map(catKey => {
+            const group = categoryGroups[catKey];
+            if (!group.items.length) return '';
+            return `
+            <div class="mc-vault-link-group">
+              <h4 style="margin:0 0 8px 0; font-size:0.9rem; color:var(--accent);">${group.label} (${group.items.length})</h4>
+              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px;">
+                ${group.items.map(c => {
+                const isLinked = linkedIds.has(c.id);
+                return `
+                    <div class="mc-vault-link-card" data-name="${S.esc(c.name).toLowerCase()}" style="padding:8px 12px; background:var(--bg-secondary); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-size:0.85rem; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:140px;" title="${S.esc(c.name)}">${S.esc(c.name)}</span>
+                      <button class="mc-btn mc-btn-sm ${isLinked ? 'mc-btn-danger mc-unlink-vault-item' : 'mc-btn-primary mc-link-vault-item'}" data-story-id="${story.id}" data-comp-id="${c.id}">
+                        ${isLinked ? '✓ Unlink' : '+ Link'}
+                      </button>
+                    </div>
+                  `;
+            }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+        <button class="mc-btn mc-btn-secondary" onclick="if(window.MissionControlModals) window.MissionControlModals.openStoryHubModal('${story.id}')">← Return to Story Hub</button>
+      </div>
+    `;
+
+        modal.classList.remove('hidden');
+
+        const searchInput = document.getElementById('mc-link-vault-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase();
+                const cards = document.querySelectorAll('.mc-vault-link-card');
+                cards.forEach(card => {
+                    const name = card.dataset.name || '';
+                    card.style.display = name.includes(q) ? 'flex' : 'none';
+                });
+            });
+        }
+    }
+
+    // Export to Global Window Namespace
+    window.MissionControlModals = {
+        openBotAnalyticsModal,
+        openQuickMetricsModal,
+        submitMetricSnapshot,
+        openStoryHubModal,
+        openLinkVaultModal
+    };
+})();
