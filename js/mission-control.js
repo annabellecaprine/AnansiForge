@@ -107,6 +107,8 @@
     portfolioChartMetric: 'messages',
     isSpawningRelease: false,
     metricsSeriesFilter: 'all',
+    includeArchived: false,
+    archivedExpanded: false,
     activeTagFilter: '',
     editingRecord: null,           // modal state
     calendarWeekOffset: 0
@@ -3728,10 +3730,15 @@ ${releasesMd}
 
   // ─── Visual Performance & Analytics Charts ────────────────────────────────────
 
-  function renderSVGLineChart(dataPoints, width = 500, height = 180, color = '#6366f1') {
+  function renderSVGLineChart(dataPoints, width = 500, height = 180, color = '#6366f1', events = []) {
     if (!dataPoints || dataPoints.length === 0) {
       return '<p class="mc-empty-state" style="padding:20px;">No historical snapshot data points available yet.</p>';
     }
+
+    // Add extra height for timeline markers if events exist
+    const hasEvents = events && events.length > 0;
+    const markerZone = hasEvents ? 32 : 0;
+    const totalHeight = height + markerZone;
 
     const padding = 30;
     const chartW = width - padding * 2;
@@ -3753,14 +3760,56 @@ ${releasesMd}
     const points = dataPoints.map((p, i) => {
       const x = padding + (dataPoints.length > 1 ? (i / (dataPoints.length - 1)) * chartW : chartW / 2);
       const y = height - padding - ((p.value - minVal) / Math.max(maxVal - minVal, 1)) * chartH;
-      return { x, y, label: p.label, value: p.value };
+      return { x, y, label: p.label, value: p.value, timestamp: p.timestamp };
     });
 
     const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
     const areaD = `${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
 
+    // Map lifecycle events to X positions on the chart
+    let markersSvg = '';
+    if (hasEvents) {
+      // Build time range from data points
+      const pointTimes = dataPoints.map(p => {
+        if (!p.timestamp) return null;
+        const d = new Date(p.timestamp);
+        return isNaN(d.getTime()) ? null : d.getTime();
+      }).filter(t => t !== null);
+
+      const tMin = pointTimes.length > 0 ? Math.min(...pointTimes) : null;
+      const tMax = pointTimes.length > 0 ? Math.max(...pointTimes) : null;
+      const tRange = (tMin !== null && tMax !== null) ? (tMax - tMin) : 0;
+
+      markersSvg = events.map((ev, idx) => {
+        const evTime = ev.timestamp ? new Date(ev.timestamp).getTime() : NaN;
+        let x = padding + chartW / 2;
+
+        if (!isNaN(evTime) && tMin !== null && tMax !== null && tRange > 0) {
+          let frac = (evTime - tMin) / tRange;
+          frac = Math.max(0.02, Math.min(0.98, frac));
+          x = padding + frac * chartW;
+        } else if (events.length > 1) {
+          x = padding + (idx / (events.length - 1)) * chartW;
+        }
+
+        const icon = ev.icon || (ev.type === 'private_testing' ? '🧪' : ev.type === 'public_release' ? '🚀' : ev.type === 'archived' ? '📦' : '📍');
+        const label = ev.label || ev.type || 'Event';
+
+        return `
+          <g class="mc-timeline-marker">
+            <line x1="${x}" y1="${padding}" x2="${x}" y2="${height - padding}"
+              stroke="rgba(148,163,184,0.45)" stroke-width="1.5" stroke-dasharray="3,3" />
+            <text x="${x}" y="${height - padding + 16}" text-anchor="middle" font-size="12" class="mc-timeline-marker-icon">
+              <title>${esc(label)}${ev.timestamp ? ' (' + new Date(ev.timestamp).toLocaleDateString() + ')' : ''}</title>${icon}
+            </text>
+            <text x="${x}" y="${height - padding + 27}" text-anchor="middle"
+              font-size="8" font-weight="600" fill="var(--text-secondary)" letter-spacing="0.2">${esc(label.length > 12 ? label.slice(0, 12) + '…' : label)}</text>
+          </g>`;
+      }).join('');
+    }
+
     return `
-      <svg viewBox="0 0 ${width} ${height}" class="mc-svg-chart" style="width:100%; height:auto; overflow:visible;">
+      <svg viewBox="0 0 ${width} ${totalHeight}" class="mc-svg-chart" style="width:100%; height:auto; overflow:visible;">
         <!-- Grid lines -->
         <line x1="${padding}" y1="${padding}" x2="${width - padding}" y2="${padding}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4" />
         <line x1="${padding}" y1="${height / 2}" x2="${width - padding}" y2="${height / 2}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4" />
@@ -3771,6 +3820,9 @@ ${releasesMd}
 
         <!-- Polyline -->
         <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Timeline Markers -->
+        ${markersSvg}
 
         <!-- Points & Tooltips -->
         ${points.map(p => `
@@ -3852,6 +3904,25 @@ ${releasesMd}
     const totalChats = m.uniqueChats || 0;
     const mpc = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
 
+    // Synthesize lifecycle events if missing
+    const botEvents = [...(rec.lifecycleEvents || [])];
+    if (!botEvents.some(e => e.type === 'private_testing' || (e.label && e.label.includes('Private')))) {
+      const createTime = rec.createdAt || (rec.tracker && rec.tracker.createdAt);
+      if (createTime) {
+        botEvents.push({ type: 'private_testing', label: 'Private Testing', icon: '🧪', timestamp: createTime });
+      }
+    }
+    if (!botEvents.some(e => e.type === 'public_release' || (e.label && (e.label.includes('Release') || e.label.includes('Launch'))))) {
+      const releaseTime = rec.publishedDate || rec.scheduledDate;
+      if (releaseTime) {
+        botEvents.push({ type: 'public_release', label: 'Public Release', icon: '🚀', timestamp: releaseTime });
+      }
+    }
+    if (rec.status === 'Archived' && !botEvents.some(e => e.type === 'archived' || (e.label && e.label.includes('Archive')))) {
+      botEvents.push({ type: 'archived', label: 'Archived', icon: '📦', timestamp: rec.archivedAt || rec.updatedAt || new Date().toISOString() });
+    }
+    botEvents.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
     // Build trajectory strictly from real metricSnapshots, previousMetrics, and current metrics
     const dataPoints = [];
     const mpcPoints = [];
@@ -3861,7 +3932,7 @@ ${releasesMd}
       rec.metricSnapshots.forEach(s => {
         const d = new Date(s.timestamp || Date.now());
         const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        allSnaps.push({ label, messages: s.messages || 0, mpc: s.mpc || 0 });
+        allSnaps.push({ label, messages: s.messages || 0, mpc: s.mpc || 0, timestamp: s.timestamp || d.toISOString() });
       });
     } else {
       // Include real user-entered previous metrics snapshot if available
@@ -3869,7 +3940,7 @@ ${releasesMd}
         const prevMpc = prev.uniqueChats > 0 ? parseFloat((prev.messages / prev.uniqueChats).toFixed(2)) : 0;
         const prevDate = prev.updatedAt ? new Date(prev.updatedAt) : null;
         const prevLabel = (prevDate && !isNaN(prevDate)) ? prevDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Previous';
-        allSnaps.push({ label: prevLabel, messages: prev.messages || 0, mpc: prevMpc });
+        allSnaps.push({ label: prevLabel, messages: prev.messages || 0, mpc: prevMpc, timestamp: prev.updatedAt || new Date().toISOString() });
       }
       // Include current real metrics snapshot
       if (m && (m.messages > 0 || m.uniqueChats > 0)) {
@@ -3877,13 +3948,13 @@ ${releasesMd}
         const curDateStr = m.date ? (m.time ? `${m.date} ${m.time}` : m.date) : 'Current';
         const curDate = new Date(curDateStr);
         const curLabel = (curDate && !isNaN(curDate)) ? curDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : (m.date || 'Current');
-        allSnaps.push({ label: curLabel, messages: totalMsgs, mpc: curMpc });
+        allSnaps.push({ label: curLabel, messages: totalMsgs, mpc: curMpc, timestamp: m.lastUpdated || (curDate && !isNaN(curDate) ? curDate.toISOString() : new Date().toISOString()) });
       }
     }
 
     allSnaps.forEach(s => {
-      dataPoints.push({ label: s.label, value: s.messages });
-      mpcPoints.push({ label: s.label, value: s.mpc });
+      dataPoints.push({ label: s.label, value: s.messages, timestamp: s.timestamp });
+      mpcPoints.push({ label: s.label, value: s.mpc, timestamp: s.timestamp });
     });
 
     const modal = document.getElementById('mc-modal-overlay');
@@ -4004,14 +4075,14 @@ ${releasesMd}
       <!-- Messages Trajectory Chart -->
       <div class="mc-overview-panel" style="margin-bottom:14px;">
         <h4 class="mc-panel-title" style="margin-bottom:8px;">📈 Messages Growth Trajectory</h4>
-        ${renderSVGLineChart(dataPoints, 520, 180, '#6366f1')}
+        ${renderSVGLineChart(dataPoints, 520, 180, '#6366f1', botEvents)}
         ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
       </div>
 
       <!-- MpC Engagement Depth Chart -->
       <div class="mc-overview-panel">
         <h4 class="mc-panel-title" style="margin-bottom:8px;">🎯 MpC Engagement Trajectory (Msg / Chat)</h4>
-        ${renderSVGLineChart(mpcPoints, 520, 180, '#10b981')}
+        ${renderSVGLineChart(mpcPoints, 520, 180, '#10b981', botEvents)}
         ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
       </div>
 
@@ -4024,13 +4095,13 @@ ${releasesMd}
   }
 
   function openQuickMetricsModal(botId) {
-    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived');
+    const releases = state.allTrackerRecords.filter(r => r.assetType === 'release');
     if (releases.length === 0) {
       showToast('No release bots found to record metrics for.', 'warning');
       return;
     }
 
-    let bot = releases.find(r => r.id === botId) || releases[0];
+    let bot = releases.find(r => r.id === botId) || releases.find(r => r.status !== 'Archived') || releases[0];
 
     const modal = document.getElementById('mc-modal-overlay');
     const body = document.getElementById('mc-modal-body');
@@ -4046,7 +4117,7 @@ ${releasesMd}
         <div class="form-group" style="margin-bottom:14px;">
           <label style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; display:block;">Select Bot / Release</label>
           <select id="mc-snap-bot-select" class="mc-modal-input" style="width:100%;">
-            ${releases.map(r => `<option value="${r.id}" ${r.id === bot.id ? 'selected' : ''}>${esc(r.name)}${r.universe ? ` (${esc(r.universe)})` : ''}</option>`).join('')}
+            ${releases.map(r => `<option value="${r.id}" ${r.id === bot.id ? 'selected' : ''}>${esc(r.name)}${r.status === 'Archived' ? ' [Archived]' : ''}${r.universe ? ` (${esc(r.universe)})` : ''}</option>`).join('')}
           </select>
         </div>
         <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
@@ -4156,10 +4227,22 @@ ${releasesMd}
 
   function renderMetrics() {
     const seriesFilter = state.metricsSeriesFilter || 'all';
-    let releases = state.allTrackerRecords.filter(r => r.assetType === 'release' && r.status !== 'Archived');
-    if (seriesFilter !== 'all') releases = releases.filter(r => (r.series || 'standard') === seriesFilter);
-    const withMetrics = releases.filter(r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0 || r.metrics?.favorites > 0);
-    const noMetrics = releases.filter(r => isReleasePublished(r) && !(r.metrics?.messages > 0) && !(r.metrics?.uniqueChats > 0) && !(r.metrics?.favorites > 0));
+    const allReleases = state.allTrackerRecords.filter(r => r.assetType === 'release');
+    let filteredBySeriesAll = seriesFilter !== 'all' ? allReleases.filter(r => (r.series || 'standard') === seriesFilter) : allReleases;
+
+    // Split into active and archived
+    const activeReleases = filteredBySeriesAll.filter(r => r.status !== 'Archived');
+    const archivedReleases = filteredBySeriesAll.filter(r => r.status === 'Archived');
+
+    // Pool for aggregated calculations respects includeArchived toggle
+    const releases = state.includeArchived ? filteredBySeriesAll : activeReleases;
+
+    const hasMetrics = r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0 || r.metrics?.favorites > 0;
+    const withMetrics = releases.filter(hasMetrics);
+    const noMetrics = activeReleases.filter(r => isReleasePublished(r) && !hasMetrics(r));
+
+    const activeWithMetrics = activeReleases.filter(hasMetrics);
+    const archivedWithMetrics = archivedReleases.filter(hasMetrics);
 
     const sortMode = state.leaderboardSort || 'messages';
     const getSortVal = (r) => {
@@ -4170,16 +4253,22 @@ ${releasesMd}
       return m.messages || 0;
     };
 
-    // Sort descending by active metric selection
-    const sorted = [...withMetrics].sort((a, b) => getSortVal(b) - getSortVal(a));
+    const sorted = [...activeWithMetrics].sort((a, b) => getSortVal(b) - getSortVal(a));
+    const archivedSorted = [...archivedReleases].sort((a, b) => {
+      const valA = getSortVal(a);
+      const valB = getSortVal(b);
+      if (valA !== valB) return valB - valA;
+      return (a.name || '').localeCompare(b.name || '');
+    });
     const sortLabel = sortMode === 'chats' ? 'Unique Chats' : sortMode === 'mpc' ? 'Msg / Chat (MpC)' : sortMode === 'favorites' ? 'Favorites' : 'Messages';
 
-    // Totals
-    const totalMsgs = sorted.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
-    const totalChats = sorted.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
-    const totalFavs = sorted.reduce((s, r) => s + (r.metrics?.favorites || 0), 0);
-    const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '—';
-    const topBot = sorted[0];
+    // Totals from the toggle-aware pool
+    const totalMsgs = withMetrics.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
+    const totalChats = withMetrics.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
+    const totalFavs = withMetrics.reduce((s, r) => s + (r.metrics?.favorites || 0), 0);
+    const avgMPC = totalChats > 0 ? (totalMsgs / totalChats).toFixed(2) : '\u2014';
+    const allSorted = [...withMetrics].sort((a, b) => getSortVal(b) - getSortVal(a));
+    const topBot = allSorted[0];
 
     const kpiCard = (icon, val, label, color = 'var(--accent)') =>
       `<div class="mc-kpi-card">
@@ -4190,146 +4279,106 @@ ${releasesMd}
         </div>
       </div>`;
 
-    const metricRow = (rec, rank) => {
+    const metricRow = (rec, rank, isArchivedRow = false) => {
       const m = rec.metrics || {};
       const prev = rec.previousMetrics || null;
-
       const mpcNum = m.uniqueChats > 0 ? (m.messages / m.uniqueChats) : 0;
-      const mpc = m.uniqueChats > 0 ? mpcNum.toFixed(2) : '—';
-      const maxVal = sorted.length > 0 ? getSortVal(sorted[0]) : 1;
+      const mpc = m.uniqueChats > 0 ? mpcNum.toFixed(2) : '\u2014';
+      const refList = isArchivedRow ? archivedSorted : sorted;
+      const maxVal = refList.length > 0 ? getSortVal(refList[0]) : 1;
       const val = getSortVal(rec);
       const barPct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
 
-      // Calculate deltas if previousMetrics exists
-      let deltaMsgHtml = '';
-      let deltaChatsHtml = '';
-      let deltaFavsHtml = '';
-      let deltaMpcHtml = '';
-
+      let deltaMsgHtml = '', deltaChatsHtml = '', deltaFavsHtml = '', deltaMpcHtml = '';
       if (prev && (prev.messages !== undefined || prev.uniqueChats !== undefined || prev.favorites !== undefined)) {
         const dMsg = (m.messages || 0) - (prev.messages || 0);
         const dChats = (m.uniqueChats || 0) - (prev.uniqueChats || 0);
         const dFavs = (m.favorites || 0) - (prev.favorites || 0);
         const prevMpcNum = prev.uniqueChats > 0 ? (prev.messages / prev.uniqueChats) : 0;
         const dMpc = mpcNum - prevMpcNum;
-
-        if (dMsg > 0) deltaMsgHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.messages || 0).toLocaleString()}">▲ +${dMsg.toLocaleString()}</span>`;
-        if (dChats > 0) deltaChatsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.uniqueChats || 0).toLocaleString()}">▲ +${dChats.toLocaleString()}</span>`;
-        if (dFavs > 0) deltaFavsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.favorites || 0).toLocaleString()}">▲ +${dFavs.toLocaleString()}</span>`;
-        if (dMpc > 0) deltaMpcHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous MpC: ${prevMpcNum.toFixed(2)}">▲ +${dMpc.toFixed(2)}</span>`;
+        if (dMsg > 0) deltaMsgHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.messages || 0).toLocaleString()}">\u25b2 +${dMsg.toLocaleString()}</span>`;
+        if (dChats > 0) deltaChatsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.uniqueChats || 0).toLocaleString()}">\u25b2 +${dChats.toLocaleString()}</span>`;
+        if (dFavs > 0) deltaFavsHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous: ${(prev.favorites || 0).toLocaleString()}">\u25b2 +${dFavs.toLocaleString()}</span>`;
+        if (dMpc > 0) deltaMpcHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous MpC: ${prevMpcNum.toFixed(2)}">\u25b2 +${dMpc.toFixed(2)}</span>`;
       }
 
-      return `<tr class="mc-row">
-        <td class="mc-metrics-rank">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</td>
-        <td class="mc-cell-name">
-          <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
-        </td>
+      const archivedBadge = isArchivedRow ? '<span class="mc-badge-archived">\ud83d\udce6</span> ' : '';
+      return `<tr class="mc-row${isArchivedRow ? ' mc-row-archived' : ''}">
+        <td class="mc-metrics-rank">${rank === 1 ? '\ud83e\udd47' : rank === 2 ? '\ud83e\udd48' : rank === 3 ? '\ud83e\udd49' : `#${rank}`}</td>
+        <td class="mc-cell-name">${archivedBadge}<button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button></td>
         <td>${seriesBadge(rec.series)}</td>
         <td>${universeBadge(rec.universe)}</td>
         <td class="mc-token-count-cell" data-record-id="${rec.id}">
-          <span class="mc-token-display" title="Click to set token count" style="cursor:pointer; font-size:0.82rem; color:${rec.tokenCount ? 'var(--text-primary)' : 'var(--text-muted)'}; padding:2px 6px; border-radius:4px; display:inline-block; min-width:32px; text-align:center; border:1px dashed ${rec.tokenCount ? 'var(--border-color)' : 'rgba(148,163,184,0.3)'}; transition:border-color 0.15s;">${rec.tokenCount ? rec.tokenCount.toLocaleString() : '—'}</span>
+          <span class="mc-token-display" title="Click to set token count" style="cursor:pointer; font-size:0.82rem; color:${rec.tokenCount ? 'var(--text-primary)' : 'var(--text-muted)'}; padding:2px 6px; border-radius:4px; display:inline-block; min-width:32px; text-align:center; border:1px dashed ${rec.tokenCount ? 'var(--border-color)' : 'rgba(148,163,184,0.3)'}; transition:border-color 0.15s;">${rec.tokenCount ? rec.tokenCount.toLocaleString() : '\u2014'}</span>
         </td>
         <td class="mc-metrics-bar-cell">
-          <div class="mc-metrics-bar-wrap">
-            <div class="mc-metrics-bar" style="width:${barPct}%;"></div>
-          </div>
-          <span class="mc-metrics-num">${(m.messages || 0).toLocaleString()}</span>
-          ${deltaMsgHtml}
+          <div class="mc-metrics-bar-wrap"><div class="mc-metrics-bar" style="width:${barPct}%;"></div></div>
+          <span class="mc-metrics-num">${(m.messages || 0).toLocaleString()}</span> ${deltaMsgHtml}
         </td>
-        <td class="mc-metrics-num">
-          ${(m.uniqueChats || 0).toLocaleString()}
-          ${deltaChatsHtml}
-        </td>
-        <td class="mc-metrics-num">
-          ${(m.favorites || 0).toLocaleString()}
-          ${deltaFavsHtml}
-        </td>
-        <td class="mc-metrics-mpc${mpc !== '—' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">
-          ${mpc}
-          ${deltaMpcHtml}
-        </td>
-        <td class="mc-metrics-date">${m.date ? `${m.date}${m.time ? ' ' + m.time : ''}` : '—'}</td>
+        <td class="mc-metrics-num">${(m.uniqueChats || 0).toLocaleString()} ${deltaChatsHtml}</td>
+        <td class="mc-metrics-num">${(m.favorites || 0).toLocaleString()} ${deltaFavsHtml}</td>
+        <td class="mc-metrics-mpc${mpc !== '\u2014' && parseFloat(mpc) >= 10 ? ' mc-metrics-mpc--high' : ''}">${mpc} ${deltaMpcHtml}</td>
+        <td class="mc-metrics-date">${m.date ? `${m.date}${m.time ? ' ' + m.time : ''}` : '\u2014'}</td>
         <td class="mc-cell-actions">
-          <button class="mc-action-btn mc-open-bot-analytics" data-record-id="${rec.id}" title="View Performance & Trajectory Chart">📊</button>
-          <button class="mc-action-btn mc-open-quick-metrics" data-record-id="${rec.id}" title="Record / Edit Metrics">✏️</button>
+          <button class="mc-action-btn mc-open-bot-analytics" data-record-id="${rec.id}" title="View Performance &amp; Trajectory Chart">\ud83d\udcca</button>
+          <button class="mc-action-btn mc-open-quick-metrics" data-record-id="${rec.id}" title="Record / Edit Metrics">\u270f\ufe0f</button>
         </td>
       </tr>`;
     };
 
+    const leaderboardTableHeaders = `<thead><tr>
+      <th>#</th><th>Name</th><th>Series</th><th>Universe</th>
+      <th title="Click a value to edit">Tokens</th><th>Messages</th>
+      <th>Unique Chats</th><th>Favorites</th><th>Msg / Chat</th>
+      <th>Snapshot</th><th></th>
+    </tr></thead>`;
+
     return `
-      <div class="mc-kpi-grid" style="margin-bottom:20px;">
-        ${kpiCard('💬', totalMsgs.toLocaleString(), 'Total Messages across all bots')}
-        ${kpiCard('👥', totalChats.toLocaleString(), 'Total Unique Chats', 'var(--success)')}
-        ${kpiCard('⭐', totalFavs.toLocaleString(), 'Total Favorites across all bots', '#f59e0b')}
-        ${kpiCard('📐', avgMPC, 'Avg Msg / Chat (all bots)', 'var(--warning)')}
-        ${kpiCard('💝', totalChats > 0 ? (totalFavs / totalChats).toFixed(3) : '—', 'Avg Fav / Chat', '#ec4899')}
-        ${topBot ? kpiCard('🏆', esc(topBot.name), `Top bot · ${(topBot.metrics?.messages || 0).toLocaleString()} msgs`, '#f59e0b') : ''}
+      <!-- Include Archived Toggle -->
+      <div class="mc-include-archived-toggle">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.82rem; color:var(--text-secondary); user-select:none;">
+          <input type="checkbox" id="mc-include-archived-cb" ${state.includeArchived ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;" />
+          Include Archived Bots
+        </label>
+        ${state.includeArchived ? '<span style="font-size:0.75rem; color:var(--text-muted); margin-left:8px;">KPIs, charts, and distribution include archived data</span>' : ''}
       </div>
 
-      <!-- Portfolio Growth Chart with Interactive Metric Selector -->
+      <div class="mc-kpi-grid" style="margin-bottom:20px;">
+        ${kpiCard('\ud83d\udcac', totalMsgs.toLocaleString(), 'Total Messages' + (state.includeArchived ? ' (all)' : ''))}
+        ${kpiCard('\ud83d\udc65', totalChats.toLocaleString(), 'Total Unique Chats' + (state.includeArchived ? ' (all)' : ''), 'var(--success)')}
+        ${kpiCard('\u2b50', totalFavs.toLocaleString(), 'Total Favorites' + (state.includeArchived ? ' (all)' : ''), '#f59e0b')}
+        ${kpiCard('\ud83d\udcd0', avgMPC, 'Avg Msg / Chat', 'var(--warning)')}
+        ${kpiCard('\ud83d\udc9d', totalChats > 0 ? (totalFavs / totalChats).toFixed(3) : '\u2014', 'Avg Fav / Chat', '#ec4899')}
+        ${topBot ? kpiCard('\ud83c\udfc6', esc(topBot.name), 'Top bot \u00b7 ' + (topBot.metrics?.messages || 0).toLocaleString() + ' msgs', '#f59e0b') : ''}
+      </div>
+
+      <!-- Portfolio Growth Chart -->
       ${(() => {
         const metric = state.portfolioChartMetric || 'messages';
         const pubReleases = releases.filter(r => isReleasePublished(r));
         const pubBotCount = pubReleases.length || releases.length || 1;
-
-        let chartTitle = '📈 Total Messages Growth';
-        let chartColor = '#10b981';
-        let targetMax = totalMsgs;
-
-        if (metric === 'chats') {
-          chartTitle = '👥 Total Unique Chats Growth';
-          chartColor = '#6366f1';
-          targetMax = totalChats;
-        } else if (metric === 'favorites') {
-          chartTitle = '⭐ Total Favorites Growth';
-          chartColor = '#f59e0b';
-          targetMax = totalFavs;
-        } else if (metric === 'mpc') {
-          chartTitle = '📐 Average MpC Trajectory';
-          chartColor = '#f59e0b';
-          targetMax = parseFloat(avgMPC) || 0;
-        } else if (metric === 'bots') {
-          chartTitle = '🤖 Published Bots Expansion';
-          chartColor = '#ec4899';
-          targetMax = pubBotCount;
-        }
+        let chartTitle = '\ud83d\udcc8 Total Messages Growth', chartColor = '#10b981', targetMax = totalMsgs;
+        if (metric === 'chats') { chartTitle = '\ud83d\udc65 Total Unique Chats Growth'; chartColor = '#6366f1'; targetMax = totalChats; }
+        else if (metric === 'favorites') { chartTitle = '\u2b50 Total Favorites Growth'; chartColor = '#f59e0b'; targetMax = totalFavs; }
+        else if (metric === 'mpc') { chartTitle = '\ud83d\udcd0 Average MpC Trajectory'; chartColor = '#f59e0b'; targetMax = parseFloat(avgMPC) || 0; }
+        else if (metric === 'bots') { chartTitle = '\ud83e\udd16 Published Bots Expansion'; chartColor = '#ec4899'; targetMax = pubBotCount; }
 
         const dataPoints = [];
         const datedReleases = releases.map(r => {
           const dStr = r.scheduledDate || r.publishedDate || r.metrics?.date || r.createdAt;
           const d = dStr ? new Date(dStr) : new Date();
-          return {
-            name: r.name,
-            dStr,
-            d,
-            msgs: r.metrics?.messages || 0,
-            chats: r.metrics?.uniqueChats || r.metrics?.chats || 0,
-            favs: r.metrics?.favorites || 0
-          };
+          return { name: r.name, dStr, d, msgs: r.metrics?.messages || 0, chats: r.metrics?.uniqueChats || r.metrics?.chats || 0, favs: r.metrics?.favorites || 0 };
         }).filter(r => r.dStr && !isNaN(r.d)).sort((a, b) => a.d - b.d);
 
         const monthsMap = {};
         let cumMsgs = 0, cumChats = 0, cumFavs = 0, cumBots = 0;
-
         datedReleases.forEach(r => {
-          cumBots++;
-          cumMsgs += r.msgs;
-          cumChats += r.chats;
-          cumFavs += r.favs;
+          cumBots++; cumMsgs += r.msgs; cumChats += r.chats; cumFavs += r.favs;
           const label = r.d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
           const mpcVal = cumChats > 0 ? parseFloat((cumMsgs / cumChats).toFixed(2)) : 0;
-          monthsMap[label] = {
-            label,
-            messages: cumMsgs,
-            chats: cumChats,
-            favorites: cumFavs,
-            mpc: mpcVal,
-            bots: cumBots
-          };
+          monthsMap[label] = { label, messages: cumMsgs, chats: cumChats, favorites: cumFavs, mpc: mpcVal, bots: cumBots };
         });
-
-        const timelinePoints = Object.values(monthsMap);
-        timelinePoints.forEach(p => {
+        Object.values(monthsMap).forEach(p => {
           let val = p.messages;
           if (metric === 'chats') val = p.chats;
           else if (metric === 'favorites') val = p.favorites;
@@ -4338,131 +4387,54 @@ ${releasesMd}
           dataPoints.push({ label: p.label, value: val });
         });
 
-        const pill = (mKey, label) => `
-          <button type="button" class="mc-leaderboard-pill mc-portfolio-pill${metric === mKey ? ' active' : ''}" data-metric="${mKey}">
-            ${label}
-          </button>
-        `;
-
-        return `
-          <div class="mc-overview-panel" style="margin-bottom:20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-              <div>
-                <h3 class="mc-panel-title" style="margin-bottom:2px;">${chartTitle}</h3>
-                <span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span>
-              </div>
-              <div class="mc-pill-group">
-                ${pill('messages', '💬 Messages')}
-                ${pill('chats', '👥 Unique Chats')}
-                ${pill('favorites', '⭐ Favorites')}
-                ${pill('mpc', '📐 Avg MpC')}
-                ${pill('bots', '🤖 Published Bots')}
-              </div>
-            </div>
-            ${renderSVGLineChart(dataPoints, 750, 160, chartColor)}
-          </div>
-        `;
+        const pill = (mKey, label) => '<button type="button" class="mc-leaderboard-pill mc-portfolio-pill' + (metric === mKey ? ' active' : '') + '" data-metric="' + mKey + '">' + label + '</button>';
+        return '<div class="mc-overview-panel" style="margin-bottom:20px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;"><div><h3 class="mc-panel-title" style="margin-bottom:2px;">' + chartTitle + '</h3><span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span></div><div class="mc-pill-group">' + pill('messages', '\ud83d\udcac Messages') + pill('chats', '\ud83d\udc65 Unique Chats') + pill('favorites', '\u2b50 Favorites') + pill('mpc', '\ud83d\udcd0 Avg MpC') + pill('bots', '\ud83e\udd16 Published Bots') + '</div></div>' + renderSVGLineChart(dataPoints, 750, 160, chartColor) + '</div>';
       })()}
 
-      <!-- MpC Distribution across all bots -->
+      <!-- MpC Distribution -->
       ${(() => {
-        const mpcBots = withMetrics.map(r => ({
-          name: r.name,
-          mpc: r.metrics.uniqueChats > 0
-            ? parseFloat((r.metrics.messages / r.metrics.uniqueChats).toFixed(2))
-            : null
-        })).filter(b => b.mpc !== null && b.mpc > 0);
-
+        const mpcBots = withMetrics.map(r => ({ name: r.name, mpc: r.metrics.uniqueChats > 0 ? parseFloat((r.metrics.messages / r.metrics.uniqueChats).toFixed(2)) : null })).filter(b => b.mpc !== null && b.mpc > 0);
         if (mpcBots.length === 0) return '';
-
         const buckets = [
-          { label: '0 – 10', min: 0, max: 10, color: '#6366f1' },
-          { label: '10 – 15', min: 10, max: 15, color: '#10b981' },
-          { label: '15 – 20', min: 15, max: 20, color: '#f59e0b' },
-          { label: '20 – 30', min: 20, max: 30, color: '#ec4899' },
+          { label: '0 \u2013 10', min: 0, max: 10, color: '#6366f1' },
+          { label: '10 \u2013 15', min: 10, max: 15, color: '#10b981' },
+          { label: '15 \u2013 20', min: 15, max: 20, color: '#f59e0b' },
+          { label: '20 \u2013 30', min: 20, max: 30, color: '#ec4899' },
           { label: '30+', min: 30, max: Infinity, color: '#ef4444' }
         ];
-
-        const grouped = buckets.map(b => ({
-          ...b,
-          bots: mpcBots.filter(b2 => b2.mpc >= b.min && b2.mpc < b.max)
-        }));
-
+        const grouped = buckets.map(b => ({ ...b, bots: mpcBots.filter(b2 => b2.mpc >= b.min && b2.mpc < b.max) }));
         const maxCount = Math.max(...grouped.map(g => g.bots.length), 1);
-
-        // SVG dimensions
         const barW = 90, gap = 24, padL = 36, padB = 40, padT = 28;
         const svgW = padL + grouped.length * (barW + gap) + 20;
-        const chartH = 160;
-        const svgH = chartH + padT + padB;
-
-        // Y-axis gridlines & labels (0, 25%, 50%, 75%, 100% of maxCount)
+        const chartH = 160, svgH = chartH + padT + padB;
         const gridLines = [0, 0.25, 0.5, 0.75, 1].map(frac => {
           const val = Math.round(frac * maxCount);
           const y = padT + chartH - Math.round(frac * chartH);
-          return `
-            <line x1="${padL - 4}" y1="${y}" x2="${svgW - 10}" y2="${y}"
-              stroke="rgba(148,163,184,0.12)" stroke-width="1"/>
-            <text x="${padL - 8}" y="${y + 4}" text-anchor="end"
-              font-size="9" fill="#64748b">${val}</text>`;
+          return '<line x1="' + (padL - 4) + '" y1="' + y + '" x2="' + (svgW - 10) + '" y2="' + y + '" stroke="rgba(148,163,184,0.12)" stroke-width="1"/><text x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="9" fill="#64748b">' + val + '</text>';
         }).join('');
-
         const bars = grouped.map((g, i) => {
           const count = g.bots.length;
           const h = count > 0 ? Math.max(4, Math.round((count / maxCount) * chartH)) : 2;
           const x = padL + i * (barW + gap);
           const y = padT + chartH - h;
-          const tipNames = [...g.bots].sort((a, b) => b.mpc - a.mpc).map(b => `${b.name} (${b.mpc})`).join('\n');
-          return `
-            <g>
-              <title>${g.label}: ${count} bot${count !== 1 ? 's' : ''}${tipNames ? '\n' + tipNames : ''}</title>
-              <rect x="${x}" y="${y}" width="${barW}" height="${h}"
-                rx="5" fill="${g.color}" opacity="0.85"/>
-              ${count > 0 ? `
-                <text x="${x + barW / 2}" y="${y - 6}"
-                  text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">
-                  ${count}
-                </text>` : ''}
-              <text x="${x + barW / 2}" y="${svgH - padB + 16}"
-                text-anchor="middle" font-size="11" fill="#94a3b8">${g.label}</text>
-              <text x="${x + barW / 2}" y="${svgH - padB + 30}"
-                text-anchor="middle" font-size="9" fill="#64748b">msg/chat</text>
-            </g>`;
+          const tipNames = [...g.bots].sort((a, b) => b.mpc - a.mpc).map(b => b.name + ' (' + b.mpc + ')').join('\\n');
+          return '<g><title>' + g.label + ': ' + count + ' bot' + (count !== 1 ? 's' : '') + (tipNames ? '\\n' + tipNames : '') + '</title><rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" rx="5" fill="' + g.color + '" opacity="0.85"/>' + (count > 0 ? '<text x="' + (x + barW / 2) + '" y="' + (y - 6) + '" text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">' + count + '</text>' : '') + '<text x="' + (x + barW / 2) + '" y="' + (svgH - padB + 16) + '" text-anchor="middle" font-size="11" fill="#94a3b8">' + g.label + '</text><text x="' + (x + barW / 2) + '" y="' + (svgH - padB + 30) + '" text-anchor="middle" font-size="9" fill="#64748b">msg/chat</text></g>';
         }).join('');
-
         const medianMpc = [...mpcBots].sort((a, b) => a.mpc - b.mpc)[Math.floor(mpcBots.length / 2)]?.mpc;
-
-        return `
-        <div class="mc-overview-panel" style="margin-bottom:20px;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-            <div>
-              <h3 class="mc-panel-title" style="margin-bottom:2px;">📊 MpC Distribution — All Bots</h3>
-              <span style="font-size:0.75rem; color:var(--text-muted);">
-                How consistently are your bots engaging? Hover a bar to see which bots fall there.
-                ${medianMpc !== undefined ? `&nbsp;·&nbsp; <strong style="color:var(--accent);">Median MpC: ${medianMpc}</strong>` : ''}
-              </span>
-            </div>
-            <span style="font-size:0.78rem; color:var(--text-secondary);">${mpcBots.length} bot${mpcBots.length !== 1 ? 's' : ''} with data</span>
-          </div>
-          <svg width="100%" viewBox="0 0 ${svgW} ${svgH}"
-            style="overflow:visible; display:block; max-width:820px;">
-            ${gridLines}
-            ${bars}
-          </svg>
-        </div>`;
+        return '<div class="mc-overview-panel" style="margin-bottom:20px;"><div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;"><div><h3 class="mc-panel-title" style="margin-bottom:2px;">\ud83d\udcca MpC Distribution \u2014 ' + (state.includeArchived ? 'All' : 'Active') + ' Bots</h3><span style="font-size:0.75rem; color:var(--text-muted);">How consistently are your bots engaging? Hover a bar to see which bots fall there.' + (medianMpc !== undefined ? ' &middot; <strong style="color:var(--accent);">Median MpC: ' + medianMpc + '</strong>' : '') + '</span></div><span style="font-size:0.78rem; color:var(--text-secondary);">' + mpcBots.length + ' bot' + (mpcBots.length !== 1 ? 's' : '') + ' with data</span></div><svg width="100%" viewBox="0 0 ' + svgW + ' ' + svgH + '" style="overflow:visible; display:block; max-width:820px;">' + gridLines + bars + '</svg></div>';
       })()}
 
       <div class="mc-metrics-section">
         <div class="mc-card-header-with-pills" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <h3 class="mc-section-title" style="margin-bottom:0;">📊 Leaderboard — by ${sortLabel}</h3>
-            <button type="button" class="mc-btn mc-btn-primary mc-btn-sm mc-open-quick-metrics" title="Record Metric Snapshot for any release bot">⚡ Record Metric Snapshot</button>
+            <h3 class="mc-section-title" style="margin-bottom:0;">\ud83d\udcca Leaderboard \u2014 by ${sortLabel}</h3>
+            <button type="button" class="mc-btn mc-btn-primary mc-btn-sm mc-open-quick-metrics" title="Record Metric Snapshot for any release bot">\u26a1 Record Metric Snapshot</button>
           </div>
           <div class="mc-pill-group">
-            <button class="mc-leaderboard-pill${sortMode === 'messages' ? ' active' : ''}" data-sort="messages">💬 By Messages</button>
-            <button class="mc-leaderboard-pill${sortMode === 'chats' ? ' active' : ''}" data-sort="chats">👥 By Unique Chats</button>
-            <button class="mc-leaderboard-pill${sortMode === 'favorites' ? ' active' : ''}" data-sort="favorites">⭐ By Favorites</button>
-            <button class="mc-leaderboard-pill${sortMode === 'mpc' ? ' active' : ''}" data-sort="mpc">📐 By MpC</button>
+            <button class="mc-leaderboard-pill${sortMode === 'messages' ? ' active' : ''}" data-sort="messages">\ud83d\udcac By Messages</button>
+            <button class="mc-leaderboard-pill${sortMode === 'chats' ? ' active' : ''}" data-sort="chats">\ud83d\udc65 By Unique Chats</button>
+            <button class="mc-leaderboard-pill${sortMode === 'favorites' ? ' active' : ''}" data-sort="favorites">\u2b50 By Favorites</button>
+            <button class="mc-leaderboard-pill${sortMode === 'mpc' ? ' active' : ''}" data-sort="mpc">\ud83d\udcd0 By MpC</button>
           </div>
         </div>
         <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
@@ -4474,32 +4446,36 @@ ${releasesMd}
         ? '<p class="mc-empty-state">No metrics recorded yet. Edit a release record to add data.</p>'
         : `<div class="mc-table-wrap">
             <table class="mc-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Series</th>
-                  <th>Universe</th>
-                  <th title="Click a value to edit">Tokens</th>
-                  <th>Messages</th>
-                  <th>Unique Chats</th>
-                  <th>Favorites</th>
-                  <th>Msg / Chat</th>
-                  <th>Snapshot</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${sorted.map((r, i) => metricRow(r, i + 1)).join('')}
-              </tbody>
+              ${leaderboardTableHeaders}
+              <tbody>${sorted.map((r, i) => metricRow(r, i + 1)).join('')}</tbody>
             </table>
-          </div>`
-      }
+          </div>`}
       </div>
+
+      <!-- Archived Bots Section -->
+      ${archivedReleases.length > 0 ? `
+      <div class="mc-archived-section${state.archivedExpanded ? '' : ' collapsed'}" style="margin-top:24px;">
+        <div class="mc-archived-section-header" id="mc-archived-toggle">
+          <h3 class="mc-section-title" style="margin-bottom:0; cursor:pointer;">
+            \ud83d\udce6 Archived Bots
+            <span class="mc-section-count">${archivedReleases.length}</span>
+            <span class="mc-archived-chevron">${state.archivedExpanded ? '\u25bc' : '\u25b6'}</span>
+          </h3>
+        </div>
+        <div class="mc-archived-section-body">
+          ${archivedSorted.length > 0 ? `
+          <div class="mc-table-wrap" style="margin-top:12px;">
+            <table class="mc-table">
+              ${leaderboardTableHeaders}
+              <tbody>${archivedSorted.map((r, i) => metricRow(r, i + 1, true)).join('')}</tbody>
+            </table>
+          </div>` : '<p class="mc-empty-state" style="margin-top:8px;">No archived bots with metrics.</p>'}
+        </div>
+      </div>` : ''}
 
       ${noMetrics.length > 0 ? `
       <div class="mc-metrics-section" style="margin-top:24px;">
-        <h3 class="mc-section-title">⏳ Released — No Metrics Yet
+        <h3 class="mc-section-title">\u23f3 Released \u2014 No Metrics Yet
           <span class="mc-section-count">${noMetrics.length}</span>
         </h3>
         <div class="mc-table-wrap">
@@ -4604,9 +4580,19 @@ ${releasesMd}
     // Close the Cast/Single dropdown when clicking outside of it
     document.addEventListener('click', (e) => {
       const dd = document.getElementById('mc-stub-dropdown');
-      if (!dd) return;
-      if (!e.target.closest('#mc-add-stub-caret') && !e.target.closest('#mc-stub-dropdown')) {
+      if (dd && !e.target.closest('#mc-add-stub-caret') && !e.target.closest('#mc-stub-dropdown')) {
         dd.style.display = 'none';
+      }
+      if (e.target && e.target.closest('#mc-archived-toggle')) {
+        state.archivedExpanded = !state.archivedExpanded;
+        renderCurrentTab();
+      }
+    });
+
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'mc-include-archived-cb') {
+        state.includeArchived = e.target.checked;
+        renderCurrentTab();
       }
     });
   }
@@ -4627,7 +4613,7 @@ ${releasesMd}
         <div id="mc-content" class="mc-content"></div>
       </div>
 
-      <!-- Record Edit Modal -->
+      <!--Record Edit Modal-->
       <div id="mc-modal-overlay" class="modal-overlay hidden">
         <div class="modal" style="max-width:520px; width:92%;">
           <div class="modal-header">

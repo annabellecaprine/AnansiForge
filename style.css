@@ -4172,3 +4172,62 @@ select.mc-universe-select:focus {
   opacity: 0.6;
   flex-shrink: 0;
 }
+
+/* Archived Section & Timeline Markers */
+.mc-include-archived-toggle {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mc-archived-section {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  opacity: 0.9;
+  transition: all var(--transition-normal);
+}
+
+.mc-archived-section-header {
+  user-select: none;
+}
+
+.mc-archived-chevron {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.mc-archived-section.collapsed .mc-archived-section-body {
+  display: none;
+}
+
+.mc-row-archived {
+  opacity: 0.7;
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+.mc-badge-archived {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.mc-timeline-marker {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.mc-timeline-marker:hover {
+  opacity: 1 !important;
+}
+
+.mc-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.mc-archived-section-body {
+  overflow-x: auto;
+}

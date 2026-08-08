@@ -522,6 +522,7 @@
     if (!Array.isArray(rec.linkedVaultIds)) rec.linkedVaultIds = [];
     if (!rec.notes) rec.notes = '';
     if (!rec.pipeline) rec.pipeline = defaultTrackerPipeline(aType);
+    if (!Array.isArray(rec.lifecycleEvents)) rec.lifecycleEvents = [];
 
     return rec;
   }
@@ -564,6 +565,9 @@
     let previousMetrics = rec.previousMetrics || null;
     let metricsHistory = Array.isArray(rec.metricsHistory) ? [...rec.metricsHistory] : [];
 
+    // Lifecycle event detection
+    let lifecycleEvents = Array.isArray(rec.lifecycleEvents) ? [...rec.lifecycleEvents] : [];
+
     if (rec.id) {
       try {
         const existing = await getTrackerRecord(rec.id);
@@ -581,6 +585,38 @@
               favorites: oldF,
               updatedAt: existing.updatedAt || now
             };
+          }
+        }
+
+        // Auto-record lifecycle events on key transitions
+        if (existing && aType === 'release') {
+          const oldVis = existing.visibility || null;
+          const newVis = rec.visibility || null;
+          const oldStatus = existing.status || 'Active';
+          const newStatus = status || 'Active';
+
+          // Visibility transitions
+          if (oldVis !== 'Private' && newVis === 'Private') {
+            lifecycleEvents.push({ type: 'private_testing', label: 'Private Testing Started', icon: '🧪', timestamp: now });
+          }
+          if (oldVis === 'Private' && newVis && newVis !== 'Private') {
+            lifecycleEvents.push({ type: 'private_testing_ended', label: 'Private Testing Ended', icon: '🔬', timestamp: now });
+          }
+          if (oldVis !== 'Public' && newVis === 'Public') {
+            lifecycleEvents.push({ type: 'public_release', label: 'Public Release', icon: '🚀', timestamp: now });
+          }
+
+          // Scheduled date set for the first time
+          if (!existing.scheduledDate && rec.scheduledDate) {
+            lifecycleEvents.push({ type: 'scheduled_release', label: 'Scheduled Release', icon: '📅', timestamp: now });
+          }
+
+          // Status transitions
+          if (oldStatus !== 'Archived' && newStatus === 'Archived') {
+            lifecycleEvents.push({ type: 'archived', label: 'Archived', icon: '📦', timestamp: now });
+          }
+          if (oldStatus === 'Archived' && newStatus === 'Active') {
+            lifecycleEvents.push({ type: 'unarchived', label: 'Unarchived', icon: '📤', timestamp: now });
           }
         }
       } catch (e) {
@@ -614,6 +650,7 @@
       iterationLabel: rec.iterationLabel || '',
       previousMetrics: previousMetrics,
       metricsHistory: metricsHistory,
+      lifecycleEvents: lifecycleEvents,
       projectId: rec.projectId || null,
       visibility: rec.visibility || null,
       scheduledDate: rec.scheduledDate || null,
