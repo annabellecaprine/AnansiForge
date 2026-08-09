@@ -263,8 +263,9 @@
       }
 
       // Promote stub to story
-      if (t.matches('.mc-promote-stub-story')) {
-        await M?.promoteStubToStory(t.dataset.stubId);
+      const promoteStubBtn = t.closest('.mc-promote-stub-story');
+      if (promoteStubBtn) {
+        await M?.promoteStubToStory(promoteStubBtn.dataset.stubId);
         return;
       }
 
@@ -740,15 +741,18 @@
       if (t.id === 'mc-add-record') { M?.openRecordModal(null, t.dataset.type); return; }
 
       // Build stub → vault
-      if (t.matches('.mc-build-btn')) {
-        M?.promoteStub(t.dataset.stubId);
+      const buildStubBtn = t.closest('.mc-build-btn');
+      if (buildStubBtn) {
+        await M?.promoteStub(buildStubBtn.dataset.stubId);
         return;
       }
 
       // Delete stub
-      if (t.matches('.mc-delete-stub-btn')) {
+      const deleteStubBtn = t.closest('.mc-delete-stub-btn');
+      if (deleteStubBtn) {
+        const stubId = deleteStubBtn.dataset.stubId;
         if (confirm('Remove this concept stub?')) {
-          await window.ForgeDB.deleteTrackerRecord(t.dataset.stubId);
+          await window.ForgeDB.deleteTrackerRecord(stubId);
           await loadAll();
           await renderCurrentTab();
         }

@@ -567,12 +567,350 @@
     }
   }
 
+  function openRecordModal(rec, assetType) {
+    const S = getS();
+    if (!S) return;
+    const isNew = !rec;
+    const r = rec || { assetType, name: '', universe: '', project: '', priority: null, tags: [], notes: '', linkedVaultIds: [], pipeline: window.ForgeDB.defaultTrackerPipeline(assetType) };
+    S.state.editingRecord = r;
+
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.textContent = isNew ? `New ${assetType === 'story' ? 'Story' : 'Release'}` : `Edit: ${r.name}`;
+    body.innerHTML = `
+      <div class="form-group"><label>Name</label>
+        <input type="text" id="mc-rec-name" value="${S.esc(r.name)}" placeholder="Name…" class="mc-modal-input" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-rec-universe" class="mc-modal-input">
+            ${S.universeSelectOptionsHTML(r.universe, '—')}
+          </select>
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="mc-rec-priority" class="mc-modal-input">
+            <option value="">—</option>
+            ${['P1', 'P2', 'P3', 'P4'].map(p => `<option value="${p}" ${r.priority === p ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Project / Group</label>
+        <input type="text" id="mc-rec-project" value="${S.esc(r.project || '')}" class="mc-modal-input" placeholder="e.g. Young Justice" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div class="form-group"><label>Tags (comma separated)</label>
+        <input type="text" id="mc-rec-tags" value="${S.esc((r.tags || []).join(', '))}" class="mc-modal-input" placeholder="e.g. hero, DC, tested" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div class="form-group"><label>Notes</label>
+        <textarea id="mc-rec-notes" class="mc-modal-input" rows="3">${S.esc(r.notes || '')}</textarea>
+      </div>
+      ${assetType === 'release' ? `
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Visibility</label>
+          <select id="mc-rec-visibility" class="mc-modal-input">
+            <option value="">—</option>
+            ${['Private', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${r.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Scheduled Date</label>
+          <input type="date" id="mc-rec-date" value="${r.scheduledDate || ''}" class="mc-modal-input">
+        </div>
+      </div>
+      <hr class="mc-modal-divider">
+      <p class="mc-modal-section-label" style="font-weight:600; margin:10px 0 6px;">📈 Post-Release Metrics</p>
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Snapshot Date</label>
+          <input type="date" id="mc-rec-metrics-date" value="${r.metrics?.date || ''}" class="mc-modal-input">
+        </div>
+        <div class="form-group"><label>Snapshot Time</label>
+          <input type="time" id="mc-rec-metrics-time" value="${r.metrics?.time || ''}" class="mc-modal-input">
+        </div>
+      </div>
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Unique Chats</label>
+          <input type="number" id="mc-rec-unique-chats" value="${r.metrics?.uniqueChats || 0}" class="mc-modal-input" min="0">
+        </div>
+        <div class="form-group"><label>Messages</label>
+          <input type="number" id="mc-rec-messages" value="${r.metrics?.messages || 0}" class="mc-modal-input" min="0">
+        </div>
+      </div>
+      <div class="mc-metrics-derived" style="margin-top:8px; font-size:0.82rem; color:var(--accent);">
+        <span class="mc-metrics-derived-label">Derived Msg / Chat: </span>
+        <span class="mc-metrics-derived-value" id="mc-derived-mpc">${r.metrics?.uniqueChats > 0 ? (r.metrics.messages / r.metrics.uniqueChats).toFixed(2) : '—'}</span>
+      </div>` : ''}
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="mc-btn mc-btn-secondary" id="mc-modal-cancel">Cancel</button>
+        <button class="mc-btn mc-btn-primary" id="mc-modal-save">Save Record</button>
+      </div>
+    `;
+
+    modal.classList.remove('hidden');
+    document.getElementById('mc-rec-name')?.focus();
+  }
+
+  function openStubModal() {
+    const S = getS();
+    if (!S) return;
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+    S.state.editingRecord = { assetType: 'concept_stub' };
+    title.textContent = '💡 New Concept Stub';
+    body.innerHTML = `
+      <div class="form-group"><label>Name</label>
+        <input type="text" id="mc-rec-name" class="mc-modal-input" placeholder="e.g. Kamala Khan" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Category</label>
+          <select id="mc-stub-category" class="mc-modal-input">
+            <option value="character">Character</option>
+            <option value="scenario">Scenario</option>
+            <option value="bio">Bio</option>
+            <option value="initial_message">Initial Message</option>
+            <option value="organization">Organization</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-rec-universe" class="mc-modal-input">
+            ${S.universeSelectOptionsHTML('', '—')}
+          </select>
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="mc-rec-priority" class="mc-modal-input">
+            <option value="">—</option>
+            ${['P1', 'P2', 'P3', 'P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Project / Group</label>
+        <input type="text" id="mc-rec-project" class="mc-modal-input" placeholder="e.g. Ant-Man" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div class="form-group"><label>Tags (comma separated)</label>
+        <input type="text" id="mc-rec-tags" class="mc-modal-input" placeholder="e.g. hero, Marvel" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+      <div class="form-group"><label>Notes</label>
+        <textarea id="mc-rec-notes" class="mc-modal-input" rows="2"></textarea>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="mc-btn mc-btn-secondary" id="mc-modal-cancel">Cancel</button>
+        <button class="mc-btn mc-btn-primary" id="mc-modal-save">Save Stub</button>
+      </div>`;
+    modal.classList.remove('hidden');
+    document.getElementById('mc-rec-name')?.focus();
+  }
+
+  function openCastModal() {
+    const S = getS();
+    if (!S) return;
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
+
+    title.textContent = '🎬 Cast — Bulk Concept Stubs';
+    S.state.editingRecord = { assetType: 'concept_cast_bulk' };
+
+    body.innerHTML = `
+      <p style="font-size:0.82rem; color:var(--text-muted); margin:0 0 14px;">
+        Set shared metadata once, then list every character name below — one per line (or comma-separated).
+        Each name becomes its own Concept Stub.
+      </p>
+
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Universe</label>
+          <select id="mc-cast-universe" class="mc-modal-input">
+            ${S.universeSelectOptionsHTML('', 'No Universe')}
+          </select>
+        </div>
+        <div class="form-group"><label>Category</label>
+          <select id="mc-cast-category" class="mc-modal-input">
+            <option value="character" selected>Character</option>
+            <option value="organization">Organization</option>
+            <option value="scenario">Scenario</option>
+            <option value="bio">Bio</option>
+            <option value="initial_message">Initial Message</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Group / Project</label>
+          <input type="text" id="mc-cast-project" class="mc-modal-input" placeholder="e.g. Young Justice" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="mc-cast-priority" class="mc-modal-input">
+            <option value="">—</option>
+            ${['P1', 'P2', 'P3', 'P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group"><label>Tags (shared, comma separated)</label>
+        <input type="text" id="mc-cast-tags" class="mc-modal-input" placeholder="e.g. hero, DC, tested" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
+
+      <div class="form-group"><label>Character Names (one per line or comma-separated)</label>
+        <textarea id="mc-cast-names" class="mc-modal-input" rows="6" placeholder="Robin&#10;Superboy&#10;Aqualad&#10;Kid Flash&#10;Artemis"></textarea>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="mc-btn mc-btn-secondary" id="mc-modal-cancel">Cancel</button>
+        <button class="mc-btn mc-btn-primary" id="mc-modal-save">Create Cast Stubs</button>
+      </div>`;
+
+    modal.classList.remove('hidden');
+    document.getElementById('mc-cast-names')?.focus();
+  }
+
+  async function saveModalRecord() {
+    const S = getS();
+    if (!S) return;
+    const r = S.state.editingRecord;
+
+    if (r && r.assetType === 'concept_cast_bulk') {
+      const category = document.getElementById('mc-cast-category')?.value || 'character';
+      const universe = document.getElementById('mc-cast-universe')?.value || '';
+      const project = document.getElementById('mc-cast-project')?.value?.trim() || '';
+      const priority = document.getElementById('mc-cast-priority')?.value || null;
+      const tags = (document.getElementById('mc-cast-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+      const namesRaw = document.getElementById('mc-cast-names')?.value || '';
+
+      const names = namesRaw.split(/[\n,]/).map(n => n.trim()).filter(Boolean);
+      if (names.length === 0) {
+        if (typeof showToast === 'function') showToast('Please enter at least one character name.', 'error');
+        return;
+      }
+
+      const promises = names.map(name => window.ForgeDB.saveTrackerRecord({
+        assetType: 'concept_stub',
+        name,
+        universe,
+        project,
+        priority,
+        intendedCategory: category,
+        tags,
+        createdAt: new Date().toISOString()
+      }));
+
+      await Promise.all(promises);
+      await S.loadAll();
+      closeModal();
+      if (window.MissionControl && window.MissionControl.renderCurrentTab) {
+        await window.MissionControl.renderCurrentTab();
+      }
+      if (typeof showToast === 'function') showToast(`Cast saved: ${names.length} Concept Stubs created!`, 'success');
+      return;
+    }
+
+    if (!r) return;
+
+    const name = document.getElementById('mc-rec-name')?.value?.trim();
+    if (!name) {
+      if (typeof showToast === 'function') showToast('Name is required.', 'error');
+      return;
+    }
+
+    const universe = document.getElementById('mc-rec-universe')?.value || '';
+    const priority = document.getElementById('mc-rec-priority')?.value || null;
+    const project = document.getElementById('mc-rec-project')?.value?.trim() || '';
+    const tags = (document.getElementById('mc-rec-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+    const notes = document.getElementById('mc-rec-notes')?.value || '';
+
+    const updated = {
+      ...r, name, universe, priority, project, tags, notes,
+      pipeline: r.pipeline || window.ForgeDB.defaultTrackerPipeline(r.assetType)
+    };
+
+    if (r.assetType === 'concept_stub') {
+      updated.intendedCategory = document.getElementById('mc-stub-category')?.value || 'character';
+    }
+    if (r.assetType === 'release') {
+      updated.visibility = document.getElementById('mc-rec-visibility')?.value || null;
+      updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
+      const uniqueChats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
+      const messages = parseInt(document.getElementById('mc-rec-messages')?.value) || 0;
+      updated.metrics = {
+        date: document.getElementById('mc-rec-metrics-date')?.value || null,
+        time: document.getElementById('mc-rec-metrics-time')?.value || null,
+        uniqueChats,
+        messages,
+        msgPerChat: uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null
+      };
+    }
+
+    await window.ForgeDB.saveTrackerRecord(updated);
+    await S.loadAll();
+    closeModal();
+    if (window.MissionControl && window.MissionControl.renderCurrentTab) {
+      await window.MissionControl.renderCurrentTab();
+    }
+    if (typeof showToast === 'function') showToast(`${updated.name} saved.`, 'success');
+  }
+
+  function closeModal() {
+    const S = getS();
+    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+    if (S) S.state.editingRecord = null;
+  }
+
+  async function promoteStub(stubId) {
+    const S = getS();
+    if (!S) return;
+    const stub = S.state.allTrackerRecords.find(r => r.id === stubId);
+    if (!stub) return;
+
+    if (window.ForgeAppBridge && window.ForgeAppBridge.openEditorNew) {
+      window.ForgeAppBridge.openEditorNew({
+        name: stub.name,
+        category: stub.intendedCategory || 'character',
+        tags: stub.tags || [],
+        _stubId: stub.id
+      });
+    } else {
+      document.getElementById('btn-new-component')?.click();
+      if (typeof showToast === 'function') showToast(`Building "${stub.name}" — fill out the editor and save to Vault.`, 'info');
+    }
+  }
+
+  async function promoteStubToStory(stubId) {
+    const S = getS();
+    if (!S) return;
+    const stub = S.state.allTrackerRecords.find(r => r.id === stubId);
+    if (!stub) return;
+
+    const storyRecord = {
+      assetType: 'story',
+      name: stub.name,
+      universe: stub.universe || '',
+      project: stub.project || '',
+      priority: stub.priority || null,
+      status: 'Idea',
+      notes: stub.notes || '',
+      linkedVaultIds: [],
+      createdAt: new Date().toISOString()
+    };
+
+    await window.ForgeDB.saveTrackerRecord(storyRecord);
+    await window.ForgeDB.deleteTrackerRecord(stubId);
+    await S.loadAll();
+    if (window.MissionControl && window.MissionControl.renderCurrentTab) {
+      await window.MissionControl.renderCurrentTab();
+    }
+    if (typeof showToast === 'function') showToast(`Promoted concept "${stub.name}" to a Story!`, 'success');
+  }
+
   // Export to Global Window Namespace
   window.MissionControlModals = {
     openBotAnalyticsModal,
     openQuickMetricsModal,
     submitMetricSnapshot,
     openStoryHubModal,
-    openLinkVaultModal
+    openLinkVaultModal,
+    openRecordModal,
+    openStubModal,
+    openCastModal,
+    saveModalRecord,
+    closeModal,
+    promoteStub,
+    promoteStubToStory
   };
 })();
