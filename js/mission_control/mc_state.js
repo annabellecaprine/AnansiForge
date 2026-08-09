@@ -520,12 +520,12 @@
     function subTabBar() {
         const tabs = [
             { id: 'overview', label: '📊 Overview' },
+            { id: 'stories', label: '📖 Stories' },
             { id: 'characters', label: '👤 Characters' },
             { id: 'scenarios', label: '🎭 Scenarios' },
             { id: 'bios', label: '📋 Bios' },
             { id: 'messages', label: '💬 Init Msgs' },
             { id: 'orgs', label: '🏢 Orgs' },
-            { id: 'stories', label: '📖 Stories' },
             { id: 'launchpad', label: '🚀 Launch Pad' },
             { id: 'metrics', label: '📈 Metrics' },
             { id: 'import', label: '⚙ Import' }
