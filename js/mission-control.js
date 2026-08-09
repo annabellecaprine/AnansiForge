@@ -860,6 +860,8 @@
     // Filter inputs + live derived field
     let searchDebounceTimer = null;
     container.addEventListener('input', (e) => {
+      const S = getS();
+      const state = S ? S.state : {};
       const t = e.target;
       if (t.id === 'mc-search') {
         state.filters.search = t.value;
@@ -877,6 +879,8 @@
     });
 
     container.addEventListener('change', async (e) => {
+      const S = getS();
+      const state = S ? S.state : {};
       const t = e.target;
 
       if (t.id === 'mc-filter-universe') {
