@@ -145,6 +145,28 @@
         return;
       }
 
+      // Sort toggle button
+      if (t.closest('#mc-sort-toggle')) {
+        state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+        await renderCurrentTab();
+        return;
+      }
+
+      // Group by priority toggle button
+      if (t.closest('#mc-group-priority-toggle')) {
+        state.groupByPriority = !state.groupByPriority;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Clear tag filter button
+      if (t.id === 'mc-clear-tag' || t.closest('#mc-clear-tag')) {
+        state.activeTagFilter = '';
+        await renderCurrentTab();
+        return;
+      }
+
+
       // Spawn release from story
       const spawnBtn = t.closest('.mc-spawn-release');
       if (spawnBtn) {
@@ -856,6 +878,34 @@
 
     container.addEventListener('change', async (e) => {
       const t = e.target;
+
+      if (t.id === 'mc-filter-universe') {
+        state.filters.universe = t.value;
+        state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
+
+      if (t.id === 'mc-filter-role') {
+        state.filters.role = t.value;
+        state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
+
+      if (t.id === 'mc-filter-priority') {
+        state.filters.priority = t.value;
+        state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
+
+      if (t.id === 'mc-filter-series') {
+        state.filters.series = t.value;
+        state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
 
       if (t.id === 'mc-include-private-cb') {
         state.includePrivate = t.checked;
