@@ -506,11 +506,11 @@
         ${showAddRecord ? `<button id="mc-add-record" class="mc-btn mc-btn-primary" data-type="${recordType}">+ ${recordType === 'story' ? 'Story' : recordType === 'release' ? 'Release' : 'Record'}</button>` : ''}
         ${showAddStub ? `
         <div class="mc-split-btn-group" style="position:relative; display:inline-flex;">
-          <button id="mc-add-stub" class="mc-btn mc-btn-primary" data-mode="cast">+ Cast / Duo</button>
+          <button id="mc-add-stub" class="mc-btn mc-btn-primary" data-mode="cast">+ Concept</button>
           <button id="mc-add-stub-caret" class="mc-btn mc-btn-primary" style="padding:0 6px; border-left:1px solid rgba(255,255,255,0.2);" title="More Options">▼</button>
           <div id="mc-stub-dropdown" class="mc-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; margin-top:4px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); box-shadow:var(--shadow-md); z-index:100; min-width:160px;">
-            <button class="mc-dropdown-item" id="mc-stub-opt-cast" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">👥 Cast / Duo Concept</button>
-            <button class="mc-dropdown-item" id="mc-stub-opt-single" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">👤 Single Character Stub</button>
+            <button class="mc-dropdown-item" id="mc-stub-opt-cast" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">👥 Bulk Concept Cast</button>
+            <button class="mc-dropdown-item" id="mc-stub-opt-single" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">👤 Single Concept Stub</button>
           </div>
         </div>` : ''}
       </div>

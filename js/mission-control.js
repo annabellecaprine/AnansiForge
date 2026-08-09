@@ -321,6 +321,60 @@
         return;
       }
 
+      // Open Vault component in editor
+      const vaultItemBtn = t.closest('[data-vault-id]');
+      if (vaultItemBtn) {
+        const id = vaultItemBtn.dataset.vaultId;
+        if (window.ForgeAppBridge && window.ForgeAppBridge.openEditor) {
+          window.ForgeAppBridge.openEditor(id);
+        } else if (document.getElementById('btn-vault')) {
+          document.getElementById('btn-vault').click();
+        }
+        return;
+      }
+
+      // Pin / Unpin Vault item
+      const pinBtn = t.closest('.mc-pin-toggle');
+      if (pinBtn) {
+        const id = pinBtn.dataset.id;
+        const comp = state.allComponents.find(c => c.id === id);
+        if (comp) {
+          const pinned = !(comp.tracker?.pinned);
+          await window.ForgeDB.updateVaultTracker(id, { pinned });
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
+
+      // Pipeline step checkbox toggle
+      const pipeBtn = t.closest('.mc-pipe-btn');
+      if (pipeBtn && !pipeBtn.disabled) {
+        const id = pipeBtn.dataset.id;
+        const step = pipeBtn.dataset.step;
+        const store = pipeBtn.dataset.store;
+
+        if (store === 'vault') {
+          const comp = state.allComponents.find(c => c.id === id);
+          if (!comp) return;
+          const pipeline = { ...(comp.tracker?.pipeline || window.ForgeDB.defaultTrackerPipeline(comp.category)) };
+          pipeline[step] = !pipeline[step];
+          await window.ForgeDB.updateVaultTracker(id, { pipeline });
+          await loadAll();
+          await renderCurrentTab();
+        } else {
+          const rec = state.allTrackerRecords.find(r => r.id === id);
+          if (!rec) return;
+          const pipeline = { ...(rec.pipeline || window.ForgeDB.defaultTrackerPipeline(rec.assetType)) };
+          pipeline[step] = !pipeline[step];
+          await window.ForgeDB.saveTrackerRecord({ ...rec, pipeline });
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
       // Toggle Private Bots section
       const privateToggle = t.closest('#mc-private-toggle');
       if (privateToggle) {
@@ -828,6 +882,68 @@
             await renderCurrentTab();
             if (typeof showToast === 'function') showToast('Vault asset linked to Story!', 'success');
           }
+        }
+        return;
+      }
+
+      // Inline Universe select
+      if (t.matches('.mc-universe-select')) {
+        const store = t.dataset.store;
+        if (store === 'vault') {
+          await window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
+      // Inline Role select
+      if (t.matches('.mc-role-select')) {
+        const store = t.dataset.store;
+        if (store === 'vault') {
+          await window.ForgeDB.updateVaultTracker(t.dataset.id, { role: t.value });
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
+      // Inline Priority select
+      if (t.matches('.mc-priority-select')) {
+        const store = t.dataset.store;
+        if (store === 'vault') {
+          await window.ForgeDB.updateVaultTracker(t.dataset.id, { priority: t.value || null });
+          await loadAll();
+          await renderCurrentTab();
+        } else {
+          const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+          if (rec) {
+            await window.ForgeDB.saveTrackerRecord({ ...rec, priority: t.value || null });
+            await loadAll();
+            await renderCurrentTab();
+          }
+        }
+        return;
+      }
+
+      // Inline Visibility select
+      if (t.matches('.mc-vis-select')) {
+        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+        if (rec) {
+          await window.ForgeDB.saveTrackerRecord({ ...rec, visibility: t.value || null });
+          await loadAll();
+          await renderCurrentTab();
+        }
+        return;
+      }
+
+      // Inline Date input
+      if (t.matches('.mc-date-input')) {
+        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+        if (rec) {
+          await window.ForgeDB.saveTrackerRecord({ ...rec, scheduledDate: t.value || null });
+          await loadAll();
+          await renderCurrentTab();
         }
         return;
       }
