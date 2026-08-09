@@ -315,6 +315,16 @@
         return `<span class="mc-badge" style="background:${color}22; color:${color}; border:1px solid ${color}44; font-size:0.72rem;">${label}</span>`;
     }
 
+    function seriesSelectBadge(series, recordId, storeType = 'record') {
+        const key = series || 'standard';
+        const color = SERIES_COLORS[key] || '#6b7280';
+        return `<select class="mc-badge-select mc-series-select" data-id="${recordId}" data-store="${storeType}"
+      style="background:${color}22; color:${color}; border:1px solid ${color}44; border-radius:12px; padding:2px 8px; font-size:0.75rem; font-weight:600; cursor:pointer; outline:none; text-align:center;"
+      title="Click to change Series in place">
+      ${Object.keys(SERIES_OPTIONS).map(k => `<option value="${k}" ${key === k ? 'selected' : ''} style="background:var(--bg-secondary); color:var(--text-primary);">${SERIES_OPTIONS[k]}</option>`).join('')}
+    </select>`;
+    }
+
     function storyStatusBadge(status) {
         const s = status || 'Active';
         const c = STORY_STATUS_COLORS[s] || '#10b981';
@@ -579,6 +589,7 @@
         universeSelectBadge,
         releaseSourceBadge,
         seriesBadge,
+        seriesSelectBadge,
         storyStatusBadge,
         isMatchingUniverse,
         getEffectiveUniversesList,

@@ -4,32 +4,32 @@
  */
 
 (() => {
-    const getS = () => window.MissionControlState;
+  const getS = () => window.MissionControlState;
 
-    function renderCalendar(releases) {
-        const S = getS();
-        if (!S) return '';
-        const esc = S.esc;
-        const universeBadge = S.universeBadge;
+  function renderCalendar(releases) {
+    const S = getS();
+    if (!S) return '';
+    const esc = S.esc;
+    const universeBadge = S.universeBadge;
 
-        const scheduled = releases.filter(r => r.scheduledDate && !r.pipeline?.released);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    const scheduled = releases.filter(r => r.scheduledDate && !r.pipeline?.released);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        const weekStart = new Date(today);
-        const dayOfWeek = (weekStart.getDay() + 6) % 7;
-        weekStart.setDate(weekStart.getDate() - dayOfWeek + (S.state.calendarWeekOffset * 7));
+    const weekStart = new Date(today);
+    const dayOfWeek = (weekStart.getDay() + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - dayOfWeek + (S.state.calendarWeekOffset * 7));
 
-        const days = Array.from({ length: 7 }, (_, i) => {
-            const d = new Date(weekStart);
-            d.setDate(d.getDate() + i);
-            return d;
-        });
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
 
-        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const isReleasDay = (d) => d.getDay() === 2 || d.getDay() === 4;
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const isReleasDay = (d) => d.getDay() === 2 || d.getDay() === 4;
 
-        return `<div class="mc-calendar-section">
+    return `<div class="mc-calendar-section">
       <div class="mc-calendar-header">
         <h3 class="mc-section-title">📅 Release Calendar</h3>
         <div class="mc-calendar-nav">
@@ -40,12 +40,12 @@
       </div>
       <div class="mc-calendar-grid">
         ${days.map((d, i) => {
-            const dateStr = d.toISOString().split('T')[0];
-            const isToday = d.getTime() === today.getTime();
-            const isSlot = isReleasDay(d);
-            const dayReleases = scheduled.filter(r => r.scheduledDate === dateStr);
+      const dateStr = d.toISOString().split('T')[0];
+      const isToday = d.getTime() === today.getTime();
+      const isSlot = isReleasDay(d);
+      const dayReleases = scheduled.filter(r => r.scheduledDate === dateStr);
 
-            return `<div class="mc-cal-day${isToday ? ' mc-cal-today' : ''}${isSlot ? ' mc-cal-slot' : ''}">
+      return `<div class="mc-cal-day${isToday ? ' mc-cal-today' : ''}${isSlot ? ' mc-cal-slot' : ''}">
             <div class="mc-cal-day-header">
               <span class="mc-cal-day-name">${dayNames[i]}</span>
               <span class="mc-cal-day-num${isToday ? ' mc-cal-today-num' : ''}">${d.getDate()}</span>
@@ -59,20 +59,20 @@
                 </div>`).join('')}
             </div>
           </div>`;
-        }).join('')}
+    }).join('')}
       </div>
     </div>`;
-    }
+  }
 
-    function releaseRow(rec, steps) {
-        const S = getS();
-        const esc = S.esc;
-        const score = S.calcReadinessForRecord(rec);
-        const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)' };
-        const linkedProj = S.state.allProjects.find(p => p.id === rec.projectId);
-        const sourceStory = rec.sourceStoryId ? S.state.allTrackerRecords.find(r => r.id === rec.sourceStoryId) : null;
+  function releaseRow(rec, steps) {
+    const S = getS();
+    const esc = S.esc;
+    const score = S.calcReadinessForRecord(rec);
+    const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)' };
+    const linkedProj = S.state.allProjects.find(p => p.id === rec.projectId);
+    const sourceStory = rec.sourceStoryId ? S.state.allTrackerRecords.find(r => r.id === rec.sourceStoryId) : null;
 
-        return `<tr class="mc-row${S.isReleasePublished(rec) ? ' mc-row--released' : ''}" data-record-id="${rec.id}">
+    return `<tr class="mc-row${S.isReleasePublished(rec) ? ' mc-row--released' : ''}" data-record-id="${rec.id}">
       <td class="mc-cell-name">
         <div style="display:flex; align-items:center; gap:6px;">
           <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
@@ -81,8 +81,8 @@
         ${sourceStory ? `<div class="mc-linked-proj-tag mc-open-story-hub" data-story-id="${sourceStory.id}" style="cursor:pointer;" title="Click to view source Story Hub">📖 from: ${esc(sourceStory.name)}</div>` : ''}
         ${linkedProj ? `<div class="mc-linked-proj-tag" title="Linked to compiled project: ${esc(linkedProj.name)}">🤖 ${esc(linkedProj.name)} (${(linkedProj.componentIds || []).length} items)</div>` : ''}
       </td>
-      <td>${S.seriesBadge(rec.series)}</td>
-      <td>${S.universeBadge(rec.universe)}</td>
+      <td>${S.seriesSelectBadge ? S.seriesSelectBadge(rec.series, rec.id, 'record') : S.seriesBadge(rec.series)}</td>
+      <td>${S.universeSelectBadge ? S.universeSelectBadge(rec.universe, rec.id, 'record') : S.universeBadge(rec.universe)}</td>
       <td>${S.priorityBadge(rec.priority)}</td>
       ${S.pipelineCheckboxes(rec.pipeline, steps, rec.id, false)}
       <td>
@@ -111,27 +111,27 @@
         <button class="mc-action-btn mc-delete-record" data-record-id="${rec.id}" title="Delete">🗑</button>
       </td>
     </tr>`;
-    }
+  }
 
-    function renderLaunchPad() {
-        const S = getS();
-        if (!S) return '';
+  function renderLaunchPad() {
+    const S = getS();
+    if (!S) return '';
 
-        const steps = S.PIPELINE_STEPS.release;
-        let releases = S.filterTrackerRecords(S.state.allTrackerRecords.filter(r => r.assetType === 'release'));
-        releases = S.sortByReadiness(releases, S.calcReadinessForRecord, r => r.priority, S.state.sortDir);
+    const steps = S.PIPELINE_STEPS.release;
+    let releases = S.filterTrackerRecords(S.state.allTrackerRecords.filter(r => r.assetType === 'release'));
+    releases = S.sortByReadiness(releases, S.calcReadinessForRecord, r => r.priority, S.state.sortDir);
 
-        const activeReleases = releases.filter(r => r.status !== 'Archived');
-        const archivedReleases = releases.filter(r => r.status === 'Archived');
+    const activeReleases = releases.filter(r => r.status !== 'Archived');
+    const archivedReleases = releases.filter(r => r.status === 'Archived');
 
-        const readyItems = activeReleases.filter(r => steps.every(s => r.pipeline?.[s]) && !S.isReleasePublished(r) && r.visibility !== 'Private');
-        const inTesting = activeReleases.filter(r => r.visibility === 'Private' && !S.isReleasePublished(r));
-        const inProgress = activeReleases.filter(r => !steps.every(s => r.pipeline?.[s]) && !S.isReleasePublished(r) && r.visibility !== 'Private');
-        const released = activeReleases.filter(S.isReleasePublished);
+    const readyItems = activeReleases.filter(r => steps.every(s => r.pipeline?.[s]) && !S.isReleasePublished(r) && r.visibility !== 'Private');
+    const inTesting = activeReleases.filter(r => r.visibility === 'Private' && !S.isReleasePublished(r));
+    const inProgress = activeReleases.filter(r => !steps.every(s => r.pipeline?.[s]) && !S.isReleasePublished(r) && r.visibility !== 'Private');
+    const released = activeReleases.filter(S.isReleasePublished);
 
-        const releaseSection = (title, items, showReady = false) => {
-            if (!items.length && !showReady) return '';
-            return `<div class="mc-launch-section">
+    const releaseSection = (title, items, showReady = false) => {
+      if (!items.length && !showReady) return '';
+      return `<div class="mc-launch-section">
         <h3 class="mc-section-title">${title} <span class="mc-section-count">${items.length}</span></h3>
         ${items.length === 0 ? '<p class="mc-empty-state">None yet.</p>' : `
         <div class="mc-table-wrap">
@@ -157,11 +157,11 @@
           </table>
         </div>`}
       </div>`;
-        };
+    };
 
-        const calendarHTML = renderCalendar(activeReleases);
+    const calendarHTML = renderCalendar(activeReleases);
 
-        return `
+    return `
       ${S.toolbarHTML(false, true, 'release')}
       ${readyItems.length > 0 ? `<div class="mc-ready-banner">
         🚀 <strong>${readyItems.length}</strong> release${readyItems.length > 1 ? 's' : ''} ready for public launch!
@@ -172,8 +172,8 @@
       ${releaseSection('✅ Released', released)}
       ${releaseSection('📦 Archived / Retired', archivedReleases)}
       ${calendarHTML}`;
-    }
+  }
 
-    window.MissionControlTabs = window.MissionControlTabs || {};
-    window.MissionControlTabs.renderLaunchPad = renderLaunchPad;
+  window.MissionControlTabs = window.MissionControlTabs || {};
+  window.MissionControlTabs.renderLaunchPad = renderLaunchPad;
 })();

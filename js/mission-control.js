@@ -947,6 +947,24 @@
           await window.ForgeDB.updateVaultTracker(t.dataset.id, { universe: t.value });
           await loadAll();
           await renderCurrentTab();
+        } else {
+          const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+          if (rec) {
+            await window.ForgeDB.saveTrackerRecord({ ...rec, universe: t.value });
+            await loadAll();
+            await renderCurrentTab();
+          }
+        }
+        return;
+      }
+
+      // Inline Series select
+      if (t.matches('.mc-series-select')) {
+        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+        if (rec) {
+          await window.ForgeDB.saveTrackerRecord({ ...rec, series: t.value });
+          await loadAll();
+          await renderCurrentTab();
         }
         return;
       }
