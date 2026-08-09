@@ -320,11 +320,30 @@
         return;
       }
 
+      // Toggle Private Bots section
+      const privateToggle = t.closest('#mc-private-toggle');
+      if (privateToggle) {
+        state.privateExpanded = !state.privateExpanded;
+        await renderCurrentTab();
+        return;
+      }
+
+      // Toggle Archived Bots section
+      const archivedToggle = t.closest('#mc-archived-toggle');
+      if (archivedToggle) {
+        state.archivedExpanded = !state.archivedExpanded;
+        await renderCurrentTab();
+        return;
+      }
+
       // Submit Metric Snapshot
       if (t.id === 'mc-btn-submit-snapshot' || t.closest('#mc-btn-submit-snapshot')) {
         const btn = t.id === 'mc-btn-submit-snapshot' ? t : t.closest('#mc-btn-submit-snapshot');
         const botId = btn.dataset.botId;
-        if (botId) await M?.submitMetricSnapshot(botId);
+        if (botId) {
+          await M?.submitMetricSnapshot(botId);
+          await renderCurrentTab();
+        }
         return;
       }
 
@@ -780,6 +799,18 @@
     container.addEventListener('change', async (e) => {
       const t = e.target;
 
+      if (t.id === 'mc-include-private-cb') {
+        state.includePrivate = t.checked;
+        await renderCurrentTab();
+        return;
+      }
+
+      if (t.id === 'mc-include-archived-cb') {
+        state.includeArchived = t.checked;
+        await renderCurrentTab();
+        return;
+      }
+
       if (t.matches('.mc-hub-add-vault')) {
         const storyId = t.dataset.storyId;
         const compId = t.value;
@@ -1059,19 +1090,6 @@
       const dd = document.getElementById('mc-stub-dropdown');
       if (dd && !e.target.closest('#mc-add-stub-caret') && !e.target.closest('#mc-stub-dropdown')) {
         dd.style.display = 'none';
-      }
-      if (e.target && e.target.closest('#mc-archived-toggle')) {
-        const S = getS();
-        if (S) S.state.archivedExpanded = !S.state.archivedExpanded;
-        renderCurrentTab();
-      }
-    });
-
-    document.addEventListener('change', (e) => {
-      if (e.target && e.target.id === 'mc-include-archived-cb') {
-        const S = getS();
-        if (S) S.state.includeArchived = e.target.checked;
-        renderCurrentTab();
       }
     });
   }

@@ -115,7 +115,9 @@
         isSpawningRelease: false,
         metricsSeriesFilter: 'all',
         includeArchived: false,
+        includePrivate: false,
         archivedExpanded: false,
+        privateExpanded: false,
         activeTagFilter: '',
         editingRecord: null,           // modal state
         calendarWeekOffset: 0

@@ -4214,6 +4214,19 @@ select.mc-universe-select:focus {
   opacity: 0.8;
 }
 
+.mc-private-section {
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.mc-row-private {
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+.mc-badge-private {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
 .mc-timeline-marker {
   cursor: pointer;
   transition: opacity 0.2s ease;
