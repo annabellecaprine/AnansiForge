@@ -24,6 +24,15 @@
         banner: 'Banner', tagsDone: 'Tags', initialTest: 'Test 1', regressionTest: 'Regression', finalPolish: 'Polish', ready: 'Ready'
     };
 
+    const SHORT_STEP_LABELS = {
+        generated: 'GEN', goldenTemplate: '⭐ TPL', test1: 'TST 1', trimmed: 'TRIM',
+        test2: 'TST 2', complete: 'COMP', published: 'PUBL',
+        concept: 'CNCPT', notesReady: 'NOTES', initialMessage: 'INIT', bio: 'BIO',
+        otherMessages: 'MSGS', testing: 'TEST',
+        staged: 'STAGED', scenario: 'SCEN', personalityLocked: 'PERS', thumbnail: 'THUMB',
+        banner: 'BANR', tagsDone: 'TAGS', initialTest: 'TST 1', regressionTest: 'REGR', finalPolish: 'PLSH', ready: 'READY'
+    };
+
     const UNIVERSE_COLORS = { DC: '#2563eb', Marvel: '#dc2626', OC: '#7c3aed', Mixed: '#d97706', Other: '#6b7280' };
     const PRIORITY_ORDER = { P1: 0, P2: 1, P3: 2, P4: 3, null: 4 };
     const CATEGORY_LABELS = {
@@ -539,6 +548,7 @@
     window.MissionControlState = {
         PIPELINE_STEPS,
         STEP_LABELS,
+        SHORT_STEP_LABELS,
         UNIVERSE_COLORS,
         PRIORITY_ORDER,
         CATEGORY_LABELS,

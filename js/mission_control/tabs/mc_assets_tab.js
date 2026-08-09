@@ -4,19 +4,19 @@
  */
 
 (() => {
-    const getS = () => window.MissionControlState;
+  const getS = () => window.MissionControlState;
 
-    function paginationHTML(totalItems) {
-        const S = getS();
-        if (!S) return '';
-        if (S.state.pageSize === 'all' && totalItems <= 50) return '';
-        const pageSize = S.state.pageSize === 'all' ? totalItems : S.state.pageSize;
-        const totalPages = Math.ceil(totalItems / Math.max(pageSize, 1)) || 1;
-        const curPage = Math.min(S.state.currentPage, totalPages);
-        const startItem = totalItems === 0 ? 0 : (curPage - 1) * pageSize + 1;
-        const endItem = Math.min(curPage * pageSize, totalItems);
+  function paginationHTML(totalItems) {
+    const S = getS();
+    if (!S) return '';
+    if (S.state.pageSize === 'all' && totalItems <= 50) return '';
+    const pageSize = S.state.pageSize === 'all' ? totalItems : S.state.pageSize;
+    const totalPages = Math.ceil(totalItems / Math.max(pageSize, 1)) || 1;
+    const curPage = Math.min(S.state.currentPage, totalPages);
+    const startItem = totalItems === 0 ? 0 : (curPage - 1) * pageSize + 1;
+    const endItem = Math.min(curPage * pageSize, totalItems);
 
-        return `<div class="mc-pagination">
+    return `<div class="mc-pagination">
       <div class="mc-pag-info">Showing ${startItem}–${endItem} of ${totalItems} items</div>
       <div class="mc-pag-controls">
         <button class="mc-btn mc-btn-ghost mc-btn-sm" id="mc-pag-prev" ${curPage <= 1 ? 'disabled' : ''}>← Prev</button>
@@ -30,20 +30,20 @@
         </select>
       </div>
     </div>`;
-    }
+  }
 
-    function assetRow(comp, steps) {
-        const S = getS();
-        const esc = S.esc;
-        const tracker = comp.tracker || {};
-        const score = S.calcReadinessForVault(comp);
-        const tags = [...(comp.tags || []), ...(tracker.trackerTags || [])].filter(Boolean);
+  function assetRow(comp, steps) {
+    const S = getS();
+    const esc = S.esc;
+    const tracker = comp.tracker || {};
+    const score = S.calcReadinessForVault(comp);
+    const tags = [...(comp.tags || []), ...(tracker.trackerTags || [])].filter(Boolean);
 
-        const isPinned = tracker.pinned;
-        const depCount = S.state.allProjects.filter(p => (p.componentIds || []).includes(comp.id)).length;
-        const isSelected = S.state.selectedIds.has(comp.id);
+    const isPinned = tracker.pinned;
+    const depCount = S.state.allProjects.filter(p => (p.componentIds || []).includes(comp.id)).length;
+    const isSelected = S.state.selectedIds.has(comp.id);
 
-        return `<tr class="mc-row${isPinned ? ' mc-row--pinned' : ''}${isSelected ? ' mc-row--selected' : ''}" data-id="${comp.id}" data-universe="${esc(tracker.universe || '')}">
+    return `<tr class="mc-row${isPinned ? ' mc-row--pinned' : ''}${isSelected ? ' mc-row--selected' : ''}" data-id="${comp.id}" data-universe="${esc(tracker.universe || '')}">
       <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${comp.id}" ${isSelected ? 'checked' : ''}></td>
       <td class="mc-cell-name">
         <button class="mc-name-link" data-vault-id="${comp.id}" title="Edit in Vault">${esc(comp.name)}</button>
@@ -71,12 +71,12 @@
         ${comp.category === 'character' ? `<button class="mc-action-btn mc-open-interview" data-char-id="${comp.id}" data-name="${esc(comp.name)}" title="Character Voice Rapid Interview Tester">🎙️</button>` : ''}
       </td>
     </tr>`;
-    }
+  }
 
-    function stubRow(stub, steps) {
-        const S = getS();
-        const esc = S.esc;
-        return `<tr class="mc-row mc-row--stub" data-stub-id="${stub.id}">
+  function stubRow(stub, steps) {
+    const S = getS();
+    const esc = S.esc;
+    return `<tr class="mc-row mc-row--stub" data-stub-id="${stub.id}">
       <td class="mc-cell-name" colspan="2">
         <span class="mc-stub-icon">💡</span>
         <span class="mc-stub-name">${esc(stub.name)}</span>
@@ -93,63 +93,63 @@
         <button class="mc-btn mc-btn-ghost mc-btn-sm mc-delete-stub-btn" data-stub-id="${stub.id}" title="Remove stub">✕</button>
       </td>
     </tr>`;
-    }
+  }
 
-    function renderAssetTab(category) {
-        const S = getS();
-        if (!S) return '';
+  function renderAssetTab(category) {
+    const S = getS();
+    if (!S) return '';
 
-        S.state.activeCategory = category;
-        const steps = S.PIPELINE_STEPS[category] || S.PIPELINE_STEPS.character;
+    S.state.activeCategory = category;
+    const steps = S.PIPELINE_STEPS[category] || S.PIPELINE_STEPS.character;
 
-        let items = S.filterComponents(S.state.allComponents.filter(c => c.category === category));
-        const stubs = S.filterTrackerRecords(
-            S.state.allTrackerRecords.filter(r => r.assetType === 'concept_stub' && r.intendedCategory === category && !r.promotedToVaultId)
-        );
+    let items = S.filterComponents(S.state.allComponents.filter(c => c.category === category));
+    const stubs = S.filterTrackerRecords(
+      S.state.allTrackerRecords.filter(r => r.assetType === 'concept_stub' && r.intendedCategory === category && !r.promotedToVaultId)
+    );
 
-        items = S.sortByReadiness(items, S.calcReadinessForVault, c => c.tracker?.priority, S.state.sortDir);
+    items = S.sortByReadiness(items, S.calcReadinessForVault, c => c.tracker?.priority, S.state.sortDir);
 
-        const total = items.length;
-        const stageCounts = {};
-        steps.forEach(s => {
-            stageCounts[s] = items.filter(c => c.tracker?.pipeline?.[s]).length;
-        });
-        const lastStep = steps[steps.length - 1];
-        const publishedPct = total ? Math.round((stageCounts[lastStep] || 0) / total * 100) : 0;
+    const total = items.length;
+    const stageCounts = {};
+    steps.forEach(s => {
+      stageCounts[s] = items.filter(c => c.tracker?.pipeline?.[s]).length;
+    });
+    const lastStep = steps[steps.length - 1];
+    const publishedPct = total ? Math.round((stageCounts[lastStep] || 0) / total * 100) : 0;
 
-        const pageSize = S.state.pageSize === 'all' ? total : S.state.pageSize;
-        const totalPages = Math.ceil(total / Math.max(pageSize, 1)) || 1;
-        if (S.state.currentPage > totalPages) S.state.currentPage = totalPages;
-        if (S.state.currentPage < 1) S.state.currentPage = 1;
+    const pageSize = S.state.pageSize === 'all' ? total : S.state.pageSize;
+    const totalPages = Math.ceil(total / Math.max(pageSize, 1)) || 1;
+    if (S.state.currentPage > totalPages) S.state.currentPage = totalPages;
+    if (S.state.currentPage < 1) S.state.currentPage = 1;
 
-        const displayItems = S.state.pageSize === 'all' ? items : items.slice((S.state.currentPage - 1) * pageSize, S.state.currentPage * pageSize);
+    const displayItems = S.state.pageSize === 'all' ? items : items.slice((S.state.currentPage - 1) * pageSize, S.state.currentPage * pageSize);
 
-        let rows = '';
-        if (S.state.groupByPriority) {
-            ['P1', 'P2', 'P3', 'P4', null].forEach(prio => {
-                const group = displayItems.filter(c => (c.tracker?.priority || null) === prio);
-                if (!group.length) return;
-                rows += `<tr class="mc-group-header"><td colspan="${steps.length + 7}">
+    let rows = '';
+    if (S.state.groupByPriority) {
+      ['P1', 'P2', 'P3', 'P4', null].forEach(prio => {
+        const group = displayItems.filter(c => (c.tracker?.priority || null) === prio);
+        if (!group.length) return;
+        rows += `<tr class="mc-group-header"><td colspan="${steps.length + 7}">
           ${prio ? S.priorityBadge(prio) : '<span class="mc-badge" style="background:#6b728022;color:var(--text-muted);border:1px solid #6b728044;">No Priority</span>'}
           <span style="color:var(--text-muted); font-size:0.8rem; margin-left:6px;">${group.length} items</span>
         </td></tr>`;
-                rows += group.map(c => assetRow(c, steps)).join('');
-            });
-        } else {
-            rows = displayItems.map(c => assetRow(c, steps)).join('');
-        }
+        rows += group.map(c => assetRow(c, steps)).join('');
+      });
+    } else {
+      rows = displayItems.map(c => assetRow(c, steps)).join('');
+    }
 
-        const stubRows = stubs.map(stub => stubRow(stub, steps)).join('');
-        const pagHTML = paginationHTML(total);
+    const stubRows = stubs.map(stub => stubRow(stub, steps)).join('');
+    const pagHTML = paginationHTML(total);
 
-        return `
+    return `
       <div class="mc-stage-summary">
         ${steps.map(s => {
-            const n = stageCounts[s] || 0;
-            return `<div class="mc-stage-chip" title="${n}/${total} items at ${S.STEP_LABELS[s] || s}">
+      const n = stageCounts[s] || 0;
+      return `<div class="mc-stage-chip" title="${n}/${total} items at ${S.STEP_LABELS[s] || s}">
             <span>${S.STEP_LABELS[s] || s}</span><strong>${n}</strong>
           </div>`;
-        }).join('')}
+    }).join('')}
         <div class="mc-stage-chip mc-stage-chip--published" title="${publishedPct}% published">
           <span>Published %</span><strong>${publishedPct}%</strong>
         </div>
@@ -167,7 +167,7 @@
               <th>Role</th>
               <th>Project</th>
               <th>Priority</th>
-              ${steps.map(s => `<th class="mc-pipe-th" title="${S.STEP_LABELS[s] || s}">${(S.STEP_LABELS[s] || s).substring(0, 4)}</th>`).join('')}
+              ${steps.map(s => `<th class="mc-pipe-th" title="${S.STEP_LABELS[s] || s}">${S.SHORT_STEP_LABELS?.[s] || S.STEP_LABELS[s] || s}</th>`).join('')}
               <th>Tags</th>
               <th>Readiness</th>
               <th>Actions</th>
@@ -180,8 +180,8 @@
         </table>
       </div>
       ${pagHTML}`;
-    }
+  }
 
-    window.MissionControlTabs = window.MissionControlTabs || {};
-    window.MissionControlTabs.renderAssetTab = renderAssetTab;
+  window.MissionControlTabs = window.MissionControlTabs || {};
+  window.MissionControlTabs.renderAssetTab = renderAssetTab;
 })();

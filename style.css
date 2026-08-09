@@ -2500,6 +2500,125 @@ main#main-canvas {
   border-color: var(--accent);
 }
 
+/* Mission Control Buttons & Sort Toggles */
+.mc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  font-family: inherit;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.mc-btn-sm {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.mc-btn-primary {
+  background: var(--accent, #6366f1);
+  color: #ffffff;
+  border-color: var(--accent, #6366f1);
+}
+
+.mc-btn-primary:hover {
+  background: var(--accent-hover, #4f46e5);
+  border-color: var(--accent-hover, #4f46e5);
+}
+
+.mc-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f3f4f6);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+}
+
+.mc-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.mc-btn-accent {
+  background: #8b5cf6;
+  color: #ffffff;
+  border-color: #8b5cf6;
+}
+
+.mc-btn-accent:hover {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+
+.mc-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #9ca3af);
+  border: 1px solid transparent;
+}
+
+.mc-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary, #f3f4f6);
+}
+
+.mc-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-primary, #111827);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  color: var(--text-primary, #f3f4f6);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.mc-sort-btn:hover {
+  border-color: var(--accent, #6366f1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mc-sort-btn.active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: var(--accent, #6366f1);
+  color: #a5b4fc;
+}
+
+.mc-stub-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.mc-stub-icon {
+  margin-right: 6px;
+  font-size: 0.85rem;
+}
+
+.mc-stub-name {
+  font-weight: 600;
+  color: var(--text-primary, #f3f4f6);
+}
+
 .mc-badge-select {
   appearance: none;
   -webkit-appearance: none;

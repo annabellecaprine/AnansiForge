@@ -1177,7 +1177,23 @@
     const selectionStart = isSearchFocused ? activeEl.selectionStart : 0;
     const selectionEnd = isSearchFocused ? activeEl.selectionEnd : 0;
 
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    const viewScrollTop = view ? view.scrollTop : 0;
+    const contentScrollTop = contentEl ? contentEl.scrollTop : 0;
+    const oldTableWrap = contentEl ? contentEl.querySelector('.mc-table-wrap') : null;
+    const tableScrollTop = oldTableWrap ? oldTableWrap.scrollTop : 0;
+    const tableScrollLeft = oldTableWrap ? oldTableWrap.scrollLeft : 0;
+
     contentEl.innerHTML = html;
+
+    window.scrollTo(0, scrollY);
+    if (view) view.scrollTop = viewScrollTop;
+    if (contentEl) contentEl.scrollTop = contentScrollTop;
+    const newTableWrap = contentEl ? contentEl.querySelector('.mc-table-wrap') : null;
+    if (newTableWrap) {
+      newTableWrap.scrollTop = tableScrollTop;
+      newTableWrap.scrollLeft = tableScrollLeft;
+    }
 
     if (isSearchFocused) {
       const searchEl = document.getElementById('mc-search');
