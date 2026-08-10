@@ -68,7 +68,7 @@
     const S = getS();
     const esc = S.esc;
     const score = S.calcReadinessForRecord(rec);
-    const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)' };
+    const visColors = { Public: 'var(--success)', Unlisted: 'var(--warning)', Private: 'var(--text-muted)', 'Pre-Release': '#a855f7' };
     const linkedProj = S.state.allProjects.find(p => p.id === rec.projectId);
     const sourceStory = rec.sourceStoryId ? S.state.allTrackerRecords.find(r => r.id === rec.sourceStoryId) : null;
 
@@ -88,7 +88,7 @@
       <td>
         <select class="mc-vis-select" data-id="${rec.id}" style="color:${visColors[rec.visibility] || 'var(--text-muted)'}">
           <option value="">—</option>
-          ${['Private', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${rec.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
+          ${['Private', 'Pre-Release', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${rec.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </td>
       <td class="mc-cell-date" style="font-size:0.75rem; color:var(--text-secondary);">

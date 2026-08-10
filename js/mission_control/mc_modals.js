@@ -31,6 +31,12 @@
         botEvents.push({ type: 'private_testing', label: 'Private Testing', icon: '🧪', timestamp: createTime });
       }
     }
+    if ((rec.visibility === 'Pre-Release' || rec.scheduledDate) && !botEvents.some(e => e.type === 'pre_release' || e.type === 'scheduled_release')) {
+      const scheduledTime = rec.lifecycleEvents?.find(e => e.type === 'pre_release' || e.type === 'scheduled_release')?.timestamp || rec.createdAt || (rec.tracker && rec.tracker.createdAt);
+      if (scheduledTime) {
+        botEvents.push({ type: 'pre_release', label: 'Scheduled', icon: '⏰', timestamp: scheduledTime });
+      }
+    }
     if (!botEvents.some(e => e.type === 'public_release' || (e.label && (e.label.includes('Release') || e.label.includes('Launch'))))) {
       const releaseTime = rec.publishedDate || rec.scheduledDate;
       if (releaseTime) {
@@ -610,7 +616,7 @@
         <div class="form-group"><label>Visibility</label>
           <select id="mc-rec-visibility" class="mc-modal-input">
             <option value="">—</option>
-            ${['Private', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${r.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
+            ${['Private', 'Pre-Release', 'Unlisted', 'Public'].map(v => `<option value="${v}" ${r.visibility === v ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label>Scheduled Date</label>

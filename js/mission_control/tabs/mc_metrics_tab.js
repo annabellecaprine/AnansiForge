@@ -17,15 +17,18 @@
     const allReleases = S.state.allTrackerRecords.filter(r => r.assetType === 'release');
     let filteredBySeriesAll = seriesFilter !== 'all' ? allReleases.filter(r => (r.series || 'standard') === seriesFilter) : allReleases;
 
-    // Categorize into 3 distinct pools
+    // Categorize into 4 distinct pools
     const isPrivate = r => r.visibility === 'Private' || r.status === 'Private';
-    const publicReleases = filteredBySeriesAll.filter(r => r.status !== 'Archived' && !isPrivate(r));
+    const isPreRelease = r => r.visibility === 'Pre-Release';
+    const publicReleases = filteredBySeriesAll.filter(r => r.status !== 'Archived' && !isPrivate(r) && !isPreRelease(r));
+    const preReleaseReleases = filteredBySeriesAll.filter(r => r.status !== 'Archived' && isPreRelease(r));
     const privateReleases = filteredBySeriesAll.filter(r => r.status !== 'Archived' && isPrivate(r));
     const archivedReleases = filteredBySeriesAll.filter(r => r.status === 'Archived');
 
     // Calculation pool for top KPIs, charts, distribution buckets, and median strictly respects toggles
     const releases = [...publicReleases];
     if (S.state.includePrivate) releases.push(...privateReleases);
+    if (S.state.includePreRelease) releases.push(...preReleaseReleases);
     if (S.state.includeArchived) releases.push(...archivedReleases);
 
     const hasMetrics = r => r.metrics?.messages > 0 || r.metrics?.uniqueChats > 0 || r.metrics?.favorites > 0;
@@ -33,6 +36,7 @@
     const noMetrics = publicReleases.filter(r => S.isReleasePublished(r) && !hasMetrics(r));
 
     const publicWithMetrics = publicReleases.filter(hasMetrics);
+    const preReleaseWithMetrics = preReleaseReleases.filter(hasMetrics);
     const privateWithMetrics = privateReleases.filter(hasMetrics);
     const archivedWithMetrics = archivedReleases.filter(hasMetrics);
 
@@ -53,16 +57,18 @@
     });
 
     // Main Leaderboard Pool (matches toggles or shows public releases by default)
-    const mainLeaderboardPool = S.state.includePrivate && S.state.includeArchived
-      ? [...publicWithMetrics, ...privateWithMetrics, ...archivedWithMetrics]
-      : (S.state.includePrivate ? [...publicWithMetrics, ...privateWithMetrics] : (S.state.includeArchived ? [...publicWithMetrics, ...archivedWithMetrics] : publicWithMetrics));
+    const mainLeaderboardPool = [...publicWithMetrics];
+    if (S.state.includePrivate) mainLeaderboardPool.push(...privateWithMetrics);
+    if (S.state.includePreRelease) mainLeaderboardPool.push(...preReleaseWithMetrics);
+    if (S.state.includeArchived) mainLeaderboardPool.push(...archivedWithMetrics);
 
     const sorted = sortItems(mainLeaderboardPool);
+    const preReleaseSorted = sortItems(preReleaseReleases);
     const privateSorted = sortItems(privateReleases);
     const archivedSorted = sortItems(archivedReleases);
     const sortLabel = sortMode === 'chats' ? 'Unique Chats' : sortMode === 'mpc' ? 'Msg / Chat (MpC)' : sortMode === 'favorites' ? 'Favorites' : 'Messages';
 
-    // Totals from calculation pool (strictly respecting includePrivate & includeArchived)
+    // Totals from calculation pool (strictly respecting toggles)
     const totalMsgs = withMetrics.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
     const totalChats = withMetrics.reduce((s, r) => s + (r.metrics?.uniqueChats || 0), 0);
     const totalFavs = withMetrics.reduce((s, r) => s + (r.metrics?.favorites || 0), 0);
@@ -102,8 +108,8 @@
         if (dMpc > 0) deltaMpcHtml = `<span class="mc-delta-badge mc-delta-up" title="Previous MpC: ${prevMpcNum.toFixed(2)}">▲ +${dMpc.toFixed(2)}</span>`;
       }
 
-      const rowBadge = rowType === 'private' ? '<span class="mc-badge-private">🔒</span> ' : rowType === 'archived' ? '<span class="mc-badge-archived">📦</span> ' : '';
-      return `<tr class="mc-row${rowType === 'archived' ? ' mc-row-archived' : rowType === 'private' ? ' mc-row-private' : ''}">
+      const rowBadge = rowType === 'private' ? '<span class="mc-badge-private">🔒</span> ' : rowType === 'archived' ? '<span class="mc-badge-archived">📦</span> ' : rowType === 'pre-release' ? '<span class="mc-badge-pre-release">📡</span> ' : '';
+      return `<tr class="mc-row${rowType === 'archived' ? ' mc-row-archived' : rowType === 'private' ? ' mc-row-private' : rowType === 'pre-release' ? ' mc-row-pre-release' : ''}">
         <td class="mc-metrics-rank">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</td>
         <td class="mc-cell-name">${rowBadge}<button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button></td>
         <td>${S.seriesBadge(rec.series)}</td>
@@ -133,13 +139,21 @@
       <th>Snapshot</th><th></th>
     </tr></thead>`;
 
-    const filterScopeLabel = (S.state.includePrivate && S.state.includeArchived)
+    const scopes = [];
+    if (S.state.includePreRelease) scopes.push('pre-release');
+    if (S.state.includePrivate) scopes.push('private');
+    if (S.state.includeArchived) scopes.push('archived');
+    const filterScopeLabel = scopes.length === 3
       ? ' (all)'
-      : S.state.includePrivate ? ' (public + private)' : S.state.includeArchived ? ' (public + archived)' : ' (public releases)';
+      : (scopes.length > 0 ? ` (public + ${scopes.join(' + ')})` : ' (public releases)');
 
     return `
       <!-- Toggles Bar -->
       <div class="mc-metrics-toggles-bar" style="display:flex; gap:16px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.82rem; color:var(--text-secondary); user-select:none;">
+          <input type="checkbox" id="mc-include-prerelease-cb" ${S.state.includePreRelease ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;" />
+          Include Pre-Release Bots
+        </label>
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.82rem; color:var(--text-secondary); user-select:none;">
           <input type="checkbox" id="mc-include-private-cb" ${S.state.includePrivate ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;" />
           Include Private Bots
@@ -148,7 +162,7 @@
           <input type="checkbox" id="mc-include-archived-cb" ${S.state.includeArchived ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;" />
           Include Archived Bots
         </label>
-        ${(S.state.includePrivate || S.state.includeArchived) ? `<span style="font-size:0.75rem; color:var(--text-muted);">KPIs, charts, and distribution include ${filterScopeLabel.replace(/[\(\)]/g, '').trim()} data</span>` : ''}
+        ${(S.state.includePrivate || S.state.includePreRelease || S.state.includeArchived) ? `<span style="font-size:0.75rem; color:var(--text-muted);">KPIs, charts, and distribution include ${filterScopeLabel.replace(/[\(\)]/g, '').trim()} data</span>` : ''}
       </div>
 
       <!-- Top KPI Cards -->
@@ -257,10 +271,31 @@
         : `<div class="mc-table-wrap">
             <table class="mc-table">
               ${leaderboardTableHeaders}
-              <tbody>${sorted.map((r, i) => metricRow(r, i + 1, r.status === 'Archived' ? 'archived' : (isPrivate(r) ? 'private' : 'public'))).join('')}</tbody>
+              <tbody>${sorted.map((r, i) => metricRow(r, i + 1, r.status === 'Archived' ? 'archived' : (isPrivate(r) ? 'private' : (isPreRelease(r) ? 'pre-release' : 'public')))).join('')}</tbody>
             </table>
           </div>`}
       </div>
+
+      <!-- Pre-Release Bots Section -->
+      ${preReleaseReleases.length > 0 ? `
+      <div class="mc-archived-section mc-pre-release-section${S.state.preReleaseExpanded ? '' : ' collapsed'}" style="margin-top:24px;">
+        <div class="mc-archived-section-header" id="mc-pre-release-toggle">
+          <h3 class="mc-section-title" style="margin-bottom:0; cursor:pointer;">
+            📅 Scheduled Pre-Release
+            <span class="mc-section-count">${preReleaseReleases.length}</span>
+            <span class="mc-archived-chevron">${S.state.preReleaseExpanded ? '▼' : '▶'}</span>
+          </h3>
+        </div>
+        <div class="mc-archived-section-body">
+          ${preReleaseSorted.length > 0 ? `
+          <div class="mc-table-wrap" style="margin-top:12px;">
+            <table class="mc-table">
+              ${leaderboardTableHeaders}
+              <tbody>${preReleaseSorted.map((r, i) => metricRow(r, i + 1, 'pre-release')).join('')}</tbody>
+            </table>
+          </div>` : '<p class="mc-empty-state" style="margin-top:8px;">No pre-release bots with metrics.</p>'}
+        </div>
+      </div>` : ''}
 
       <!-- 2. Private Bots Section -->
       ${privateReleases.length > 0 ? `

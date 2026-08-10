@@ -602,6 +602,9 @@
           if (oldVis === 'Private' && newVis && newVis !== 'Private') {
             lifecycleEvents.push({ type: 'private_testing_ended', label: 'Private Testing Ended', icon: '🔬', timestamp: now });
           }
+          if (oldVis !== 'Pre-Release' && newVis === 'Pre-Release') {
+            lifecycleEvents.push({ type: 'pre_release', label: 'Scheduled Pre-Release', icon: '⏰', timestamp: now });
+          }
           if (oldVis !== 'Public' && newVis === 'Public') {
             lifecycleEvents.push({ type: 'public_release', label: 'Public Release', icon: '🚀', timestamp: now });
           }

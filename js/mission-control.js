@@ -397,6 +397,14 @@
         return;
       }
 
+      // Toggle Pre-Release Bots section
+      const preReleaseToggle = t.closest('#mc-pre-release-toggle');
+      if (preReleaseToggle) {
+        state.preReleaseExpanded = !state.preReleaseExpanded;
+        await renderCurrentTab();
+        return;
+      }
+
       // Toggle Private Bots section
       const privateToggle = t.closest('#mc-private-toggle');
       if (privateToggle) {
@@ -907,6 +915,12 @@
       if (t.id === 'mc-filter-series') {
         state.filters.series = t.value;
         state.currentPage = 1;
+        await renderCurrentTab();
+        return;
+      }
+
+      if (t.id === 'mc-include-prerelease-cb') {
+        state.includePreRelease = t.checked;
         await renderCurrentTab();
         return;
       }

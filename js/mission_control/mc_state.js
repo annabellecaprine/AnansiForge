@@ -125,8 +125,10 @@
         metricsSeriesFilter: 'all',
         includeArchived: false,
         includePrivate: false,
+        includePreRelease: false,
         archivedExpanded: false,
         privateExpanded: false,
+        preReleaseExpanded: false,
         activeTagFilter: '',
         editingRecord: null,           // modal state
         calendarWeekOffset: 0
