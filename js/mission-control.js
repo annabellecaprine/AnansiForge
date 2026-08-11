@@ -1012,27 +1012,6 @@
         return;
       }
 
-      // Inline Visibility select
-      if (t.matches('.mc-vis-select')) {
-        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
-        if (rec) {
-          await window.ForgeDB.saveTrackerRecord({ ...rec, visibility: t.value || null });
-          await loadAll();
-          await renderCurrentTab();
-        }
-        return;
-      }
-
-      // Inline Date input
-      if (t.matches('.mc-date-input')) {
-        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
-        if (rec) {
-          await window.ForgeDB.saveTrackerRecord({ ...rec, scheduledDate: t.value || null });
-          await loadAll();
-          await renderCurrentTab();
-        }
-        return;
-      }
 
       if (t.id === 'mc-pag-size-select') {
         state.pageSize = t.value === 'all' ? 'all' : parseInt(t.value, 10);
@@ -1079,17 +1058,6 @@
         return;
       }
 
-      const uniSelect = t.id === 'mc-filter-universe' ? t : t.closest('#mc-filter-universe');
-      if (uniSelect) { state.filters.universe = uniSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
-
-      const prioSelect = t.id === 'mc-filter-priority' ? t : t.closest('#mc-filter-priority');
-      if (prioSelect) { state.filters.priority = prioSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
-
-      const roleSelect = t.id === 'mc-filter-role' ? t : t.closest('#mc-filter-role');
-      if (roleSelect) { state.filters.role = roleSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
-
-      const seriesSelect = t.id === 'mc-filter-series' ? t : t.closest('#mc-filter-series');
-      if (seriesSelect) { state.filters.series = seriesSelect.value; state.currentPage = 1; await renderCurrentTab(); return; }
 
       if (t.id === 'mc-bulk-role') {
         const roleVal = t.value;
