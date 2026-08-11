@@ -32,7 +32,7 @@
   const mainCanvas = document.getElementById('main-canvas');
   const sidebarList = document.getElementById('vault-list');
   const searchInput = document.getElementById('vault-search');
-  
+
   // Vault filters / actions rows
   const filterCat = document.getElementById('vault-category-filter');
   const filterLineage = document.getElementById('vault-lineage-filter');
@@ -134,7 +134,7 @@
 
   function switchSidebarTab(tabName) {
     activeSidebarTab = tabName;
-    
+
     // Deactivate Mission Control if open
     const btnMC = document.getElementById('btn-mission-control');
     if (btnMC) btnMC.classList.remove('active');
@@ -168,7 +168,7 @@
     if (activeSidebarTab !== 'vault') return;
     try {
       const components = await window.ForgeDB.getAllComponents();
-      
+
       // Update Lineage Filter dropdown options
       const activeLineageFilter = filterLineage.value;
       const activeCat = filterCat.value;
@@ -215,9 +215,9 @@
       const scenarioVal = filterScenario.value;
 
       const filtered = components.filter(comp => {
-        const matchesSearch = comp.name.toLowerCase().includes(search) || 
-                              (comp.content || '').toLowerCase().includes(search) ||
-                              (comp.tags || []).some(t => t.toLowerCase().includes(search));
+        const matchesSearch = comp.name.toLowerCase().includes(search) ||
+          (comp.content || '').toLowerCase().includes(search) ||
+          (comp.tags || []).some(t => t.toLowerCase().includes(search));
         const matchesCat = cat === 'all' || comp.category === cat;
         const matchesLineage = lineageVal === 'all' || comp.lineage === lineageVal;
         const matchesScenario = scenarioVal === 'all' || (comp.scenarios || []).includes(scenarioVal);
@@ -254,7 +254,7 @@
 
       // Render in chunks of 60 items for 500+ scale performance
       sidebarList.innerHTML = '';
-      
+
       if (filtered.length === 0) {
         sidebarList.innerHTML = `
           <div style="text-align:center; padding:30px 10px; color:var(--text-muted); font-size:0.85rem;">
@@ -271,15 +271,15 @@
         const item = document.createElement('div');
         const isPinned = comp.tracker?.pinned === true;
         item.className = `vault-item${isPinned ? ' vault-item--pinned' : ''}`;
-        
-        const templateBadge = comp.isTemplate 
-          ? `<span class="template-badge">⭐ Template</span>` 
+
+        const templateBadge = comp.isTemplate
+          ? `<span class="template-badge">⭐ Template</span>`
           : '';
 
         const pinIcon = isPinned ? `<span class="pin-badge" title="Pinned">📌</span>` : '';
 
-        const lineageLabel = comp.lineage 
-          ? `<span class="vault-item-lineage">🔗 ${escapeHTML(comp.lineage)}</span>` 
+        const lineageLabel = comp.lineage
+          ? `<span class="vault-item-lineage">🔗 ${escapeHTML(comp.lineage)}</span>`
           : '<span></span>';
 
         const scenarioPills = (comp.scenarios && comp.scenarios.length > 0)
@@ -368,7 +368,7 @@
 
       const filtered = projects.filter(proj => {
         return proj.name.toLowerCase().includes(search) ||
-               proj.componentIds.some(id => id.toLowerCase().includes(search));
+          proj.componentIds.some(id => id.toLowerCase().includes(search));
       });
 
       // Update Stats Banner
@@ -395,7 +395,7 @@
       filtered.forEach(proj => {
         const item = document.createElement('div');
         item.className = 'vault-item';
-        
+
         const count = proj.componentIds ? proj.componentIds.length : 0;
         const relCount = proj.relationships ? proj.relationships.length : 0;
 
@@ -495,7 +495,7 @@
         scenarioRules.value = parsed.rules || '';
         scenarioTone.value = parsed.tone || '';
       }
-      
+
       tabEditorRaw.classList.remove('active');
       tabEditorForm.classList.add('active');
       editorRawPane.style.display = 'none';
@@ -538,7 +538,7 @@
           updateTokenCount();
         }
       }
-      
+
       tabEditorForm.classList.remove('active');
       tabEditorRaw.classList.add('active');
       editorFormPane.style.display = 'none';
@@ -549,7 +549,7 @@
 
   async function openComponentEditor(id = null) {
     editingComponentId = id;
-    
+
     compNameInput.value = '';
     compContentInput.value = '';
     compCategorySelect.value = 'character';
@@ -588,7 +588,7 @@
         compIsTemplateCheck.checked = comp.isTemplate === true;
         btnCreateVariant.style.display = comp.isTemplate ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
-        
+
         const roleEl = document.getElementById('comp-role');
         if (roleEl) roleEl.value = comp.tracker?.role || '';
         const factionEl = document.getElementById('comp-faction');
@@ -828,10 +828,10 @@
     try {
       const savedVariant = await window.ForgeDB.saveComponent(variantRecord);
       showToast(`Variant "${variantName}" created!`, 'success');
-      
+
       // Open the new variant in editor
       await openComponentEditor(savedVariant.id);
-      
+
       // Focus target field
       if (category === 'character') {
         if (charNotes) {
@@ -905,7 +905,7 @@
 
   async function handleImportFiles(files) {
     if (!files || files.length === 0) return;
-    
+
     const file = files[0];
     const extension = file.name.split('.').pop().toLowerCase();
 
@@ -990,13 +990,13 @@
   async function handleExportVault() {
     try {
       const bundle = await window.ForgeDB.exportVault();
-      const json   = JSON.stringify(bundle, null, 2);
-      const blob   = new Blob([json], { type: 'application/json' });
-      const url    = URL.createObjectURL(blob);
-      const date   = new Date().toISOString().slice(0, 10);
-      const a      = document.createElement('a');
-      a.href       = url;
-      a.download   = `anansi-forge-backup-${date}.json`;
+      const json = JSON.stringify(bundle, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const date = new Date().toISOString().slice(0, 10);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `anansi-forge-backup-${date}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1011,11 +1011,15 @@
 
   async function handleRestoreVault(file) {
     try {
-      const text   = await file.text();
+      const text = await file.text();
       const bundle = JSON.parse(text);
-      const total  = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
-      const ok = confirm(`This will merge ${total} records from "${file.name}" into your Vault. Existing items with the same ID will be overwritten. Continue?`);
-      if (!ok) return;
+      const total = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
+      const backupFirst = confirm(`⚠️ Restoring "${file.name}" will merge/overwrite ${total} records in your Vault.\n\nWould you like to download a safety backup of your current Vault first?`);
+      if (backupFirst) {
+        await handleExportVault();
+      }
+      const confirmProceed = confirm(`Proceed with importing ${total} records into your Vault?`);
+      if (!confirmProceed) return;
       await window.ForgeDB.importVault(bundle);
       showToast(`Vault restored — ${total} records imported.`, 'success');
       refreshVaultList();
@@ -1036,9 +1040,9 @@
 
     const config = {
       provider: apiProvider.value,
-      model:    apiModel.value.trim(),
-      apiKey:   apiKey.value.trim(),
-      baseUrl:  apiUrl.value.trim(),
+      model: apiModel.value.trim(),
+      apiKey: apiKey.value.trim(),
+      baseUrl: apiUrl.value.trim(),
       maxTokens: 16
     };
 
@@ -1148,7 +1152,7 @@
 
   function stitchCharacterMarkdown(sections) {
     const parts = [];
-    
+
     if (sections.overview?.trim()) {
       parts.push(`## Overview\n\n${sections.overview.trim()}`);
     }
@@ -1164,7 +1168,7 @@
     if (sections.abilities?.trim()) {
       parts.push(`## Abilities\n\n${sections.abilities.trim()}`);
     }
-    
+
     const listFields = [
       { key: 'strengths', label: 'Strengths' },
       { key: 'weaknesses', label: 'Weaknesses' },
@@ -1312,6 +1316,7 @@
     window.ProjectAssembler.init();
     window.ParlorWizard.init();
     window.SandboxPlaytest.init();
+    if (window.OmniSearch) window.OmniSearch.init();
 
     // Main UI Events
     document.getElementById('btn-new-component').addEventListener('click', () => openComponentEditor(null));
@@ -1558,9 +1563,9 @@
         openComponentEditor(null);
         if (prefill) {
           setTimeout(() => {
-            if (prefill.name) { const el = document.getElementById('comp-name'); if(el) el.value = prefill.name; }
-            if (prefill.category) { const el = document.getElementById('comp-category'); if(el) el.value = prefill.category; }
-            if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if(el) el.value = prefill.tags.join(', '); }
+            if (prefill.name) { const el = document.getElementById('comp-name'); if (el) el.value = prefill.name; }
+            if (prefill.category) { const el = document.getElementById('comp-category'); if (el) el.value = prefill.category; }
+            if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if (el) el.value = prefill.tags.join(', '); }
           }, 100);
         }
       }
