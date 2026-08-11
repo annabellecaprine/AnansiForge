@@ -1032,12 +1032,21 @@
       const text = await file.text();
       const bundle = JSON.parse(text);
       const total = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
-      const backupFirst = confirm(`⚠️ Restoring "${file.name}" will merge/overwrite ${total} records in your Vault.\n\nWould you like to download a safety backup of your current Vault first?`);
-      if (backupFirst) {
+
+      const wantBackup = confirm(
+        `⚠️ This import will merge or overwrite ${total} Vault records.\n\n` +
+        `Recommended: Download a backup of your current Vault before continuing?\n\n` +
+        `• OK = Download backup, then continue with the import.\n` +
+        `• Cancel = Continue without creating a backup.`
+      );
+
+      if (wantBackup) {
         await handleExportVault();
       }
-      const confirmProceed = confirm(`Proceed with importing ${total} records into your Vault?`);
+
+      const confirmProceed = confirm(`Proceed with importing ${total} records from "${file.name}" into your Vault?`);
       if (!confirmProceed) return;
+
       await window.ForgeDB.importVault(bundle);
       showToast(`Vault restored — ${total} records imported.`, 'success');
       refreshVaultList();
