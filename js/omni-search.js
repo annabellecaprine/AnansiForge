@@ -1,7 +1,7 @@
 /**
  * Global Omni-Search (Ctrl+K) for AnansiForge
  */
-(function() {
+(function () {
     let overlayEl, inputEl, resultsEl;
     let isOpen = false;
     let dataCache = { components: [], projects: [], tracker: [] };
@@ -45,12 +45,16 @@
         inputEl.addEventListener('input', handleInput);
         inputEl.addEventListener('keydown', handleKeydown);
 
-        document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        const triggerBtn = document.getElementById('btn-omni-search');
+        if (triggerBtn) triggerBtn.addEventListener('click', open);
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
                 e.preventDefault();
+                e.stopPropagation();
                 toggle();
             }
-        });
+        }, true);
     }
 
     async function loadData() {
@@ -103,9 +107,9 @@
         if (!query) {
             return [];
         }
-        
+
         query = query.toLowerCase();
-        
+
         const matchItem = (item) => {
             const tracker = item.tracker || {};
             const searchFields = [
@@ -116,7 +120,7 @@
                 item.project || tracker.project,
                 ...(Array.isArray(item.tags) ? item.tags : [])
             ];
-            
+
             for (const field of searchFields) {
                 if (typeof field === 'string') {
                     const fieldLower = field.toLowerCase();
@@ -174,7 +178,7 @@
         }
 
         const groups = searchData(query);
-        
+
         if (groups.length === 0) {
             resultsEl.innerHTML = '';
             filteredResults = [];
@@ -184,7 +188,7 @@
 
         filteredResults = [];
         let html = '';
-        
+
         groups.forEach(group => {
             html += `<div class="omni-category-header">${group.icon} ${escapeHTML(group.category)}</div>`;
             group.items.forEach(item => {
@@ -217,7 +221,7 @@
         resultsEl.innerHTML = html;
         selectedIndex = -1;
         updateSelection();
-        
+
         // Add click listeners to results
         resultsEl.querySelectorAll('.omni-result').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -277,7 +281,7 @@
 
     function executeResult(item) {
         close();
-        
+
         if (item._uiType === 'component') {
             if (window.ForgeAppBridge && window.ForgeAppBridge.openEditor) {
                 window.ForgeAppBridge.openEditor(item.id);
