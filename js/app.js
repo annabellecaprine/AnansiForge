@@ -1027,24 +1027,93 @@
     }
   }
 
+  function showConfirmModal({ title, message, okText = 'OK', cancelText = 'Cancel', danger = false }) {
+    return new Promise((resolve) => {
+      let modal = document.getElementById('custom-confirm-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'custom-confirm-modal';
+        modal.className = 'omni-overlay hidden';
+        modal.style.zIndex = '10000';
+        modal.innerHTML = `
+          <div class="omni-backdrop"></div>
+          <div class="omni-panel" style="max-width: 480px; padding: 24px; text-align: left;">
+            <h3 id="custom-confirm-title" style="margin-top:0; margin-bottom: 12px; font-size: 1.1rem; color: var(--text-primary); font-family: var(--font-sans);"></h3>
+            <div id="custom-confirm-msg" style="margin-bottom: 24px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; font-family: var(--font-sans);"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+              <button id="custom-confirm-cancel" class="btn btn-ghost" style="padding: 8px 16px;"></button>
+              <button id="custom-confirm-ok" class="btn btn-primary" style="padding: 8px 16px;"></button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+
+      const titleEl = modal.querySelector('#custom-confirm-title');
+      const msgEl = modal.querySelector('#custom-confirm-msg');
+      const okBtn = modal.querySelector('#custom-confirm-ok');
+      const cancelBtn = modal.querySelector('#custom-confirm-cancel');
+      const backdrop = modal.querySelector('.omni-backdrop');
+
+      titleEl.innerHTML = title;
+      msgEl.innerHTML = message;
+      okBtn.textContent = okText;
+      cancelBtn.textContent = cancelText;
+
+      if (danger) {
+        okBtn.className = 'btn btn-danger';
+      } else {
+        okBtn.className = 'btn btn-primary';
+      }
+
+      const cleanup = (result) => {
+        modal.classList.add('hidden');
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        backdrop.removeEventListener('click', onCancel);
+        window.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+
+      const onOk = () => cleanup(true);
+      const onCancel = () => cleanup(false);
+      const onKey = (e) => {
+        if (e.key === 'Escape') cleanup(false);
+      };
+
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      backdrop.addEventListener('click', onCancel);
+      window.addEventListener('keydown', onKey);
+
+      modal.classList.remove('hidden');
+    });
+  }
+
   async function handleRestoreVault(file) {
     try {
       const text = await file.text();
       const bundle = JSON.parse(text);
       const total = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
 
-      const wantBackup = confirm(
-        `⚠️ This import will merge or overwrite ${total} Vault records.\n\n` +
-        `Recommended: Download a backup of your current Vault before continuing?\n\n` +
-        `• OK = Download backup, then continue with the import.\n` +
-        `• Cancel = Continue without creating a backup.`
-      );
+      const wantBackup = await showConfirmModal({
+        title: '⚠️ Vault Restore Backup Recommendation',
+        message: `This import will merge or overwrite <strong>${total} Vault records</strong>.<br><br><strong>Recommended:</strong> Download a backup of your current Vault before continuing?`,
+        okText: 'Download Backup',
+        cancelText: 'Skip Backup'
+      });
 
       if (wantBackup) {
         await handleExportVault();
       }
 
-      const confirmProceed = confirm(`Proceed with importing ${total} records from "${file.name}" into your Vault?`);
+      const confirmProceed = await showConfirmModal({
+        title: '📥 Confirm Vault Import',
+        message: `Proceed with importing <strong>${total} records</strong> from <em>"${file.name}"</em> into your Vault?`,
+        okText: 'Proceed Import',
+        cancelText: 'Cancel'
+      });
+
       if (!confirmProceed) return;
 
       await window.ForgeDB.importVault(bundle);
