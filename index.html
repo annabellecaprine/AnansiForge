@@ -497,6 +497,19 @@
             </div>
           </div>
           <div class="editor-sidebar">
+            <div id="editor-timestamps-card" class="editor-info-card"
+              style="display:none; margin-bottom:12px; font-size:0.78rem;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px; align-items:center;">
+                <span style="color:var(--text-muted);">📅 Created</span>
+                <span id="comp-created-at"
+                  style="color:var(--text-primary); font-family:var(--font-mono); font-weight:500;">—</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="color:var(--text-muted);">✏️ Last Edited</span>
+                <span id="comp-modified-at"
+                  style="color:var(--text-primary); font-family:var(--font-mono); font-weight:500;">—</span>
+              </div>
+            </div>
             <div class="form-group">
               <label for="comp-category">Category</label>
               <select id="comp-category">

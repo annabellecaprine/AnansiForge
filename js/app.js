@@ -596,10 +596,28 @@
 
         updateTokenCount();
 
+        const timestampsCard = document.getElementById('editor-timestamps-card');
+        const createdEl = document.getElementById('comp-created-at');
+        const modifiedEl = document.getElementById('comp-modified-at');
+        if (timestampsCard) {
+          timestampsCard.style.display = 'block';
+          const fmt = (str) => {
+            if (!str) return '—';
+            const d = new Date(str);
+            if (isNaN(d.getTime())) return '—';
+            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+              d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+          };
+          if (createdEl) createdEl.textContent = fmt(comp.createdAt);
+          if (modifiedEl) modifiedEl.textContent = fmt(comp.modifiedAt || comp.updatedAt || comp.createdAt);
+        }
+
         // Load Dependency Map (projects referencing this component)
         await loadComponentDependencies(id);
       }
     } else {
+      const timestampsCard = document.getElementById('editor-timestamps-card');
+      if (timestampsCard) timestampsCard.style.display = 'none';
       const depContainer = document.getElementById('editor-dep-container');
       if (depContainer) depContainer.innerHTML = '';
     }
