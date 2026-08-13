@@ -333,6 +333,17 @@
         return `<span class="mc-badge mc-badge--status" style="background:${c}18; color:${c}; border:1px solid ${c}44;">${esc(s)}</span>`;
     }
 
+    function storyStatusSelectBadge(status, recordId) {
+        const sVal = status || 'Active';
+        const c = STORY_STATUS_COLORS[sVal] || '#10b981';
+        const statuses = ['Active', 'Promoted', 'Archived'];
+        return `<select class="mc-badge-select mc-story-status-select" data-id="${recordId}"
+      style="background:${c}18; color:${c}; border:1px solid ${c}44; border-radius:12px; padding:2px 8px; font-size:0.75rem; font-weight:600; cursor:pointer; outline:none; text-align:center;"
+      title="Click to change Story Status in place">
+      ${statuses.map(st => `<option value="${st}" ${sVal === st ? 'selected' : ''} style="background:var(--bg-secondary); color:var(--text-primary);">${st}</option>`).join('')}
+    </select>`;
+    }
+
     function isMatchingUniverse(itemUniRaw, targetUniRaw) {
         if (!targetUniRaw || targetUniRaw === 'all') return true;
         if (!itemUniRaw) return false;
@@ -593,6 +604,7 @@
         seriesBadge,
         seriesSelectBadge,
         storyStatusBadge,
+        storyStatusSelectBadge,
         isMatchingUniverse,
         getEffectiveUniversesList,
         universeSelectOptionsHTML,

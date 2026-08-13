@@ -991,6 +991,18 @@
         return;
       }
 
+      // Inline Story Status select
+      if (t.matches('.mc-story-status-select')) {
+        const rec = state.allTrackerRecords.find(r => r.id === t.dataset.id);
+        if (rec && rec.status !== t.value) {
+          await window.ForgeDB.saveTrackerRecord({ ...rec, status: t.value });
+          await loadAll();
+          await renderCurrentTab();
+          if (typeof showToast === 'function') showToast(`Story "${rec.name}" status set to ${t.value}.`, 'info');
+        }
+        return;
+      }
+
       // Inline Role select
       if (t.matches('.mc-role-select')) {
         const store = t.dataset.store;

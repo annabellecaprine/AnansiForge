@@ -611,6 +611,12 @@
       <div class="form-group"><label>Notes</label>
         <textarea id="mc-rec-notes" class="mc-modal-input" rows="3">${S.esc(r.notes || '')}</textarea>
       </div>
+      ${assetType === 'story' ? `
+      <div class="form-group"><label>Status</label>
+        <select id="mc-rec-status" class="mc-modal-input">
+          ${['Active', 'Promoted', 'Archived'].map(s => `<option value="${s}" ${(r.status || 'Active') === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>` : ''}
       ${assetType === 'release' ? `
       <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
         <div class="form-group"><label>Visibility</label>
@@ -826,6 +832,10 @@
       pipeline: r.pipeline || window.ForgeDB.defaultTrackerPipeline(r.assetType)
     };
 
+    if (r.assetType === 'story') {
+      const statusEl = document.getElementById('mc-rec-status');
+      if (statusEl) updated.status = statusEl.value;
+    }
     if (r.assetType === 'concept_stub') {
       updated.intendedCategory = document.getElementById('mc-stub-category')?.value || 'character';
     }

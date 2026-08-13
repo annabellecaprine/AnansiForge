@@ -24,7 +24,7 @@
         <button class="mc-name-link mc-open-story-hub" data-story-id="${rec.id}" title="Open Story Creative Hub">📖 ${esc(rec.name)}</button>
         ${totalMsgs > 0 ? `<span class="mc-badge mc-trophy-badge" title="Top performer">🏆 ${totalMsgs.toLocaleString()} msgs</span>` : ''}
       </td>
-      <td>${S.storyStatusBadge(rec.status)}</td>
+      <td>${S.storyStatusSelectBadge ? S.storyStatusSelectBadge(rec.status, rec.id) : S.storyStatusBadge(rec.status)}</td>
       <td>${S.universeSelectBadge ? S.universeSelectBadge(rec.universe, rec.id, 'record') : S.universeBadge(rec.universe)}</td>
       <td>
         <button class="mc-badge-btn mc-open-story-hub" data-story-id="${rec.id}" title="View linked vault assets">
