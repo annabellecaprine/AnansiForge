@@ -523,7 +523,7 @@
         <button id="mc-group-priority-toggle" class="mc-sort-btn${state.groupByPriority ? ' active' : ''}" title="Group rows by priority level">
           📌 ${state.groupByPriority ? 'Grouped' : 'Group by Priority'}
         </button>
-        ${quickAsset ? `<button id="mc-quick-add-asset" class="mc-btn mc-btn-primary" data-cat="${quickAsset.cat}">${quickAsset.label}</button>` : ''}
+        ${quickAsset ? `<button id="mc-quick-add-asset" class="mc-btn mc-btn-primary mc-quick-add-asset" data-cat="${quickAsset.cat}">${quickAsset.label}</button>` : ''}
         ${showAddRecord ? `<button id="mc-add-record" class="mc-btn mc-btn-primary" data-type="${recordType}">+ ${recordType === 'story' ? 'Story' : recordType === 'release' ? 'Release' : 'Record'}</button>` : ''}
         ${showAddStub ? `
         <div class="mc-split-btn-group" style="position:relative; display:inline-flex;">

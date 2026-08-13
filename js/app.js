@@ -1621,7 +1621,13 @@
         if (prefill) {
           setTimeout(() => {
             if (prefill.name) { const el = document.getElementById('comp-name'); if (el) el.value = prefill.name; }
-            if (prefill.category) { const el = document.getElementById('comp-category'); if (el) el.value = prefill.category; }
+            if (prefill.category) {
+              const el = document.getElementById('comp-category');
+              if (el) {
+                el.value = prefill.category;
+                toggleFormFields(prefill.category);
+              }
+            }
             if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if (el) el.value = prefill.tags.join(', '); }
           }, 100);
         }

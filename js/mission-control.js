@@ -268,19 +268,13 @@
         return;
       }
 
-      // Open Quick Asset Creator Modal
-      const quickAssetBtn = t.closest('.mc-quick-add-asset');
+      // Open Quick Asset Creator (opens Vault editor pre-filled with active category)
+      const quickAssetBtn = t.closest('.mc-quick-add-asset') || t.closest('#mc-quick-add-asset');
       if (quickAssetBtn) {
         const cat = quickAssetBtn.dataset.cat || 'character';
-        M?.openQuickAssetModal(cat);
-        return;
-      }
-
-      // Submit Quick Asset
-      if (t.id === 'mc-btn-submit-quick-asset' || t.closest('#mc-btn-submit-quick-asset')) {
-        const btn = t.id === 'mc-btn-submit-quick-asset' ? t : t.closest('#mc-btn-submit-quick-asset');
-        const cat = btn.dataset.cat || 'character';
-        await M?.submitQuickAsset(cat);
+        if (window.ForgeAppBridge && window.ForgeAppBridge.openEditorNew) {
+          window.ForgeAppBridge.openEditorNew({ category: cat });
+        }
         return;
       }
 
