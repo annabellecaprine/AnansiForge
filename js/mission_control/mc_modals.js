@@ -1033,6 +1033,78 @@
     modal.classList.remove('hidden');
   }
 
+  async function spawnReleaseFromStory(storyId) {
+    const S = getS();
+    if (!S) return;
+    if (S.state.isSpawningRelease) return;
+    S.state.isSpawningRelease = true;
+
+    try {
+      const story = S.state.allTrackerRecords.find(r => r.id === storyId) || await window.ForgeDB.getTrackerRecord(storyId);
+      if (!story) throw new Error('Story record not found');
+
+      const releaseCount = (story.releaseIds || []).length + 1;
+      const customLabel = prompt(`Enter release iteration label for "${story.name}":`, `Release #${releaseCount}`);
+      if (customLabel === null) return;
+      const iterationLabel = customLabel.trim() || `Release #${releaseCount}`;
+      const releaseName = `${story.name} (${iterationLabel})`;
+
+      // Map story pipeline -> release pipeline
+      const releasePipeline = window.ForgeDB.defaultTrackerPipeline('release');
+      if (story.pipeline?.concept) releasePipeline.staged = true;
+      if (story.pipeline?.bio) releasePipeline.bio = true;
+      if (story.pipeline?.initialMessage) releasePipeline.initialMessage = true;
+
+      const newRelease = {
+        assetType: 'release',
+        name: releaseName,
+        iterationLabel: iterationLabel,
+        universe: story.universe || '',
+        project: story.project || '',
+        priority: story.priority || null,
+        tags: story.tags ? [...story.tags] : [],
+        notes: story.notes ? `Spawned from Story "${story.name}".\n\n${story.notes}` : `Spawned from Story "${story.name}".`,
+        pipeline: releasePipeline,
+        releaseSource: 'story',
+        sourceStoryId: story.id,
+        linkedVaultIds: story.linkedVaultIds ? [...story.linkedVaultIds] : []
+      };
+
+      const savedRelease = await window.ForgeDB.saveTrackerRecord(newRelease);
+
+      // Update story record
+      const updatedReleaseIds = Array.from(new Set([...(story.releaseIds || []), savedRelease.id]));
+      const updatedStory = {
+        ...story,
+        status: 'Promoted',
+        releaseIds: updatedReleaseIds
+      };
+
+      await window.ForgeDB.saveTrackerRecord(updatedStory);
+
+      if (window.ForgeDB?.logActivity) {
+        window.ForgeDB.logActivity({
+          action: 'created',
+          targetType: 'release',
+          targetId: savedRelease.id,
+          targetName: savedRelease.name,
+          details: `Spawned from story: ${story.name}`
+        }).catch(e => console.error(e));
+      }
+
+      await S.loadAll();
+      if (window.MissionControl && window.MissionControl.renderCurrentTab) {
+        await window.MissionControl.renderCurrentTab();
+      }
+      if (typeof showToast === 'function') showToast(`🚀 Release "${savedRelease.name}" spawned from Story!`, 'success');
+    } catch (err) {
+      console.error('Failed to spawn release:', err);
+      if (typeof showToast === 'function') showToast(`Failed to spawn release: ${err.message}`, 'error');
+    } finally {
+      S.state.isSpawningRelease = false;
+    }
+  }
+
   // Export to Global Window Namespace
   window.MissionControlModals = {
     openBotAnalyticsModal,
@@ -1047,6 +1119,7 @@
     closeModal,
     promoteStub,
     promoteStubToStory,
-    exportStoryBrief
+    exportStoryBrief,
+    spawnReleaseFromStory
   };
 })();
