@@ -1093,6 +1093,10 @@
       }
 
       await S.loadAll();
+      const modalOverlay = document.getElementById('mc-modal-overlay');
+      if (modalOverlay && !modalOverlay.classList.contains('hidden')) {
+        openStoryHubModal(story.id);
+      }
       if (window.MissionControl && window.MissionControl.renderCurrentTab) {
         await window.MissionControl.renderCurrentTab();
       }

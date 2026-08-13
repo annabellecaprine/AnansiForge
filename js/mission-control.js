@@ -124,11 +124,11 @@
   function bindEvents(container) {
     if (container._mcEventsBound) return;
     container._mcEventsBound = true;
-    const S = getS();
-    const M = getModals();
 
     container.addEventListener('click', async (e) => {
       const t = e.target;
+      const S = getS();
+      const M = getModals();
       const state = S ? S.state : {};
 
       // Manage Universes
@@ -1393,6 +1393,7 @@
     openLinkVaultModal: (id) => getModals()?.openLinkVaultModal(id),
     openQuickMetricsModal: (id) => getModals()?.openQuickMetricsModal(id),
     submitMetricSnapshot: (id) => getModals()?.submitMetricSnapshot(id),
+    spawnReleaseFromStory: (id) => getModals()?.spawnReleaseFromStory(id),
     exportCompleteBackup
   };
 
