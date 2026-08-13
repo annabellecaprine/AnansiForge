@@ -989,18 +989,48 @@
 
     md += `*Exported from AnansiForge Mission Control on ${new Date().toLocaleDateString()}*\n`;
 
-    const fileName = `${(story.name || 'story').toLowerCase().replace(/[^a-z0-9]/g, '_')}_brief.md`;
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const modal = document.getElementById('mc-modal-overlay');
+    const body = document.getElementById('mc-modal-body');
+    const title = document.getElementById('mc-modal-title');
 
-    if (typeof showToast === 'function') showToast(`Exported Story Brief for "${story.name}"!`, 'success');
+    title.innerHTML = `📄 Story Brief: ${S.esc(story.name)}`;
+    body.innerHTML = `
+      <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.85rem; color:var(--text-secondary);">Markdown format ready for export or documentation</span>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="mc-btn-copy-brief" class="mc-btn mc-btn-primary mc-btn-sm">📋 Copy to Clipboard</button>
+          <button type="button" id="mc-btn-download-brief" class="mc-btn mc-btn-secondary mc-btn-sm">💾 Download .md</button>
+        </div>
+      </div>
+      <textarea id="mc-brief-textarea" class="mc-modal-input" rows="16" readonly style="font-family:var(--font-mono); font-size:0.78rem; line-height:1.5; white-space:pre-wrap;">${S.esc(md)}</textarea>
+      <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="mc-btn mc-btn-secondary" onclick="if(window.MissionControlModals) window.MissionControlModals.openStoryHubModal('${story.id}')">← Return to Story Hub</button>
+        <button type="button" class="mc-btn mc-btn-ghost" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Close</button>
+      </div>
+    `;
+
+    const fileName = `${(story.name || 'story').toLowerCase().replace(/[^a-z0-9]/g, '_')}_brief.md`;
+
+    body.querySelector('#mc-btn-copy-brief')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(md).then(() => {
+        if (typeof showToast === 'function') showToast('📄 Story Brief copied to clipboard!', 'success');
+      });
+    });
+
+    body.querySelector('#mc-btn-download-brief')?.addEventListener('click', () => {
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (typeof showToast === 'function') showToast(`💾 Downloaded ${fileName}`, 'success');
+    });
+
+    modal.classList.remove('hidden');
   }
 
   // Export to Global Window Namespace
