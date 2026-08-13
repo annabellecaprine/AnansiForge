@@ -914,6 +914,95 @@
     if (typeof showToast === 'function') showToast(`Promoted concept "${stub.name}" to a Story!`, 'success');
   }
 
+  function exportStoryBrief(storyId) {
+    const S = getS();
+    if (!S) return;
+
+    const story = S.state.allTrackerRecords.find(r => r.id === storyId);
+    if (!story) {
+      if (typeof showToast === 'function') showToast('Story not found.', 'error');
+      return;
+    }
+
+    const linkedIds = story.linkedVaultIds || [];
+    const linkedComps = linkedIds.map(id => S.state.compMap.get(id)).filter(Boolean);
+
+    const chars = linkedComps.filter(c => c.category === 'character');
+    const scenarios = linkedComps.filter(c => c.category === 'scenario');
+    const bios = linkedComps.filter(c => c.category === 'bio');
+    const initMsgs = linkedComps.filter(c => c.category === 'initial_message');
+    const orgs = linkedComps.filter(c => c.category === 'organization');
+
+    const releases = S.state.allTrackerRecords.filter(r =>
+      r.assetType === 'release' && r.status !== 'Archived' && (r.sourceStoryId === story.id || (story.releaseIds || []).includes(r.id))
+    );
+
+    const score = S.calcReadinessForRecord(story);
+    const readinessText = S.readinessPct(score);
+
+    let md = `# 📖 Story Brief: ${story.name}\n\n`;
+    md += `**Universe:** ${story.universe || 'None'}\n`;
+    md += `**Status:** ${story.status || 'Active'}\n`;
+    md += `**Priority:** ${story.priority || 'Unassigned'}\n`;
+    if (story.project) md += `**Project / Group:** ${story.project}\n`;
+    if (story.tags && story.tags.length) md += `**Tags:** ${story.tags.join(', ')}\n`;
+    md += `**Readiness Score:** ${readinessText}\n`;
+    if (story.createdAt) md += `**Created:** ${new Date(story.createdAt).toLocaleDateString()}\n`;
+    md += `\n---\n\n`;
+
+    if (story.notes) {
+      md += `## 📝 Premise & Notes\n\n${story.notes}\n\n---\n\n`;
+    }
+
+    md += `## 🔗 Linked Vault Assets (${linkedComps.length})\n\n`;
+
+    const formatCompGroup = (title, items) => {
+      if (!items.length) return '';
+      let section = `### ${title} (${items.length})\n\n`;
+      items.forEach(c => {
+        section += `#### ${c.name}\n`;
+        if (c.tags && c.tags.length) section += `*Tags: ${c.tags.join(', ')}*\n\n`;
+        if (c.content) section += `${c.content.trim()}\n\n`;
+        section += `---\n\n`;
+      });
+      return section;
+    };
+
+    md += formatCompGroup('👤 Characters', chars);
+    md += formatCompGroup('🎭 Scenarios', scenarios);
+    md += formatCompGroup('📋 Bios', bios);
+    md += formatCompGroup('💬 Initial Messages', initMsgs);
+    md += formatCompGroup('🏢 Organizations', orgs);
+
+    if (releases.length > 0) {
+      md += `## 🚀 Spawned Releases (${releases.length})\n\n`;
+      releases.forEach(r => {
+        const m = r.metrics || {};
+        md += `- **${r.name}** [${r.status || 'Active'}]\n`;
+        if (r.releaseSource) md += `  - Source: ${r.releaseSource}\n`;
+        if (m.messages || m.uniqueChats) {
+          md += `  - Messages: ${m.messages || 0} | Unique Chats: ${m.uniqueChats || 0} | MpC: ${m.msgPerChat || '—'}\n`;
+        }
+      });
+      md += `\n`;
+    }
+
+    md += `*Exported from AnansiForge Mission Control on ${new Date().toLocaleDateString()}*\n`;
+
+    const fileName = `${(story.name || 'story').toLowerCase().replace(/[^a-z0-9]/g, '_')}_brief.md`;
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === 'function') showToast(`Exported Story Brief for "${story.name}"!`, 'success');
+  }
+
   // Export to Global Window Namespace
   window.MissionControlModals = {
     openBotAnalyticsModal,
@@ -927,6 +1016,7 @@
     saveModalRecord,
     closeModal,
     promoteStub,
-    promoteStubToStory
+    promoteStubToStory,
+    exportStoryBrief
   };
 })();
