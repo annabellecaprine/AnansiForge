@@ -1044,9 +1044,21 @@
       if (!story) throw new Error('Story record not found');
 
       const releaseCount = (story.releaseIds || []).length + 1;
-      const customLabel = prompt(`Enter release iteration label for "${story.name}":`, `Release #${releaseCount}`);
+      const defaultLabel = `Release #${releaseCount}`;
+      let customLabel;
+      if (typeof window.showPromptModal === 'function') {
+        customLabel = await window.showPromptModal({
+          title: '🚀 Spawn New Release',
+          message: `Enter release iteration label for <strong>${S.esc(story.name)}</strong>:`,
+          defaultValue: defaultLabel,
+          okText: '🚀 Spawn Release',
+          cancelText: 'Cancel'
+        });
+      } else {
+        customLabel = prompt(`Enter release iteration label for "${story.name}":`, defaultLabel);
+      }
       if (customLabel === null) return;
-      const iterationLabel = customLabel.trim() || `Release #${releaseCount}`;
+      const iterationLabel = customLabel.trim() || defaultLabel;
       const releaseName = `${story.name} (${iterationLabel})`;
 
       // Map story pipeline -> release pipeline

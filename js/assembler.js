@@ -155,7 +155,18 @@
         const comp = await window.ForgeDB.getComponent(currentTweakId);
         const defaultName = comp ? `${comp.name.split(' - ')[0]} (Scenario Tweak)` : 'Tweaked Component';
 
-        const newName = prompt('Enter a name to save this tweaked version to your Vault:', defaultName);
+        let newName;
+        if (typeof showPromptModal === 'function') {
+          newName = await showPromptModal({
+            title: '📝 Save Tweaked Component',
+            message: 'Enter a name to save this tweaked version to your Vault:',
+            defaultValue: defaultName,
+            okText: 'Save to Vault',
+            cancelText: 'Cancel'
+          });
+        } else {
+          newName = prompt('Enter a name to save this tweaked version to your Vault:', defaultName);
+        }
         if (!newName || !newName.trim()) return;
 
         const newComp = {

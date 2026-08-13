@@ -801,11 +801,33 @@
     }
 
     // Prompts
-    const variantName = prompt('Enter Variant Name:', `${originalName} (Scenario Variant)`);
+    let variantName;
+    if (typeof showPromptModal === 'function') {
+      variantName = await showPromptModal({
+        title: '✨ Create Variant Component',
+        message: 'Enter Variant Name:',
+        defaultValue: `${originalName} (Scenario Variant)`,
+        okText: 'Next',
+        cancelText: 'Cancel'
+      });
+    } else {
+      variantName = prompt('Enter Variant Name:', `${originalName} (Scenario Variant)`);
+    }
     if (!variantName) return; // User cancelled
 
     const defaultScenarios = compScenariosInput.value.trim();
-    const variantScenariosStr = prompt('Enter Scenarios (comma-separated):', defaultScenarios);
+    let variantScenariosStr;
+    if (typeof showPromptModal === 'function') {
+      variantScenariosStr = await showPromptModal({
+        title: '🎬 Variant Scenarios',
+        message: 'Enter Scenarios (comma-separated):',
+        defaultValue: defaultScenarios,
+        okText: 'Create Variant',
+        cancelText: 'Cancel'
+      });
+    } else {
+      variantScenariosStr = prompt('Enter Scenarios (comma-separated):', defaultScenarios);
+    }
     if (variantScenariosStr === null) return; // User cancelled
 
     // Sync form content first
