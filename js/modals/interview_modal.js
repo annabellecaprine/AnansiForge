@@ -321,8 +321,11 @@
       console.error(err);
       if (window.showToast) {
         window.showToast(`Failed to generate voice response: ${err.message}`, 'error');
-      } else {
-        alert(`Failed to generate voice response: ${err.message}`);
+      } else if (window.showAlertModal) {
+        window.showAlertModal({
+          title: '🚫 Generation Failed',
+          message: `Failed to generate voice response: ${err.message}`
+        });
       }
     } finally {
       sendBtn.disabled = false;

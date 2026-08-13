@@ -118,7 +118,14 @@
 
       request.onblocked = (event) => {
         console.warn('Database upgrade is blocked by another tab or connection. Please close all other tabs of this application.');
-        alert('Database upgrade is blocked by another tab of Anansi Forge. Please close all other tabs of the app to allow the upgrade, then refresh this page.');
+        if (window.showAlertModal) {
+          window.showAlertModal({
+            title: '⚠️ Database Upgrade Blocked',
+            message: 'Database upgrade is blocked by another tab of Anansi Forge.<br><br>Please close all other tabs of the app to allow the upgrade, then refresh this page.'
+          });
+        } else {
+          alert('Database upgrade is blocked by another tab of Anansi Forge. Please close all other tabs of the app to allow the upgrade, then refresh this page.');
+        }
       };
 
       request.onupgradeneeded = (event) => {

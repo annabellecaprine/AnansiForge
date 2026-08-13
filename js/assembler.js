@@ -171,7 +171,12 @@
         if (window.refreshVaultList) window.refreshVaultList();
         if (window.showToast) window.showToast(`Saved "${newComp.name}" to Vault!`, 'success');
 
-        const swap = confirm(`Would you like to stage the new Vault component "${newComp.name}" in this project, replacing the tweaked version?`);
+        const swap = await showConfirmModal({
+          title: '🔄 Stage New Component',
+          message: `Would you like to stage the new Vault component <strong>"${escapeHTML(newComp.name)}"</strong> in this project, replacing the tweaked version?`,
+          okText: 'Stage It',
+          cancelText: 'No Thanks'
+        });
         if (swap) {
           // Store old mapping value
           const oldMapValue = mappings[currentTweakId];

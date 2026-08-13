@@ -6,7 +6,7 @@
   let activeProjectId = '';
   let activeProject = null;
   let chatHistory = [];
-  
+
   // Personas State
   let personasList = [];
   let activePersonaId = '';
@@ -17,7 +17,7 @@
   const chatLog = document.getElementById('chat-log');
   const chatInput = document.getElementById('chat-input');
   const btnSend = document.getElementById('btn-chat-send');
-  
+
   // Persona Selector DOM
   const personaSelect = document.getElementById('sandbox-persona-select');
   const btnManagePersonas = document.getElementById('btn-sandbox-manage-personas');
@@ -69,7 +69,7 @@
       btn.addEventListener('click', () => {
         inspectorPanel.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         inspectorPanel.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        
+
         btn.classList.add('active');
         const panelId = `tab-${btn.dataset.tab}`;
         document.getElementById(panelId).classList.add('active');
@@ -138,7 +138,7 @@
   async function loadAndSeedPersonas() {
     try {
       personasList = await window.ForgeDB.getAllPersonas();
-      
+
       // Seed default persona if none exist
       if (personasList.length === 0) {
         const defaultPersona = {
@@ -251,13 +251,19 @@
       return;
     }
 
-    const confirmed = confirm('Are you sure you want to delete this user persona?');
+    const confirmed = await showConfirmModal({
+      title: '🗑️ Delete Persona',
+      message: 'Are you sure you want to delete this user persona?',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
     if (!confirmed) return;
 
     try {
       await window.ForgeDB.deletePersona(val);
       personasList = personasList.filter(x => x.id !== val);
-      
+
       if (activePersonaId === val) {
         activePersonaId = personasList[0].id;
         localStorage.setItem('anansi_active_persona_id', activePersonaId);
@@ -289,10 +295,10 @@
     await loadAndSeedPersonas();
 
     botNameHeader.textContent = `Playtest: ${activeProject.name}`;
-    
+
     // Load history
     chatHistory = await window.ForgeDB.getChatHistory(projectId);
-    
+
     // Clear inspector panels
     reasoningOutput.textContent = 'No reasoning tokens output by model yet.';
     promptOutput.textContent = '';
@@ -301,12 +307,12 @@
     if (playtestNotes) {
       playtestNotes.value = activeProject.notes || '';
     }
-    
+
     // If history is empty, seed with compiled greeting
     if (chatHistory.length === 0) {
       const compiled = activeProject.compiledCard?.data || {};
       const greeting = compiled.first_mes || `Hello! I am ${activeProject.name}. How can I assist you today?`;
-      
+
       chatHistory.push({
         role: 'model',
         content: greeting
@@ -324,7 +330,7 @@
 
   function renderChatLog() {
     chatLog.innerHTML = '';
-    
+
     chatHistory.forEach((msg, idx) => {
       addMessageBubble(msg.role, msg.content, idx, false);
     });
@@ -337,7 +343,7 @@
    */
   function addMessageBubble(role, rawContent, index, animate = true) {
     const bubble = document.createElement('div');
-    
+
     // Reasoning Separation (supports unclosed <think> tags)
     const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/i;
     let dialogue = rawContent;
@@ -354,7 +360,7 @@
     }
 
     bubble.className = `chat-bubble ${role === 'user' ? 'user' : 'character'}`;
-    
+
     // Retrieve Persona details
     const activePersona = personasList.find(p => p.id === activePersonaId) || { name: 'User' };
     const nameLabel = role === 'user' ? activePersona.name : (activeProject?.name || 'Bot');
@@ -405,8 +411,8 @@
     if (history.length <= MAX_HISTORY_MESSAGES) return history;
     // Always keep the very first message (the character greeting / first_mes)
     const first = history[0];
-    const rest  = history.slice(1);
-    const kept  = rest.slice(rest.length - (MAX_HISTORY_MESSAGES - 1));
+    const rest = history.slice(1);
+    const kept = rest.slice(rest.length - (MAX_HISTORY_MESSAGES - 1));
     return [first, ...kept];
   }
 
@@ -426,7 +432,7 @@
 
     // Compile Context Prompt
     const compiled = activeProject.compiledCard?.data || {};
-    
+
     // 1. Build Persona description block
     let systemPrompt = `[User Persona Details:\n- Name: ${activePersona.name}\n- Description: ${activePersona.description}]\n\n`;
 
@@ -450,13 +456,13 @@
     }));
 
     // Update inspector view
-    promptOutput.textContent = `=== SYSTEM CONTEXT ===\n${systemPrompt}\n\n=== MESSAGES HISTORY ===\n` + 
+    promptOutput.textContent = `=== SYSTEM CONTEXT ===\n${systemPrompt}\n\n=== MESSAGES HISTORY ===\n` +
       mappedHistory.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
 
     try {
       // Call LLM
       const reply = await window.ForgeLLM.generate(systemPrompt, mappedHistory);
-      
+
       loadingBubble.remove();
 
       chatHistory.push({ role: 'model', content: reply });
@@ -468,7 +474,7 @@
     } catch (err) {
       loadingBubble.remove();
       console.error(err);
-      
+
       const errBubble = document.createElement('div');
       errBubble.className = 'chat-bubble character error';
       errBubble.innerHTML = `
@@ -485,11 +491,11 @@
     if (!text) return;
 
     chatInput.value = '';
-    
+
     // Add user message to log and history
     chatHistory.push({ role: 'user', content: text });
     addMessageBubble('user', text, chatHistory.length - 1);
-    
+
     await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
 
     await triggerBotResponse();
@@ -500,10 +506,10 @@
 
     // Slice to remove the response we want to re-roll and any subsequent messages
     chatHistory = chatHistory.slice(0, index);
-    
+
     await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
     renderChatLog();
-    
+
     await triggerBotResponse();
   }
 
@@ -511,10 +517,10 @@
     const textContainer = bubbleElement.querySelector('.chat-bubble-text');
     const actionsContainer = bubbleElement.querySelector('.chat-bubble-actions');
     const originalText = chatHistory[index].content;
-    
+
     textContainer.style.display = 'none';
     if (actionsContainer) actionsContainer.style.display = 'none';
-    
+
     const editForm = document.createElement('div');
     editForm.className = 'bubble-edit-form';
     editForm.style.marginTop = '6px';
@@ -525,32 +531,32 @@
         <button class="btn btn-primary btn-sm btn-save-edit" style="padding:4px 8px; font-size:0.75rem; background:white; color:var(--accent); border:none; cursor:pointer;">Save</button>
       </div>
     `;
-    
+
     bubbleElement.appendChild(editForm);
-    
+
     const textarea = editForm.querySelector('.edit-msg-textarea');
     textarea.focus();
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    
+
     editForm.querySelector('.btn-cancel-edit').addEventListener('click', () => {
       editForm.remove();
       textContainer.style.display = 'block';
       if (actionsContainer) actionsContainer.style.display = 'flex';
     });
-    
+
     editForm.querySelector('.btn-save-edit').addEventListener('click', async () => {
       const updatedText = textarea.value.trim();
       if (!updatedText) return;
-      
+
       // Update text in history
       chatHistory[index].content = updatedText;
-      
+
       // Slice history to remove all subsequent messages
       chatHistory = chatHistory.slice(0, index + 1);
-      
+
       await window.ForgeDB.saveChatHistory(activeProjectId, chatHistory);
       renderChatLog();
-      
+
       await triggerBotResponse();
     });
   }
@@ -560,10 +566,10 @@
       if (window.showToast) window.showToast('No chat history to export.', 'info');
       return;
     }
-    
+
     const charName = (activeProject && (activeProject.name || activeProject.compiledCard?.data?.name)) || 'Character';
     const activePersona = personasList.find(p => p.id === activePersonaId) || { name: 'User' };
-    
+
     const transcript = chatHistory.map(msg => {
       const sender = msg.role === 'user' ? activePersona.name : charName;
       return `${sender}: ${msg.content}\n`;
@@ -585,7 +591,7 @@
     if (!activeProject) return;
     const activePersona = personasList.find(p => p.id === activePersonaId) || { name: 'User', description: '' };
     const compiled = activeProject.compiledCard?.data || {};
-    
+
     let systemPrompt = `[User Persona Details:\n- Name: ${activePersona.name}\n- Description: ${activePersona.description}]\n\n`;
     if (compiled.system_prompt) systemPrompt += compiled.system_prompt + '\n\n';
     if (compiled.description) systemPrompt += `[Character Description:\n${compiled.description}]\n\n`;
@@ -596,27 +602,33 @@
     }
 
     systemPrompt = replaceUserPlaceholders(systemPrompt, activePersona.name);
-    
+
     const mappedHistory = chatHistory.map(m => ({
       role: m.role,
       content: replaceUserPlaceholders(m.content, activePersona.name)
     }));
 
-    promptOutput.textContent = `=== SYSTEM CONTEXT ===\n${systemPrompt}\n\n=== MESSAGES HISTORY ===\n` + 
+    promptOutput.textContent = `=== SYSTEM CONTEXT ===\n${systemPrompt}\n\n=== MESSAGES HISTORY ===\n` +
       mappedHistory.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
   }
 
   async function resetChat() {
     if (!activeProjectId) return;
-    const confirmed = confirm('Are you sure you want to reset this chat session?');
+    const confirmed = await showConfirmModal({
+      title: '🔄 Reset Chat',
+      message: 'Are you sure you want to reset this chat session?',
+      okText: 'Reset',
+      cancelText: 'Cancel',
+      danger: true
+    });
     if (!confirmed) return;
 
     await window.ForgeDB.clearChatHistory(activeProjectId);
     chatHistory = [];
-    
+
     const compiled = activeProject.compiledCard?.data || {};
     const greeting = compiled.first_mes || `Hello! I am ${activeProject.name}. How can I assist you today?`;
-    
+
     chatHistory.push({
       role: 'model',
       content: greeting
@@ -626,7 +638,7 @@
     renderChatLog();
     reasoningOutput.textContent = 'No reasoning tokens output by model yet.';
     updatePromptInspector();
-    
+
     if (window.showToast) window.showToast('Chat history reset', 'info');
   }
 

@@ -160,7 +160,13 @@ Notes:
     const uni = universesList.find(u => u.id === activeUniverseId);
     if (!uni) return;
 
-    const confirmed = confirm(`Delete universe "${uni.name}"? This won't affect components already assigned to it.`);
+    const confirmed = await showConfirmModal({
+      title: '🗑️ Delete Universe',
+      message: `Delete universe <strong>"${escapeHTML(uni.name)}"</strong>? This won't affect components already assigned to it.`,
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
     if (!confirmed) return;
 
     if (window.ForgeDB?.deleteUniverse) {
@@ -186,11 +192,19 @@ Notes:
     renderList();
   }
 
-  function insertTemplate() {
+  async function insertTemplate() {
     const area = contentArea();
     if (!area) return;
     const existing = area.value.trim();
-    if (existing && !confirm('This will replace the current content with the template. Continue?')) return;
+    if (existing) {
+      const confirmed = await showConfirmModal({
+        title: '📋 Insert Template',
+        message: 'This will replace the current content with the template. Continue?',
+        okText: 'Replace',
+        cancelText: 'Cancel'
+      });
+      if (!confirmed) return;
+    }
     area.value = UNIVERSE_TEMPLATE;
     area.focus();
   }

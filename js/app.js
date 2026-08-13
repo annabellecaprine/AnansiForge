@@ -426,7 +426,13 @@
 
         item.querySelector('.btn-del-proj').addEventListener('click', async (e) => {
           e.stopPropagation();
-          const confirmed = confirm(`Delete compiled project "${proj.name}"? This cannot be undone.`);
+          const confirmed = await showConfirmModal({
+            title: '🗑️ Delete Project',
+            message: `Delete compiled project <strong>"${escapeHTML(proj.name)}"</strong>? This cannot be undone.`,
+            okText: 'Delete',
+            cancelText: 'Cancel',
+            danger: true
+          });
           if (confirmed) {
             await window.ForgeDB.deleteProject(proj.id);
             await window.ForgeDB.clearChatHistory(proj.id);
@@ -719,7 +725,12 @@
         const similars = window.ForgeDB.findSimilarComponents(name, allComps, 0.85);
         if (similars.length > 0) {
           const matchNames = similars.map(s => s.name).join(', ');
-          const confirmProceed = confirm(`⚠️ Warning: Highly similar component(s) already exist in your Vault: "${matchNames}". Save anyway?`);
+          const confirmProceed = await showConfirmModal({
+            title: '⚠️ Similar Component Detected',
+            message: `Highly similar component(s) already exist in your Vault: <strong>"${escapeHTML(matchNames)}"</strong>.<br><br>Save anyway?`,
+            okText: 'Save Anyway',
+            cancelText: 'Cancel'
+          });
           if (!confirmProceed) return;
         }
       } catch (e) {
@@ -872,7 +883,13 @@
 
   async function deleteComponentForm() {
     if (!editingComponentId) return;
-    const confirmed = confirm('Are you sure you want to delete this component from the Vault?');
+    const confirmed = await showConfirmModal({
+      title: '🗑️ Delete Component',
+      message: 'Are you sure you want to delete this component from the Vault?',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
     if (!confirmed) return;
 
     try {
@@ -1027,68 +1044,7 @@
     }
   }
 
-  function showConfirmModal({ title, message, okText = 'OK', cancelText = 'Cancel', danger = false }) {
-    return new Promise((resolve) => {
-      let modal = document.getElementById('custom-confirm-modal');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'custom-confirm-modal';
-        modal.className = 'omni-overlay hidden';
-        modal.style.zIndex = '10000';
-        modal.innerHTML = `
-          <div class="omni-backdrop"></div>
-          <div class="omni-panel" style="max-width: 480px; padding: 24px; text-align: left;">
-            <h3 id="custom-confirm-title" style="margin-top:0; margin-bottom: 12px; font-size: 1.1rem; color: var(--text-primary); font-family: var(--font-sans);"></h3>
-            <div id="custom-confirm-msg" style="margin-bottom: 24px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; font-family: var(--font-sans);"></div>
-            <div style="display: flex; justify-content: flex-end; gap: 10px;">
-              <button id="custom-confirm-cancel" class="btn btn-ghost" style="padding: 8px 16px;"></button>
-              <button id="custom-confirm-ok" class="btn btn-primary" style="padding: 8px 16px;"></button>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-      }
-
-      const titleEl = modal.querySelector('#custom-confirm-title');
-      const msgEl = modal.querySelector('#custom-confirm-msg');
-      const okBtn = modal.querySelector('#custom-confirm-ok');
-      const cancelBtn = modal.querySelector('#custom-confirm-cancel');
-      const backdrop = modal.querySelector('.omni-backdrop');
-
-      titleEl.innerHTML = title;
-      msgEl.innerHTML = message;
-      okBtn.textContent = okText;
-      cancelBtn.textContent = cancelText;
-
-      if (danger) {
-        okBtn.className = 'btn btn-danger';
-      } else {
-        okBtn.className = 'btn btn-primary';
-      }
-
-      const cleanup = (result) => {
-        modal.classList.add('hidden');
-        okBtn.removeEventListener('click', onOk);
-        cancelBtn.removeEventListener('click', onCancel);
-        backdrop.removeEventListener('click', onCancel);
-        window.removeEventListener('keydown', onKey);
-        resolve(result);
-      };
-
-      const onOk = () => cleanup(true);
-      const onCancel = () => cleanup(false);
-      const onKey = (e) => {
-        if (e.key === 'Escape') cleanup(false);
-      };
-
-      okBtn.addEventListener('click', onOk);
-      cancelBtn.addEventListener('click', onCancel);
-      backdrop.addEventListener('click', onCancel);
-      window.addEventListener('keydown', onKey);
-
-      modal.classList.remove('hidden');
-    });
-  }
+  // showConfirmModal is now global via js/modals/confirm_modal.js
 
   async function handleRestoreVault(file) {
     try {
@@ -1514,9 +1470,14 @@
     document.getElementById('btn-parlor-start').addEventListener('click', () => window.ParlorWizard.start());
 
     // Navigation Back buttons
-    btnEditorBack.addEventListener('click', () => {
+    btnEditorBack.addEventListener('click', async () => {
       if (editorIsDirty) {
-        const leave = confirm('You have unsaved changes. Leave without saving?');
+        const leave = await showConfirmModal({
+          title: '⚠️ Unsaved Changes',
+          message: 'You have unsaved changes. Leave without saving?',
+          okText: 'Leave',
+          cancelText: 'Stay'
+        });
         if (!leave) return;
       }
       editorIsDirty = false;

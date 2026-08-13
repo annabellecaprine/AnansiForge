@@ -779,7 +779,14 @@
       // Delete tracker record
       if (t.matches('.mc-delete-record')) {
         const id = t.dataset.recordId;
-        if (confirm('Delete this record?')) {
+        const confirmed = await showConfirmModal({
+          title: '🗑️ Delete Record',
+          message: 'Delete this tracker record?',
+          okText: 'Delete',
+          cancelText: 'Cancel',
+          danger: true
+        });
+        if (confirmed) {
           await window.ForgeDB.deleteTrackerRecord(id);
           await loadAll();
           await renderCurrentTab();
@@ -835,7 +842,14 @@
       const deleteStubBtn = t.closest('.mc-delete-stub-btn');
       if (deleteStubBtn) {
         const stubId = deleteStubBtn.dataset.stubId;
-        if (confirm('Remove this concept stub?')) {
+        const confirmed = await showConfirmModal({
+          title: '🗑️ Remove Concept Stub',
+          message: 'Remove this concept stub?',
+          okText: 'Remove',
+          cancelText: 'Cancel',
+          danger: true
+        });
+        if (confirmed) {
           await window.ForgeDB.deleteTrackerRecord(stubId);
           await loadAll();
           await renderCurrentTab();
