@@ -8,44 +8,28 @@
 
   const UNIVERSE_TEMPLATE = `Universe Name: [Name]
 
-Overview:
-[Brief summary of what this universe IS — the core concept in 2-3 sentences.]
-
-Core Assumptions:
-[What is always true in this reality? List the foundational rules.]
-- 
-- 
+Setting:
+[Describe the physical world, locations, foundational environment, and reality assumptions.]
 - 
 
-Continuity Decisions:
-[Which canon events, timelines, or versions apply? What's been adjusted or merged?]
-- 
-- 
-
-World Rules:
-[How does the world WORK? Physics, magic, tech, powers, society norms.]
-- 
-- 
+Culture:
+[Describe societal norms, factions, customs, history, and social dynamics.]
 - 
 
-Tone and Story Logic:
-[What kind of stories belong here? What's the emotional texture?]
-- 
-- 
-
-Presentation Guidance:
-[How should the AI write within this universe? Style, vocabulary, pacing.]
-- 
+Technology:
+[Describe tech level, powers, magic systems, physics, or specialized equipment constraints.]
 - 
 
-Avoid / Do Not Assume:
-[What should the AI never do or assume within this universe?]
-- 
+Tone:
+[Describe the emotional texture, story logic, writing style, vocabulary, and pacing guidance.]
 - 
 
-Notes:
-[Any additional context, exceptions, or reminders.]
+Other Rules:
+[List any additional canon constraints, taboo assumptions ("Do Not Assume"), or exceptions.]
+- 
 `;
+
+
 
   let activeUniverseId = null;
   let universesList = [];
@@ -150,6 +134,7 @@ Notes:
         activeUniverseId = saved.id;
         await loadUniverses();
         renderList();
+        window.dispatchEvent(new CustomEvent('universeChanged', { detail: { action: 'save', universe: saved } }));
         if (window.showToast) window.showToast(`Universe "${name}" saved.`, 'success');
       }
     }
@@ -171,11 +156,13 @@ Notes:
 
     if (window.ForgeDB?.deleteUniverse) {
       await window.ForgeDB.deleteUniverse(activeUniverseId);
+      const deletedId = activeUniverseId;
       activeUniverseId = null;
       editForm().style.display = 'none';
       editEmpty().style.display = 'block';
       await loadUniverses();
       renderList();
+      window.dispatchEvent(new CustomEvent('universeChanged', { detail: { action: 'delete', universeId: deletedId } }));
       if (window.showToast) window.showToast(`Universe "${uni.name}" deleted.`, 'info');
     }
   }
@@ -228,16 +215,27 @@ Notes:
   let initialized = false;
 
   const UniverseGenreModal = {
-    openModal: async function () {
+    openModal: async function (targetUniName = null) {
       if (!initialized) {
         bindEvents();
         initialized = true;
       }
       await loadUniverses();
-      activeUniverseId = null;
-      editForm().style.display = 'none';
-      editEmpty().style.display = 'block';
       renderList();
+      if (targetUniName) {
+        const uni = universesList.find(u => (u.name || '').toLowerCase() === targetUniName.toLowerCase() || (u.id || '').toLowerCase() === targetUniName.toLowerCase());
+        if (uni) {
+          selectUniverse(uni.id);
+        } else {
+          activeUniverseId = null;
+          editForm().style.display = 'none';
+          editEmpty().style.display = 'block';
+        }
+      } else {
+        activeUniverseId = null;
+        editForm().style.display = 'none';
+        editEmpty().style.display = 'block';
+      }
       modalEl()?.classList.remove('hidden');
     },
 

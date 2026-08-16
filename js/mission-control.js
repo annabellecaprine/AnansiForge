@@ -137,6 +137,16 @@
         return;
       }
 
+      // Edit Universe Rules button on card
+      const editUniBtn = t.closest('.btn-edit-universe');
+      if (editUniBtn) {
+        const uniName = editUniBtn.dataset.name;
+        if (window.MissionControlUniverseModal?.openModal) {
+          window.MissionControlUniverseModal.openModal(uniName);
+        }
+        return;
+      }
+
       // Story Status filter pill
       const statusPill = t.closest('.mc-story-status-pill');
       if (statusPill) {
@@ -1227,6 +1237,8 @@
     try {
       if (tab === 'overview' && Tabs?.renderOverview) {
         html = await Tabs.renderOverview();
+      } else if (tab === 'universes' && Tabs?.renderUniversesTab) {
+        html = Tabs.renderUniversesTab();
       } else if (CAT_FOR_TAB[tab] && Tabs?.renderAssetTab) {
         html = Tabs.renderAssetTab(CAT_FOR_TAB[tab]);
       } else if (tab === 'stories' && Tabs?.renderStoriesTab) {
@@ -1301,6 +1313,11 @@
       if (dd && !e.target.closest('#mc-add-stub-caret') && !e.target.closest('#mc-stub-dropdown')) {
         dd.style.display = 'none';
       }
+    });
+
+    window.addEventListener('universeChanged', async () => {
+      await loadAll();
+      await renderCurrentTab();
     });
   }
 

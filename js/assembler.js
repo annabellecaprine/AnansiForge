@@ -105,6 +105,9 @@
         window.MissionControlUniverseModal.openModal();
       }
     });
+    window.addEventListener('universeChanged', () => {
+      populateUniverseSelect();
+    });
 
     // Tweak Modal DOM references
     tweakModalOverlay = document.getElementById('tweak-modal-overlay');
@@ -447,7 +450,12 @@
 
     // Default open from Bottom Drawer staging
     activeProjectId = null;
-    if (stagedIds.length === 0) return;
+    if (stagedIds.length === 0) {
+      if (typeof showToast === 'function') {
+        showToast('Please stage at least 1 component before assembling.', 'info');
+      }
+      return;
+    }
 
     // Default project name based on character components
     const characterNames = [];
@@ -475,7 +483,7 @@
       }
     }
 
-    renderAssemblerScreen();
+    await renderAssemblerScreen();
     updateCoverPreview();
 
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -528,12 +536,22 @@
 
       // Auto-detect universe from staged components if none selected
       if (!selectedUniverseId && stagedIds.length > 0) {
+        const detectedUnis = new Set();
         for (const id of stagedIds) {
           const comp = await window.ForgeDB.getComponent(id);
-          if (comp && comp.universe) {
-            selectedUniverseId = comp.universe;
-            break;
+          const uVal = comp?.universe || comp?.tracker?.universe;
+          if (typeof uVal === 'string' && uVal.trim()) {
+            detectedUnis.add(uVal.trim());
+          } else if (Array.isArray(uVal)) {
+            uVal.forEach(v => { if (typeof v === 'string' && v.trim()) detectedUnis.add(v.trim()); });
           }
+        }
+        if (detectedUnis.size === 1) {
+          selectedUniverseId = Array.from(detectedUnis)[0];
+        } else if (detectedUnis.size > 1) {
+          // Crossover detected! Default to Mixed if available
+          const mixedUni = universes.find(u => u.id === 'mixed' || (u.name || '').toLowerCase() === 'mixed');
+          if (mixedUni) selectedUniverseId = mixedUni.id;
         }
       }
 
@@ -562,8 +580,8 @@
   }
 
   async function renderAssemblerScreen() {
-    populateLinkTargets();
-    populateUniverseSelect();
+    await populateLinkTargets();
+    await populateUniverseSelect();
     stagedCountBadge.textContent = stagedIds.length;
     stagedListCanvas.innerHTML = '';
     mappingsContainer.innerHTML = '';
@@ -804,6 +822,31 @@
         type: 'warning',
         icon: '🔗',
         text: `${brokenRelsCount} relationship links refer to components that are no longer staged in this project.`
+      });
+    }
+
+    // 6. Warning Check: Crossover Conflict (staged components belong to multiple universes)
+    const stagedUniverses = new Set();
+    stagedComps.forEach(comp => {
+      const uVal = comp?.universe || comp?.tracker?.universe;
+      if (typeof uVal === 'string' && uVal.trim()) {
+        stagedUniverses.add(uVal.trim());
+      } else if (Array.isArray(uVal)) {
+        uVal.forEach(v => { if (typeof v === 'string' && v.trim()) stagedUniverses.add(v.trim()); });
+      }
+    });
+    if (stagedUniverses.size > 1) {
+      const uniListStr = Array.from(stagedUniverses).join(', ');
+      let activeUniName = selectedUniverseId || 'None';
+      if (selectedUniverseId && window.MissionControlUniverseModal?.getUniversesList) {
+        const uList = window.MissionControlUniverseModal.getUniversesList();
+        const foundU = (uList || []).find(u => u.id === selectedUniverseId || u.name?.toLowerCase() === selectedUniverseId.toLowerCase());
+        if (foundU) activeUniName = foundU.name;
+      }
+      checks.push({
+        type: 'warning',
+        icon: '🌐',
+        text: `Crossover Conflict: Staged components span multiple universes (${uniListStr}). Prompt is compiling under rules of "${activeUniName}".`
       });
     }
 

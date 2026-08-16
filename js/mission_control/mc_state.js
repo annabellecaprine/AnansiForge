@@ -553,6 +553,7 @@
         const tabs = [
             { id: 'overview', label: '📊 Overview' },
             { id: 'stories', label: '📖 Stories' },
+            { id: 'universes', label: '🌐 Universes' },
             { id: 'characters', label: '👤 Characters' },
             { id: 'scenarios', label: '🎭 Scenarios' },
             { id: 'bios', label: '📋 Bios' },
