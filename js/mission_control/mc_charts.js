@@ -80,8 +80,22 @@
       }).join('');
     }
 
+    // Compute waypoint indices: always first + last + up to 3 evenly spaced between
+    const totalPts = points.length;
+    const waypointSet = new Set([0, totalPts - 1]);
+    if (totalPts > 2) {
+      const innerCount = Math.min(3, totalPts - 2);
+      for (let w = 1; w <= innerCount; w++) {
+        waypointSet.add(Math.round(w * (totalPts - 1) / (innerCount + 1)));
+      }
+    }
+    const waypointIndices = Array.from(waypointSet).sort((a, b) => a - b);
+
+    // Extra bottom padding for 45° rotated waypoint labels
+    const labelZone = 36;
+
     return `
-      <svg viewBox="0 0 ${width} ${totalHeight}" class="mc-svg-chart" style="width:100%; height:auto; overflow:visible;">
+      <svg viewBox="0 0 ${width} ${totalHeight + labelZone}" class="mc-svg-chart" style="width:100%; height:auto; overflow:visible;">
         <line x1="${padding}" y1="${padding}" x2="${width - padding}" y2="${padding}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4" />
         <line x1="${padding}" y1="${height / 2}" x2="${width - padding}" y2="${height / 2}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4" />
         <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.12)" />
@@ -91,14 +105,29 @@
 
         ${markersSvg}
 
-        ${points.map(p => `
+        ${points.map((p, i) => `
           <g class="mc-chart-point-group">
             <circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" stroke="var(--bg-secondary)" stroke-width="2" />
             <title>${esc(p.label)}: ${p.value.toLocaleString()}</title>
             <text x="${p.x}" y="${p.y - 8}" fill="var(--text-secondary)" font-size="10" font-weight="600" text-anchor="middle">${p.value.toLocaleString()}</text>
-            <text x="${p.x}" y="${height - padding + 14}" fill="var(--text-muted)" font-size="9" text-anchor="middle">${esc(p.label)}</text>
           </g>
         `).join('')}
+
+        ${waypointIndices.map(i => {
+      const p = points[i];
+      const tickY = height - padding;
+      return `<g>
+              <line x1="${p.x}" y1="${tickY}" x2="${p.x}" y2="${tickY + 5}" stroke="rgba(148,163,184,0.4)" stroke-width="1.5"/>
+              <text
+                x="${p.x}" y="${tickY + 8}"
+                fill="var(--text-muted)"
+                font-size="9"
+                font-weight="500"
+                text-anchor="start"
+                transform="rotate(-45 ${p.x} ${tickY + 8})"
+              >${esc(p.label)}</text>
+            </g>`;
+    }).join('')}
       </svg>
     `;
   }
