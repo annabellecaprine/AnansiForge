@@ -192,13 +192,13 @@
 
       <div class="mc-overview-panel" style="margin-bottom:14px;">
         <h4 class="mc-panel-title" style="margin-bottom:8px;">📈 Messages Growth Trajectory</h4>
-        ${C.renderSVGLineChart(dataPoints, 520, 180, '#6366f1', botEvents)}
+        ${C.wrapChart(C.renderSVGLineChart(dataPoints, 520, 180, '#6366f1', botEvents), '📈 Messages Growth Trajectory')}
         ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
       </div>
 
       <div class="mc-overview-panel">
         <h4 class="mc-panel-title" style="margin-bottom:8px;">🎯 MpC Engagement Trajectory (Msg / Chat)</h4>
-        ${C.renderSVGLineChart(mpcPoints, 520, 180, '#10b981', botEvents)}
+        ${C.wrapChart(C.renderSVGLineChart(mpcPoints, 520, 180, '#10b981', botEvents), '🎯 MpC Engagement Trajectory (Msg / Chat)')}
         ${limitedData ? `<p style="text-align:center; font-size:0.78rem; color:var(--text-muted); margin-top:6px;">⚠️ Limited Data Available — update snapshots over time to build the trajectory</p>` : ''}
       </div>
 

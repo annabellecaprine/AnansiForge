@@ -211,7 +211,7 @@
         });
 
         const pill = (mKey, label) => '<button type="button" class="mc-leaderboard-pill mc-portfolio-pill' + (metric === mKey ? ' active' : '') + '" data-metric="' + mKey + '">' + label + '</button>';
-        return '<div class="mc-overview-panel" style="margin-bottom:20px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;"><div><h3 class="mc-panel-title" style="margin-bottom:2px;">' + chartTitle + '</h3><span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span></div><div class="mc-pill-group">' + pill('messages', '💬 Messages') + pill('chats', '👥 Unique Chats') + pill('favorites', '⭐ Favorites') + pill('mpc', '📐 Avg MpC') + pill('bots', '🤖 Published Bots') + '</div></div>' + Charts.renderSVGLineChart(dataPoints, 750, 160, chartColor) + '</div>';
+        return '<div class="mc-overview-panel" style="margin-bottom:20px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;"><div><h3 class="mc-panel-title" style="margin-bottom:2px;">' + chartTitle + '</h3><span style="font-size:0.75rem; color:var(--text-muted);">Historical portfolio expansion across releases</span></div><div class="mc-pill-group">' + pill('messages', '💬 Messages') + pill('chats', '👥 Unique Chats') + pill('favorites', '⭐ Favorites') + pill('mpc', '📐 Avg MpC') + pill('bots', '🤖 Published Bots') + '</div></div>' + Charts.wrapChart(Charts.renderSVGLineChart(dataPoints, 750, 160, chartColor), chartTitle) + '</div>';
       })()}
 
       <!-- MpC Distribution -->
