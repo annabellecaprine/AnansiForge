@@ -812,7 +812,7 @@
       }
 
       // Add concept stub — single
-      if (t.id === 'mc-add-stub' || t.id === 'mc-add-stub-single') {
+      if (t.id === 'mc-add-stub' || t.id === 'mc-add-stub-single' || t.id === 'mc-stub-opt-single') {
         document.getElementById('mc-stub-dropdown')?.setAttribute('style', 'display:none; position:absolute; top:calc(100% + 4px); right:0; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-md); min-width:160px; z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden;');
         M?.openStubModal();
         return;
@@ -826,7 +826,7 @@
       }
 
       // Add concept stubs — cast (bulk)
-      if (t.id === 'mc-add-stub-cast') {
+      if (t.id === 'mc-add-stub-cast' || t.id === 'mc-stub-opt-cast') {
         document.getElementById('mc-stub-dropdown')?.setAttribute('style', 'display:none; position:absolute; top:calc(100% + 4px); right:0; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-md); min-width:160px; z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden;');
         M?.openCastModal();
         return;
