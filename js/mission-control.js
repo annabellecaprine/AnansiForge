@@ -1108,6 +1108,113 @@
         return;
       }
 
+      // ── BULK ACTION BAR HANDLERS ──────────────────────────────────────────
+
+      // Bulk assign universe (vault or tracker records)
+      if (t.id === 'mc-bulk-assign-universe') {
+        const val = t.value;
+        if (!val) return;
+        const store = t.closest('.mc-bulk-bar')?.dataset.store || 'vault';
+        const promises = [];
+        for (const id of state.selectedIds) {
+          if (store === 'vault') {
+            const comp = state.compMap.get(id);
+            if (comp) {
+              if (!comp.tracker) comp.tracker = {};
+              comp.tracker.universe = val;
+              promises.push(window.ForgeDB.updateVaultTracker(id, { universe: val }));
+            }
+          } else {
+            const rec = state.recordMap.get(id);
+            if (rec) promises.push(window.ForgeDB.saveTrackerRecord({ ...rec, universe: val }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        if (typeof showToast === 'function') showToast(`Universe set to "${val}" for ${promises.length} item(s)`, 'success');
+        await loadAll(); await renderCurrentTab();
+        return;
+      }
+
+      // Bulk assign priority (vault or tracker records)
+      if (t.id === 'mc-bulk-assign-priority') {
+        const raw = t.value;
+        if (!raw) return;
+        const val = raw === '__clear__' ? null : raw;
+        const store = t.closest('.mc-bulk-bar')?.dataset.store || 'vault';
+        const promises = [];
+        for (const id of state.selectedIds) {
+          if (store === 'vault') {
+            const comp = state.compMap.get(id);
+            if (comp) {
+              if (!comp.tracker) comp.tracker = {};
+              comp.tracker.priority = val;
+              promises.push(window.ForgeDB.updateVaultTracker(id, { priority: val }));
+            }
+          } else {
+            const rec = state.recordMap.get(id);
+            if (rec) promises.push(window.ForgeDB.saveTrackerRecord({ ...rec, priority: val }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        if (typeof showToast === 'function') showToast(`Priority ${val ? 'set to ' + val : 'cleared'} for ${promises.length} item(s)`, 'success');
+        await loadAll(); await renderCurrentTab();
+        return;
+      }
+
+      // Bulk assign role (vault only)
+      if (t.id === 'mc-bulk-assign-role') {
+        const val = t.value;
+        if (!val) return;
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const comp = state.compMap.get(id);
+          if (comp) {
+            if (!comp.tracker) comp.tracker = {};
+            comp.tracker.role = val;
+            promises.push(window.ForgeDB.updateVaultTracker(id, { role: val }));
+          }
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        if (typeof showToast === 'function') showToast(`Role set to "${val}" for ${promises.length} item(s)`, 'success');
+        await loadAll(); await renderCurrentTab();
+        return;
+      }
+
+      // Bulk assign story status
+      if (t.id === 'mc-bulk-assign-status') {
+        const val = t.value;
+        if (!val) return;
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const rec = state.recordMap.get(id);
+          if (rec) promises.push(window.ForgeDB.saveTrackerRecord({ ...rec, status: val }));
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        if (typeof showToast === 'function') showToast(`Status set to "${val}" for ${promises.length} story/stories`, 'success');
+        await loadAll(); await renderCurrentTab();
+        return;
+      }
+
+      // Bulk assign series (releases)
+      if (t.id === 'mc-bulk-assign-series') {
+        const val = t.value;
+        if (!val) return;
+        const promises = [];
+        for (const id of state.selectedIds) {
+          const rec = state.recordMap.get(id);
+          if (rec) promises.push(window.ForgeDB.saveTrackerRecord({ ...rec, series: val }));
+        }
+        await Promise.all(promises);
+        state.selectedIds.clear();
+        if (typeof showToast === 'function') showToast(`Series set for ${promises.length} release(s)`, 'success');
+        await loadAll(); await renderCurrentTab();
+        return;
+      }
+
       if (t.matches('.mc-role-select') && t.dataset.store === 'vault') {
         const comp = state.allComponents.find(c => c.id === t.dataset.id);
         if (comp) {

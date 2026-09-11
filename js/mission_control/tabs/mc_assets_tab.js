@@ -156,6 +156,7 @@
       </div>
 
       ${S.toolbarHTML(true, false)}
+      ${S.bulkActionBarHTML ? S.bulkActionBarHTML('vault') : ''}
 
       <div class="mc-table-wrap">
         <table class="mc-table">

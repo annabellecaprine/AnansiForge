@@ -549,6 +549,55 @@
     </div>`;
     }
 
+    function bulkActionBarHTML(store = 'vault') {
+        const count = state.selectedIds.size;
+        if (count === 0) return '';
+
+        const uniSelect = `<select id="mc-bulk-assign-universe" class="mc-filter-select" style="font-size:0.8rem;" title="Assign Universe to selected">
+          <option value="">— Set Universe —</option>
+          ${universeSelectOptionsHTML('', '')}
+        </select>`;
+
+        const prioSelect = `<select id="mc-bulk-assign-priority" class="mc-filter-select" style="font-size:0.8rem;" title="Assign Priority to selected">
+          <option value="">— Set Priority —</option>
+          ${['P1', 'P2', 'P3', 'P4'].map(p => `<option value="${p}">${p}</option>`).join('')}
+          <option value="__clear__">✕ Clear Priority</option>
+        </select>`;
+
+        const roleSelect = `<select id="mc-bulk-assign-role" class="mc-filter-select" style="font-size:0.8rem;" title="Assign Role to selected">
+          <option value="">— Set Role —</option>
+          ${['Hero', 'Villain', 'AntiHero', 'Support', 'Other'].map(r => `<option value="${r}">${ROLE_ICONS[r] || ''} ${r}</option>`).join('')}
+        </select>`;
+
+        const statusSelect = `<select id="mc-bulk-assign-status" class="mc-filter-select" style="font-size:0.8rem;" title="Assign Story Status to selected">
+          <option value="">— Set Status —</option>
+          ${['Active', 'Promoted', 'Archived'].map(s => `<option value="${s}">${s}</option>`).join('')}
+        </select>`;
+
+        const seriesSelect = `<select id="mc-bulk-assign-series" class="mc-filter-select" style="font-size:0.8rem;" title="Assign Series to selected">
+          <option value="">— Set Series —</option>
+          ${Object.entries(SERIES_OPTIONS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
+        </select>`;
+
+        let actions = `${uniSelect} ${prioSelect}`;
+        if (store === 'vault') actions += ` ${roleSelect}`;
+        if (store === 'record-story') actions += ` ${statusSelect}`;
+        if (store === 'record-release') actions += ` ${seriesSelect}`;
+
+        return `<div class="mc-bulk-bar" data-store="${store}" style="
+          display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+          padding:8px 14px; margin-bottom:8px;
+          background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08));
+          border:1px solid rgba(99,102,241,0.35); border-radius:var(--radius-md);
+          animation: mc-bulk-bar-in 0.15s ease;">
+          <span style="font-size:0.82rem; font-weight:600; color:var(--accent); white-space:nowrap;">
+            ✅ ${count} selected
+          </span>
+          ${actions}
+          <button id="mc-bulk-deselect" class="mc-btn mc-btn-ghost mc-btn-sm" style="margin-left:auto;">✕ Deselect All</button>
+        </div>`;
+    }
+
     function subTabBar() {
         const tabs = [
             { id: 'overview', label: '📊 Overview' },
@@ -615,6 +664,7 @@
         isReleasePublished,
         pipelineCheckboxes,
         toolbarHTML,
+        bulkActionBarHTML,
         subTabBar
     };
 })();

@@ -19,7 +19,9 @@
     );
     const totalMsgs = storyReleases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
 
-    return `<tr class="mc-row ${rec.status === 'Promoted' ? 'mc-row--promoted' : ''}" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
+    const isSelected = S.state.selectedIds.has(rec.id);
+    return `<tr class="mc-row ${rec.status === 'Promoted' ? 'mc-row--promoted' : ''}${isSelected ? ' mc-row--selected' : ''}" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
+      <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${rec.id}" ${isSelected ? 'checked' : ''}></td>
       <td class="mc-cell-name">
         <button class="mc-name-link mc-open-story-hub" data-story-id="${rec.id}" title="Open Story Creative Hub">📖 ${esc(rec.name)}</button>
         ${totalMsgs > 0 ? `<span class="mc-badge mc-trophy-badge" title="Top performer">🏆 ${totalMsgs.toLocaleString()} msgs</span>` : ''}
@@ -86,6 +88,7 @@
 
     return `
       ${S.toolbarHTML(false, true, 'story')}
+      ${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-story') : ''}
       <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0; align-items:center;">
         ${filterPill('Active', 'Active', activeCount, '✏️')}
         ${filterPill('Promoted', 'Promoted', promotedCount, '🚀')}
@@ -99,6 +102,7 @@
         <table class="mc-table">
           <thead>
             <tr>
+              <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
               <th>Story / Hub</th>
               <th>Status</th>
               <th>Universe</th>
@@ -111,7 +115,7 @@
             </tr>
           </thead>
           <tbody>
-            ${items.length ? items.map(r => recordRow(r, steps)).join('') : `<tr><td colspan="${steps.length + 8}" class="mc-empty-state">No ${S.state.storyStatusFilter === 'all' ? '' : S.state.storyStatusFilter.toLowerCase()} stories found.</td></tr>`}
+            ${items.length ? items.map(r => recordRow(r, steps)).join('') : `<tr><td colspan="${steps.length + 9}" class="mc-empty-state">No ${S.state.storyStatusFilter === 'all' ? '' : S.state.storyStatusFilter.toLowerCase()} stories found.</td></tr>`}
           </tbody>
         </table>
       </div>`;

@@ -72,7 +72,9 @@
     const linkedProj = S.state.allProjects.find(p => p.id === rec.projectId);
     const sourceStory = rec.sourceStoryId ? S.state.allTrackerRecords.find(r => r.id === rec.sourceStoryId) : null;
 
-    return `<tr class="mc-row${S.isReleasePublished(rec) ? ' mc-row--released' : ''}" data-record-id="${rec.id}">
+    const isSelected = S.state.selectedIds.has(rec.id);
+    return `<tr class="mc-row${S.isReleasePublished(rec) ? ' mc-row--released' : ''}${isSelected ? ' mc-row--selected' : ''}" data-record-id="${rec.id}">
+      <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${rec.id}" ${isSelected ? 'checked' : ''}></td>
       <td class="mc-cell-name">
         <div style="display:flex; align-items:center; gap:6px;">
           <button class="mc-name-link mc-edit-record" data-record-id="${rec.id}">${esc(rec.name)}</button>
@@ -138,6 +140,7 @@
           <table class="mc-table mc-table--release">
             <thead>
               <tr>
+                <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
                 <th>Name</th>
                 <th>Series</th>
                 <th>Universe</th>
@@ -163,6 +166,7 @@
 
     return `
       ${S.toolbarHTML(false, true, 'release')}
+      ${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-release') : ''}
       ${readyItems.length > 0 ? `<div class="mc-ready-banner">
         🚀 <strong>${readyItems.length}</strong> release${readyItems.length > 1 ? 's' : ''} ready for public launch!
       </div>` : ''}

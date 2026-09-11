@@ -3652,6 +3652,11 @@ textarea.mc-modal-input {
   background: rgba(99, 102, 241, 0.12) !important;
 }
 
+@keyframes mc-bulk-bar-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* 5. Omni-Search Spotter (Ctrl+K) */
 .omni-overlay {
   position: fixed;
