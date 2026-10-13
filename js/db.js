@@ -1122,7 +1122,21 @@
 
   // --- Vault Backup / Restore ---
 
-  async function exportVault() {
+  // options: { includeCovers = true, includeActivityLog = true, versionCap = 0 }
+  //   includeCovers: set false to skip the covers store (base64 images — the
+  //     dominant export size driver, and presentation-only data).
+  //   includeActivityLog: set false to skip the diagnostic activity log.
+  //   versionCap: max component_versions kept per component (0 = no cap).
+  //     Note the DB itself already prunes to 10 per component on save.
+  // The bundle shape is unchanged (keys always present, possibly empty), so
+  // importVault() accepts slim exports with no format bump.
+  async function exportVault(options = {}) {
+    const {
+      includeCovers = true,
+      includeActivityLog = true,
+      versionCap = 0,
+    } = options;
+
     const components = await getAllComponents();
     const projects = await getAllProjects();
     const personas = await getAllPersonas();
@@ -1134,7 +1148,10 @@
     let universes = [];
     try {
       const db = dbInstance || await initDB();
-      const storeNames = ['component_versions', 'activity_log', 'covers', 'universes'].filter(s => db.objectStoreNames.contains(s));
+      const wanted = ['component_versions', 'universes'];
+      if (includeCovers) wanted.push('covers');
+      if (includeActivityLog) wanted.push('activity_log');
+      const storeNames = wanted.filter(s => db.objectStoreNames.contains(s));
       if (storeNames.length > 0) {
         const tx = db.transaction(storeNames, 'readonly');
         if (storeNames.includes('component_versions')) component_versions = await promisify(tx.objectStore('component_versions').getAll());
@@ -1146,9 +1163,24 @@
       console.warn('Could not export versions/activity/covers/universes', e);
     }
 
+    if (versionCap > 0 && component_versions.length > 0) {
+      const byComp = new Map();
+      for (const v of component_versions) {
+        const cid = v.componentId || 'unknown';
+        if (!byComp.has(cid)) byComp.set(cid, []);
+        byComp.get(cid).push(v);
+      }
+      component_versions = [];
+      for (const list of byComp.values()) {
+        list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+        component_versions.push(...list.slice(0, versionCap));
+      }
+    }
+
     return {
       _version: 3,
       _exportedAt: new Date().toISOString(),
+      _exportOptions: { includeCovers, includeActivityLog, versionCap },
       components,
       projects,
       personas,
@@ -1158,6 +1190,42 @@
       covers,
       universes
     };
+  }
+
+  // Estimated serialized size per export section, for the export options dialog.
+  // Returns [{ key, label, items, bytes }]. Reads the stores but does not build
+  // a bundle.
+  async function getExportSectionSizes() {
+    const enc = new TextEncoder();
+    const sizeOf = (v) => enc.encode(JSON.stringify(v)).length;
+    const out = [];
+    const push = (key, label, value) => {
+      out.push({
+        key,
+        label,
+        items: Array.isArray(value) ? value.length : (value ? 1 : 0),
+        bytes: sizeOf(value),
+      });
+    };
+    push('components', 'Components', await getAllComponents());
+    push('projects', 'Projects', await getAllProjects());
+    push('personas', 'Personas', await getAllPersonas());
+    push('trackerRecords', 'Tracker records', await getAllTrackerRecords());
+    push('universes', 'Universes', await getAllUniverses());
+    try {
+      const db = dbInstance || await initDB();
+      const readStore = async (store) => {
+        if (!db.objectStoreNames.contains(store)) return [];
+        const tx = db.transaction(store, 'readonly');
+        return await promisify(tx.objectStore(store).getAll());
+      };
+      push('component_versions', 'Component versions', await readStore('component_versions'));
+      push('activity_log', 'Activity log', await readStore('activity_log'));
+      push('covers', 'Covers', await readStore('covers'));
+    } catch (e) {
+      console.warn('Could not size versions/activity/covers', e);
+    }
+    return out;
   }
 
   async function importVault(bundle) {
@@ -1273,6 +1341,7 @@
     updateVaultTracker,
     defaultTrackerPipeline,
     exportVault,
+    getExportSectionSizes,
     importVault,
     saveComponentVersion,
     getComponentVersions,

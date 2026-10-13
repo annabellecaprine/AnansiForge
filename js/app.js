@@ -1044,22 +1044,110 @@
 
   // --- Vault Backup & Restore ---
 
-  async function handleExportVault() {
+  function formatBytes(b) {
+    if (b > 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+    if (b > 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b > 1024) return (b / 1024).toFixed(1) + ' KB';
+    return b + ' B';
+  }
+
+  // Promise-based export options dialog. Resolves to an options object for
+  // exportVault(), or null when the user cancels. Follows the omni-overlay
+  // pattern used by the confirm modal.
+  function showExportOptionsDialog(sections) {
+    return new Promise((resolve) => {
+      let done = false;
+      const overlay = document.createElement('div');
+      overlay.className = 'omni-overlay';
+      overlay.style.zIndex = '10000';
+      const finish = (val) => { if (!done) { done = true; overlay.remove(); resolve(val); } };
+
+      const byKey = Object.fromEntries(sections.map(s => [s.key, s]));
+      const sizeNote = (key) => {
+        const s = byKey[key];
+        return s ? ` — ${formatBytes(s.bytes)} (${(s.items || 0).toLocaleString()} items)` : '';
+      };
+      const optRow = (key, label, note) => `
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;cursor:pointer;font-size:.9rem;">
+          <input type="checkbox" data-opt="${key}" checked style="margin-top:3px;">
+          <span><strong>${label}</strong><span style="color:var(--text-secondary);">${sizeNote(key)}</span><br>
+          <span style="color:var(--text-secondary);font-size:.8rem;">${note}</span></span>
+        </label>`;
+
+      overlay.innerHTML = `
+      <div class="omni-backdrop"></div>
+      <div class="omni-panel" style="max-width: 520px; padding: 24px; text-align: left;">
+        <h3 style="margin-top:0;margin-bottom:6px;font-size:1.1rem;">💾 Export Vault Backup</h3>
+        <p style="margin:0 0 8px;font-size:.85rem;color:var(--text-secondary);">Choose what to include. Components, projects, personas, universes and tracker records are always included.</p>
+        <div>
+          ${optRow('covers', 'Covers', 'Base64 images — usually the dominant file size. Presentation only; safe to exclude.')}
+          ${optRow('activity_log', 'Activity log', 'Diagnostic log. Not needed to restore production state.')}
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:.9rem;">
+            <span><strong>Max versions per component</strong>${sizeNote('component_versions')}<br>
+            <span style="color:var(--text-secondary);font-size:.8rem;">0 = no limit. The database already keeps at most 10 per component.</span></span>
+            <input type="number" id="export-version-cap" min="0" value="0" style="width:70px;margin-left:auto;" class="mc-modal-input">
+          </label>
+        </div>
+        <div style="margin:12px 0;font-size:.9rem;">Estimated size: <strong id="export-est-size">…</strong></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button id="export-opts-cancel" class="btn btn-ghost" style="padding:8px 16px;">Cancel</button>
+          <button id="export-opts-ok" class="btn btn-primary" style="padding:8px 16px;">Download Backup</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+
+      const updateEst = () => {
+        let bytes = 0;
+        for (const s of sections) {
+          if (s.key === 'covers' && !overlay.querySelector('[data-opt="covers"]').checked) continue;
+          if (s.key === 'activity_log' && !overlay.querySelector('[data-opt="activity_log"]').checked) continue;
+          bytes += s.bytes;
+        }
+        overlay.querySelector('#export-est-size').textContent = '≈ ' + formatBytes(bytes) + ' (versions capped at export)';
+      };
+      overlay.querySelectorAll('[data-opt]').forEach(cb => cb.addEventListener('change', updateEst));
+      overlay.querySelector('#export-opts-cancel').addEventListener('click', () => finish(null));
+      overlay.querySelector('.omni-backdrop').addEventListener('click', () => finish(null));
+      overlay.querySelector('#export-opts-ok').addEventListener('click', () => {
+        finish({
+          includeCovers: overlay.querySelector('[data-opt="covers"]').checked,
+          includeActivityLog: overlay.querySelector('[data-opt="activity_log"]').checked,
+          versionCap: Math.max(0, parseInt(overlay.querySelector('#export-version-cap').value, 10) || 0),
+        });
+      });
+      updateEst();
+    });
+  }
+
+  async function downloadVaultBundle(bundle, slim) {
+    const json = JSON.stringify(bundle, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const date = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `anansi-forge-backup-${date}${slim ? '-slim' : ''}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return json.length;
+  }
+
+  async function handleExportVault({ showDialog = true } = {}) {
     try {
-      const bundle = await window.ForgeDB.exportVault();
-      const json = JSON.stringify(bundle, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const date = new Date().toISOString().slice(0, 10);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `anansi-forge-backup-${date}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      let options = { includeCovers: true, includeActivityLog: true, versionCap: 0 };
+      if (showDialog) {
+        const sections = await window.ForgeDB.getExportSectionSizes();
+        const chosen = await showExportOptionsDialog(sections);
+        if (!chosen) return; // user cancelled
+        options = chosen;
+      }
+      const bundle = await window.ForgeDB.exportVault(options);
+      const slim = !options.includeCovers || !options.includeActivityLog || options.versionCap > 0;
+      const bytes = await downloadVaultBundle(bundle, slim);
       const total = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
-      showToast(`Vault exported — ${total} records saved.`, 'success');
+      showToast(`Vault exported — ${total} records, ${formatBytes(bytes)}.`, 'success');
     } catch (err) {
       console.error(err);
       showToast('Export failed: ' + err.message, 'error');
@@ -1082,7 +1170,7 @@
       });
 
       if (wantBackup) {
-        await handleExportVault();
+        await handleExportVault({ showDialog: false });
       }
 
       const confirmProceed = await showConfirmModal({
@@ -1605,7 +1693,9 @@
       const intervalMs = 30 * 60 * 1000; // 30 minutes
       setInterval(async () => {
         try {
-          const bundle = await window.ForgeDB.exportVault();
+          // Slim auto-backups: covers are presentation-only and dominate file
+          // size, so they are excluded from the silent 30-minute snapshots.
+          const bundle = await window.ForgeDB.exportVault({ includeCovers: false });
           await window.ForgeDB.saveAutoBackup(JSON.stringify(bundle));
           console.log('[Auto-Backup] Saved silent IndexedDB vault backup.');
         } catch (e) {
