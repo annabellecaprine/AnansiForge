@@ -180,7 +180,7 @@
       </div>
 
       ${S.toolbarHTML(true, false)}
-      <div id="mc-bulk-bar-container">${S.bulkActionBarHTML ? S.bulkActionBarHTML('vault') : ''}</div>
+      <div id="mc-bulk-bar-container" style="display: ${S.state.selectedIds && S.state.selectedIds.size > 0 ? 'block' : 'none'};">${S.bulkActionBarHTML ? S.bulkActionBarHTML('vault') : ''}</div>
 
       <div class="mc-table-wrap">
         <table class="mc-table">

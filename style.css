@@ -2673,6 +2673,8 @@ main#main-canvas {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
+  position: relative;
+  z-index: 1;
 }
 
 .mc-table {
@@ -3672,7 +3674,15 @@ textarea.mc-modal-input {
 }
 
 #mc-bulk-bar-container {
+  display: block;
+  width: 100%;
   min-height: 0;
+  position: relative;
+  z-index: 10;
+}
+
+#mc-bulk-bar-container:empty {
+  display: none !important;
 }
 
 .mc-bulk-bar {
@@ -3680,11 +3690,17 @@ textarea.mc-modal-input {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 8px 14px;
-  margin-bottom: 8px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.08));
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 10px 16px;
+  margin: 4px 0 16px 0;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.16), rgba(139, 92, 246, 0.10));
+  border: 1px solid rgba(99, 102, 241, 0.45);
   border-radius: var(--radius-md);
+  box-sizing: border-box;
+  width: 100%;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  min-height: 52px;
   animation: mc-bulk-bar-in 0.15s ease;
 }
 

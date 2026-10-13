@@ -134,7 +134,14 @@
     // 1. Update bulk action bar container without destroying table
     const bulkContainer = document.getElementById('mc-bulk-bar-container');
     if (bulkContainer && S.bulkActionBarHTML) {
-      bulkContainer.innerHTML = S.bulkActionBarHTML(store);
+      const hasSelection = state.selectedIds && state.selectedIds.size > 0;
+      if (hasSelection) {
+        bulkContainer.style.display = 'block';
+        bulkContainer.innerHTML = S.bulkActionBarHTML(store);
+      } else {
+        bulkContainer.style.display = 'none';
+        bulkContainer.innerHTML = '';
+      }
     }
 
     // 2. Synchronize header select-all checkboxes (checked & indeterminate states)

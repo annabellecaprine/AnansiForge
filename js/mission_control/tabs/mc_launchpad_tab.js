@@ -167,7 +167,7 @@
 
     return `
       ${S.toolbarHTML(false, true, 'release')}
-      <div id="mc-bulk-bar-container">${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-release') : ''}</div>
+      <div id="mc-bulk-bar-container" style="display: ${S.state.selectedIds && S.state.selectedIds.size > 0 ? 'block' : 'none'};">${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-release') : ''}</div>
       ${readyItems.length > 0 ? `<div class="mc-ready-banner">
         🚀 <strong>${readyItems.length}</strong> release${readyItems.length > 1 ? 's' : ''} ready for public launch!
       </div>` : ''}

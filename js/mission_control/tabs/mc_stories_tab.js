@@ -91,7 +91,7 @@
 
     return `
       ${S.toolbarHTML(false, true, 'story')}
-      <div id="mc-bulk-bar-container">${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-story') : ''}</div>
+      <div id="mc-bulk-bar-container" style="display: ${S.state.selectedIds && S.state.selectedIds.size > 0 ? 'block' : 'none'};">${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-story') : ''}</div>
       <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0; align-items:center;">
         ${filterPill('Active', 'Active', activeCount, '✏️')}
         ${filterPill('Promoted', 'Promoted', promotedCount, '🚀')}
