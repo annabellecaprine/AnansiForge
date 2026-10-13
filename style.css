@@ -2115,11 +2115,17 @@ main#main-canvas {
 
 .mc-content {
   flex: 1;
+  min-height: 0;
   padding: 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Children keep their natural height; the content area scrolls instead of squashing them */
+.mc-content > * {
+  flex-shrink: 0;
 }
 
 /* Overview Dashboard Layout */
@@ -3676,7 +3682,6 @@ textarea.mc-modal-input {
 #mc-bulk-bar-container {
   display: block;
   width: 100%;
-  min-height: 0;
   position: relative;
   z-index: 10;
 }
