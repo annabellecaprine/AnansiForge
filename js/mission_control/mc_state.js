@@ -587,12 +587,7 @@
         if (store === 'record-story') actions += ` ${statusSelect}`;
         if (store === 'record-release') actions += ` ${seriesSelect}`;
 
-        return `<div class="mc-bulk-bar" data-store="${store}" style="
-          display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-          padding:8px 14px; margin-bottom:8px;
-          background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08));
-          border:1px solid rgba(99,102,241,0.35); border-radius:var(--radius-md);
-          animation: mc-bulk-bar-in 0.15s ease;">
+        return `<div class="mc-bulk-bar" data-store="${store}">
           <span style="font-size:0.82rem; font-weight:600; color:var(--accent); white-space:nowrap;">
             ✅ ${count} selected
           </span>

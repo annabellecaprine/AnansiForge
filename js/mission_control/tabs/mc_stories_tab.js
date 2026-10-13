@@ -19,7 +19,7 @@
     );
     const totalMsgs = storyReleases.reduce((s, r) => s + (r.metrics?.messages || 0), 0);
 
-    const isSelected = S.state.selectedIds.has(rec.id);
+    const isSelected = S.state.selectedIds.has(String(rec.id)) || S.state.selectedIds.has(rec.id);
     return `<tr class="mc-row ${rec.status === 'Promoted' ? 'mc-row--promoted' : ''}${isSelected ? ' mc-row--selected' : ''}" data-record-id="${rec.id}" data-universe="${esc(rec.universe || '')}">
       <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${rec.id}" ${isSelected ? 'checked' : ''}></td>
       <td class="mc-cell-name">
@@ -86,9 +86,12 @@
       </button>`;
     };
 
+    const pageIds = items.map(r => String(r.id));
+    const allSelected = pageIds.length > 0 && pageIds.every(id => S.state.selectedIds.has(id));
+
     return `
       ${S.toolbarHTML(false, true, 'story')}
-      ${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-story') : ''}
+      <div id="mc-bulk-bar-container">${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-story') : ''}</div>
       <div class="mc-story-status-bar" style="display:flex; gap:8px; margin: 12px 0; align-items:center;">
         ${filterPill('Active', 'Active', activeCount, '✏️')}
         ${filterPill('Promoted', 'Promoted', promotedCount, '🚀')}
@@ -102,7 +105,7 @@
         <table class="mc-table">
           <thead>
             <tr>
-              <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
+              <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" class="mc-bulk-select-all" title="Select all on page" ${allSelected ? 'checked' : ''}></th>
               <th>Story / Hub</th>
               <th>Status</th>
               <th>Universe</th>

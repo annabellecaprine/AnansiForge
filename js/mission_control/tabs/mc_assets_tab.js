@@ -41,7 +41,7 @@
 
     const isPinned = tracker.pinned;
     const depCount = S.state.allProjects.filter(p => (p.componentIds || []).includes(comp.id)).length;
-    const isSelected = S.state.selectedIds.has(comp.id);
+    const isSelected = S.state.selectedIds.has(String(comp.id)) || S.state.selectedIds.has(comp.id);
 
     return `<tr class="mc-row${isPinned ? ' mc-row--pinned' : ''}${isSelected ? ' mc-row--selected' : ''}" data-id="${comp.id}" data-universe="${esc(tracker.universe || '')}">
       <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${comp.id}" ${isSelected ? 'checked' : ''}></td>
@@ -163,6 +163,9 @@
     const stubRows = stubs.map(stub => stubRow(stub, steps)).join('');
     const pagHTML = paginationHTML(total);
 
+    const pageIds = displayItems.map(c => String(c.id));
+    const allSelected = pageIds.length > 0 && pageIds.every(id => S.state.selectedIds.has(id));
+
     return `
       <div class="mc-stage-summary">
         ${steps.map(s => {
@@ -177,13 +180,13 @@
       </div>
 
       ${S.toolbarHTML(true, false)}
-      ${S.bulkActionBarHTML ? S.bulkActionBarHTML('vault') : ''}
+      <div id="mc-bulk-bar-container">${S.bulkActionBarHTML ? S.bulkActionBarHTML('vault') : ''}</div>
 
       <div class="mc-table-wrap">
         <table class="mc-table">
           <thead>
             <tr>
-              <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
+              <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" class="mc-bulk-select-all" title="Select all on page" ${allSelected ? 'checked' : ''}></th>
               <th>Name</th>
               <th>Universe</th>
               <th>Role</th>

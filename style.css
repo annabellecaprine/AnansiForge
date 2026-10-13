@@ -3648,6 +3648,46 @@ textarea.mc-modal-input {
   padding: 3px 6px;
 }
 
+.mc-th-check,
+.mc-cell-check {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  text-align: center;
+  padding: 8px 6px !important;
+  user-select: none;
+}
+
+.mc-cell-check {
+  cursor: pointer;
+}
+
+.mc-th-check input[type="checkbox"],
+.mc-cell-check input[type="checkbox"] {
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  vertical-align: middle;
+}
+
+#mc-bulk-bar-container {
+  min-height: 0;
+}
+
+.mc-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: var(--radius-md);
+  animation: mc-bulk-bar-in 0.15s ease;
+}
+
 .mc-row--selected {
   background: rgba(99, 102, 241, 0.12) !important;
 }

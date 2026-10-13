@@ -72,7 +72,7 @@
     const linkedProj = S.state.allProjects.find(p => p.id === rec.projectId);
     const sourceStory = rec.sourceStoryId ? S.state.allTrackerRecords.find(r => r.id === rec.sourceStoryId) : null;
 
-    const isSelected = S.state.selectedIds.has(rec.id);
+    const isSelected = S.state.selectedIds.has(String(rec.id)) || S.state.selectedIds.has(rec.id);
     return `<tr class="mc-row${S.isReleasePublished(rec) ? ' mc-row--released' : ''}${isSelected ? ' mc-row--selected' : ''}" data-record-id="${rec.id}">
       <td class="mc-cell-check"><input type="checkbox" class="mc-bulk-check" data-id="${rec.id}" ${isSelected ? 'checked' : ''}></td>
       <td class="mc-cell-name">
@@ -133,6 +133,7 @@
 
     const releaseSection = (title, items, showReady = false) => {
       if (!items.length && !showReady) return '';
+      const secAllSelected = items.length > 0 && items.every(r => S.state.selectedIds.has(String(r.id)) || S.state.selectedIds.has(r.id));
       return `<div class="mc-launch-section">
         <h3 class="mc-section-title">${title} <span class="mc-section-count">${items.length}</span></h3>
         ${items.length === 0 ? '<p class="mc-empty-state">None yet.</p>' : `
@@ -140,7 +141,7 @@
           <table class="mc-table mc-table--release">
             <thead>
               <tr>
-                <th class="mc-th-check"><input type="checkbox" id="mc-bulk-select-all" title="Select all on page"></th>
+                <th class="mc-th-check"><input type="checkbox" class="mc-bulk-select-all" title="Select all in section" ${secAllSelected ? 'checked' : ''}></th>
                 <th>Name</th>
                 <th>Series</th>
                 <th>Universe</th>
@@ -166,7 +167,7 @@
 
     return `
       ${S.toolbarHTML(false, true, 'release')}
-      ${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-release') : ''}
+      <div id="mc-bulk-bar-container">${S.bulkActionBarHTML ? S.bulkActionBarHTML('record-release') : ''}</div>
       ${readyItems.length > 0 ? `<div class="mc-ready-banner">
         🚀 <strong>${readyItems.length}</strong> release${readyItems.length > 1 ? 's' : ''} ready for public launch!
       </div>` : ''}

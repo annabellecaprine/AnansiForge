@@ -121,6 +121,47 @@
 
   // ─── Event Delegation ─────────────────────────────────────────────────────────
 
+  let lastClickedCheck = null;
+
+  function updateBulkSelectionUI(store) {
+    const S = getS();
+    if (!S) return;
+    const state = S.state;
+    if (!store) {
+      store = state.activeSubTab === 'stories' ? 'record-story' : (state.activeSubTab === 'launchpad' ? 'record-release' : 'vault');
+    }
+
+    // 1. Update bulk action bar container without destroying table
+    const bulkContainer = document.getElementById('mc-bulk-bar-container');
+    if (bulkContainer && S.bulkActionBarHTML) {
+      bulkContainer.innerHTML = S.bulkActionBarHTML(store);
+    }
+
+    // 2. Synchronize header select-all checkboxes (checked & indeterminate states)
+    const selectAllElements = document.querySelectorAll('#mc-bulk-select-all, .mc-bulk-select-all');
+    selectAllElements.forEach(selectAll => {
+      const table = selectAll.closest('table') || document.getElementById('mc-content');
+      if (!table) return;
+      const checks = Array.from(table.querySelectorAll('.mc-bulk-check'));
+      if (!checks.length) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+      }
+      const checkedCount = checks.filter(c => c.checked).length;
+      if (checkedCount === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+      } else if (checkedCount === checks.length) {
+        selectAll.checked = true;
+        selectAll.indeterminate = false;
+      } else {
+        selectAll.checked = false;
+        selectAll.indeterminate = true;
+      }
+    });
+  }
+
   function bindEvents(container) {
     if (container._mcEventsBound) return;
     container._mcEventsBound = true;
@@ -567,30 +608,72 @@
         return;
       }
 
-      // Bulk checkbox toggle
-      if (t.matches('.mc-bulk-check')) {
-        const id = t.dataset.id;
-        if (t.checked) state.selectedIds.add(id);
-        else state.selectedIds.delete(id);
-        await renderCurrentTab();
+      // Bulk checkbox toggle or click on checkbox cell
+      const checkCell = t.closest('.mc-cell-check');
+      const bulkCheck = t.matches('.mc-bulk-check') ? t : (checkCell ? checkCell.querySelector('.mc-bulk-check') : null);
+      if (bulkCheck) {
+        // If clicked on cell but not the input element itself, toggle the input
+        if (t !== bulkCheck) {
+          bulkCheck.checked = !bulkCheck.checked;
+        }
+
+        const id = String(bulkCheck.dataset.id);
+        const allChecks = Array.from(container.querySelectorAll('.mc-bulk-check'));
+
+        // Shift+Click range selection
+        if (e.shiftKey && lastClickedCheck && lastClickedCheck !== bulkCheck && allChecks.includes(lastClickedCheck)) {
+          const fromIdx = allChecks.indexOf(lastClickedCheck);
+          const toIdx = allChecks.indexOf(bulkCheck);
+          const start = Math.min(fromIdx, toIdx);
+          const end = Math.max(fromIdx, toIdx);
+          const targetState = bulkCheck.checked;
+          for (let i = start; i <= end; i++) {
+            const chk = allChecks[i];
+            chk.checked = targetState;
+            const cid = String(chk.dataset.id);
+            if (targetState) state.selectedIds.add(cid);
+            else state.selectedIds.delete(cid);
+            chk.closest('tr')?.classList.toggle('mc-row--selected', targetState);
+          }
+        } else {
+          if (bulkCheck.checked) state.selectedIds.add(id);
+          else state.selectedIds.delete(id);
+          bulkCheck.closest('tr')?.classList.toggle('mc-row--selected', bulkCheck.checked);
+        }
+
+        lastClickedCheck = bulkCheck;
+        updateBulkSelectionUI();
         return;
       }
 
-      // Select All on page
-      if (t.id === 'mc-bulk-select-all') {
-        const checks = container.querySelectorAll('.mc-bulk-check');
+      // Select All on page or section
+      const selectAllBtn = t.closest('#mc-bulk-select-all, .mc-bulk-select-all');
+      if (selectAllBtn) {
+        const table = selectAllBtn.closest('table') || container;
+        const checks = Array.from(table.querySelectorAll('.mc-bulk-check'));
+        const shouldCheck = selectAllBtn.checked;
         checks.forEach(chk => {
-          if (t.checked) state.selectedIds.add(chk.dataset.id);
-          else state.selectedIds.delete(chk.dataset.id);
+          chk.checked = shouldCheck;
+          const cid = String(chk.dataset.id);
+          if (shouldCheck) state.selectedIds.add(cid);
+          else state.selectedIds.delete(cid);
+          chk.closest('tr')?.classList.toggle('mc-row--selected', shouldCheck);
         });
-        await renderCurrentTab();
+        lastClickedCheck = null;
+        updateBulkSelectionUI();
         return;
       }
 
       // Bulk deselect
-      if (t.id === 'mc-bulk-deselect') {
+      if (t.id === 'mc-bulk-deselect' || t.closest('#mc-bulk-deselect')) {
         state.selectedIds.clear();
-        await renderCurrentTab();
+        const checks = container.querySelectorAll('.mc-bulk-check');
+        checks.forEach(chk => {
+          chk.checked = false;
+          chk.closest('tr')?.classList.remove('mc-row--selected');
+        });
+        lastClickedCheck = null;
+        updateBulkSelectionUI();
         return;
       }
 
@@ -1424,6 +1507,9 @@
     view.querySelectorAll('.mc-subtab').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.subtab === tab);
     });
+
+    const store = tab === 'stories' ? 'record-story' : (tab === 'launchpad' ? 'record-release' : 'vault');
+    updateBulkSelectionUI(store);
   }
 
   function bindGlobalListeners() {
