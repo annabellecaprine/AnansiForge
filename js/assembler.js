@@ -1490,6 +1490,88 @@
     }
   }
 
+  // Shared category → character-card field mapping used when auto-staging
+  // components (story builds and ad-hoc selection builds).
+  function mappingForCategory(category) {
+    if (category === 'character' || category === 'organization') return 'personality';
+    if (category === 'scenario') return 'scenario';
+    if (category === 'bio') return 'description';
+    if (category === 'initial_message') return 'first_mes';
+    if (category === 'setting' || category === 'rules') return 'scenario';
+    return 'personality';
+  }
+
+  const CATEGORY_RANK = ['character', 'organization', 'scenario', 'bio', 'initial_message', 'setting', 'rules'];
+
+  // Deterministic ordering for ad-hoc project casts: category rank, then name.
+  // Unknown categories go last, alphabetical by category then name. Dedupes by id.
+  function orderComponentsForProject(comps) {
+    const seen = new Set();
+    const unique = [];
+    for (const c of comps || []) {
+      if (!c || seen.has(c.id)) continue;
+      seen.add(c.id);
+      unique.push(c);
+    }
+    const rankOf = (c) => {
+      const i = CATEGORY_RANK.indexOf(c.category);
+      return i === -1 ? CATEGORY_RANK.length : i;
+    };
+    return unique.sort((a, b) => {
+      const ra = rankOf(a), rb = rankOf(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === CATEGORY_RANK.length) {
+        const cc = String(a.category || '').localeCompare(String(b.category || ''));
+        if (cc !== 0) return cc;
+      }
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
+
+  // Build a project ad hoc from a set of component ids. Eagerly saves the
+  // project record, then opens it in the Assembler. Returns the saved record
+  // (or null when no selected component could be resolved).
+  async function createFromSelection(ids, name) {
+    const resolved = [];
+    for (const id of ids || []) {
+      const comp = await window.ForgeDB.getComponent(id);
+      if (comp) resolved.push(comp);
+    }
+    const ordered = orderComponentsForProject(resolved);
+    if (ordered.length === 0) {
+      if (typeof showToast === 'function') showToast('None of the selected components could be found.', 'error');
+      return null;
+    }
+
+    const componentIds = ordered.map(c => c.id);
+    const projMappings = {};
+    for (const c of ordered) projMappings[c.id] = mappingForCategory(c.category);
+
+    const record = await window.ForgeDB.saveProject({
+      name: (name || '').trim(),
+      componentIds,
+      mappings: projMappings,
+      relationships: [],
+      origin: 'ad-hoc'
+    });
+
+    // openAssemblerScreen only deactivates .view elements; Mission Control is
+    // shown via inline display, so hide it explicitly (same as createFromStory).
+    const mcModal = document.getElementById('mc-modal-overlay');
+    if (mcModal) mcModal.classList.add('hidden');
+    const mcView = document.getElementById('mission-control-view');
+    if (mcView) mcView.style.display = 'none';
+    const btnMC = document.getElementById('btn-mission-control');
+    if (btnMC) btnMC.classList.remove('active');
+
+    await openAssemblerScreen(record.id);
+
+    if (typeof showToast === 'function') {
+      showToast(`Project "${record.name}" created with ${componentIds.length} component(s)`, 'success');
+    }
+    return record;
+  }
+
   async function createFromStory(storyOrId) {
     let story = storyOrId;
     if (typeof storyOrId === 'string') {
@@ -1515,13 +1597,7 @@
       if (comp) {
         if (!stagedIds.includes(compId)) {
           stagedIds.push(compId);
-          if (comp.category === 'character') mappings[compId] = 'personality';
-          else if (comp.category === 'organization') mappings[compId] = 'personality';
-          else if (comp.category === 'scenario') mappings[compId] = 'scenario';
-          else if (comp.category === 'bio') mappings[compId] = 'description';
-          else if (comp.category === 'initial_message') mappings[compId] = 'first_mes';
-          else if (comp.category === 'setting' || comp.category === 'rules') mappings[compId] = 'scenario';
-          else mappings[compId] = 'personality';
+          mappings[compId] = mappingForCategory(comp.category);
         }
       }
     }
@@ -1565,6 +1641,9 @@
     compile: compileCardData,
     exportLorebook: exportAsLorebook,
     open: openAssemblerScreen,
-    createFromStory: createFromStory
+    createFromStory: createFromStory,
+    createFromSelection: createFromSelection,
+    mappingForCategory: mappingForCategory,
+    orderComponentsForProject: orderComponentsForProject
   };
 })();

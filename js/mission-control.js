@@ -439,9 +439,16 @@
       // Sub-tab switching
       const subtabBtn = t.closest('.mc-subtab');
       if (subtabBtn) {
-        state.activeSubTab = subtabBtn.dataset.subtab;
+        // Vault asset tabs share one persistent selection (enables building an
+        // ad-hoc project across tabs). Stories/Releases reuse the same Set for
+        // record ids, so clear whenever moving to or from a non-vault tab.
+        const VAULT_ASSET_TABS = ['characters', 'scenarios', 'bios', 'messages', 'orgs'];
+        const prevTab = state.activeSubTab;
+        const nextTab = subtabBtn.dataset.subtab;
+        const keepSelection = VAULT_ASSET_TABS.includes(prevTab) && VAULT_ASSET_TABS.includes(nextTab);
+        state.activeSubTab = nextTab;
         state.activeTagFilter = '';
-        state.selectedIds.clear();
+        if (!keepSelection) state.selectedIds.clear();
         state.currentPage = 1;
         await renderCurrentTab();
         return;
@@ -574,6 +581,14 @@
       if (t.id === 'mc-bulk-deselect') {
         state.selectedIds.clear();
         await renderCurrentTab();
+        return;
+      }
+
+      // Bulk: new project from selection
+      if (t.closest('#mc-bulk-new-project')) {
+        const ids = [...state.selectedIds];
+        if (!ids.length) return;
+        if (window.NewProjectModal?.open) window.NewProjectModal.open(ids);
         return;
       }
 

@@ -594,7 +594,8 @@
             ✅ ${count} selected
           </span>
           ${actions}
-          <button id="mc-bulk-deselect" class="mc-btn mc-btn-ghost mc-btn-sm" style="margin-left:auto;">✕ Deselect All</button>
+          ${store === 'vault' ? `<button id="mc-bulk-new-project" class="mc-btn mc-btn-accent mc-btn-sm" style="margin-left:auto;" title="Create a new project from the selected components">🤖 New Project (${count})</button>` : ''}
+          <button id="mc-bulk-deselect" class="mc-btn mc-btn-ghost mc-btn-sm" style="${store === 'vault' ? '' : 'margin-left:auto;'}">✕ Deselect All</button>
         </div>`;
     }
 
