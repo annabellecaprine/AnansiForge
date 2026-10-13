@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=17.1">
+  <link rel="stylesheet" href="style.css?v=17.2">
 </head>
 
 <body>
@@ -866,39 +866,85 @@
 
   <!-- API CONFIGURATION MODAL -->
   <div id="modal-overlay" class="modal-overlay hidden">
-    <div class="modal">
+    <div class="modal" style="max-width: 540px;">
       <div class="modal-header">
         <h3>API Configuration</h3>
         <button id="btn-close-modal" class="btn btn-ghost btn-icon">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="api-provider">Provider</label>
-          <select id="api-provider">
-            <option value="gemini">Google Gemini</option>
-            <option value="openai">OpenAI</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="chutes">Chutes.ai</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="lmstudio">LM Studio (Local)</option>
-            <option value="kobold">Kobold AI (Local)</option>
-            <option value="custom">Custom Endpoint</option>
-          </select>
+      <div class="api-modal-tabs" style="display:flex; border-bottom:1px solid var(--border-color); padding:0 16px;">
+        <button id="tab-api-primary" class="api-modal-tab active" type="button">Primary Model</button>
+        <button id="tab-api-secondary" class="api-modal-tab" type="button">Secondary Model (Delphi QA)</button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px;">
+        <!-- PRIMARY MODEL PANE -->
+        <div id="api-pane-primary">
+          <div class="form-group">
+            <label for="api-provider">Provider</label>
+            <select id="api-provider">
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="chutes">Chutes.ai</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="lmstudio">LM Studio (Local)</option>
+              <option value="kobold">Kobold AI (Local)</option>
+              <option value="custom">Custom Endpoint</option>
+            </select>
+          </div>
+          <div id="api-url-group" class="form-group" style="display:none;">
+            <label for="api-url">Base URL</label>
+            <input type="text" id="api-url" placeholder="e.g., http://localhost:1234/v1" autocomplete="off"
+              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+          </div>
+          <div class="form-group">
+            <label for="api-model">Model Name</label>
+            <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o" autocomplete="off"
+              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+          </div>
+          <div id="api-key-group" class="form-group">
+            <label for="api-key">API Key</label>
+            <input type="password" id="api-key" name="api-key" placeholder="Enter API Key" autocomplete="new-password"
+              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+          </div>
         </div>
-        <div id="api-url-group" class="form-group" style="display:none;">
-          <label for="api-url">Base URL</label>
-          <input type="text" id="api-url" placeholder="e.g., http://localhost:1234/v1" autocomplete="off"
-            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-        </div>
-        <div class="form-group">
-          <label for="api-model">Model Name</label>
-          <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o" autocomplete="off"
-            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-        </div>
-        <div id="api-key-group" class="form-group">
-          <label for="api-key">API Key</label>
-          <input type="password" id="api-key" name="api-key" placeholder="Enter API Key" autocomplete="new-password"
-            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+
+        <!-- SECONDARY MODEL PANE (DELPHI QA) -->
+        <div id="api-pane-secondary" style="display:none;">
+          <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:12px; line-height:1.45; background:rgba(168,85,247,0.06); border:1px solid rgba(168,85,247,0.2); padding:8px 12px; border-radius:var(--radius-sm);">
+            Configure an optional second LLM for <strong>Delphi Phase 2 Cross-Model Audits</strong>. When configured, Delphi compares trait interpretations and cited wording across both architectures to catch model-specific prompt brittleness.
+          </div>
+          <div class="form-group">
+            <label for="api-provider-2">Secondary Provider</label>
+            <select id="api-provider-2">
+              <option value="none">— Disabled (Single Model) —</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="chutes">Chutes.ai</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="lmstudio">LM Studio (Local)</option>
+              <option value="kobold">Kobold AI (Local)</option>
+              <option value="custom">Custom Endpoint</option>
+            </select>
+          </div>
+          <div id="api-url-group-2" class="form-group" style="display:none;">
+            <label for="api-url-2">Base URL</label>
+            <input type="text" id="api-url-2" placeholder="e.g., http://localhost:1234/v1" autocomplete="off"
+              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+          </div>
+          <div class="form-group">
+            <label for="api-model-2">Model Name</label>
+            <input type="text" id="api-model-2" placeholder="e.g., gpt-4o, claude-3-5-sonnet-20241022" autocomplete="off"
+              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+          </div>
+          <div id="api-key-group-2" class="form-group">
+            <label for="api-key-2">API Key</label>
+            <input type="password" id="api-key-2" name="api-key-2" placeholder="Enter Secondary API Key" autocomplete="new-password"
+              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+            <button id="btn-clear-api-2" class="btn btn-ghost btn-sm" type="button" style="color:#f87171;">Disable Secondary Model</button>
+          </div>
         </div>
       </div>
       <div class="modal-footer" style="display:flex; gap:8px; justify-content:space-between; align-items:center;">
@@ -1057,35 +1103,35 @@
   <script src="js/modals/confirm_modal.js?v=17.0"></script>
   <script src="js/png-handler.js?v=17.0"></script>
   <script src="js/breakout.js?v=17.0"></script>
-  <script src="js/llm.js?v=17.1"></script>
+  <script src="js/llm.js?v=17.2"></script>
 
   <!-- CORE MODULES (must load before UI controllers) -->
-  <script src="js/analytics/metrics_math.js?v=17.1"></script>
-  <script src="js/delphi.js?v=17.1"></script>
+  <script src="js/analytics/metrics_math.js?v=17.2"></script>
+  <script src="js/delphi.js?v=17.2"></script>
 
   <!-- UI CONTROLLERS -->
-  <script src="js/parlor.js?v=17.1"></script>
-  <script src="js/assembler.js?v=17.1"></script>
-  <script src="js/sandbox.js?v=17.1"></script>
+  <script src="js/parlor.js?v=17.2"></script>
+  <script src="js/assembler.js?v=17.2"></script>
+  <script src="js/sandbox.js?v=17.2"></script>
   <!-- MISSION CONTROL SUB-MODULES -->
-  <script src="js/mission_control/mc_state.js?v=17.1"></script>
-  <script src="js/mission_control/mc_charts.js?v=17.1"></script>
-  <script src="js/mission_control/mc_modals.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_overview_tab.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_assets_tab.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_launchpad_tab.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_stories_tab.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_universes_tab.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_metrics_tab.js?v=17.1"></script>
-  <script src="js/mission_control/tabs/mc_import_tab.js?v=17.1"></script>
+  <script src="js/mission_control/mc_state.js?v=17.2"></script>
+  <script src="js/mission_control/mc_charts.js?v=17.2"></script>
+  <script src="js/mission_control/mc_modals.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_overview_tab.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_assets_tab.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_launchpad_tab.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_stories_tab.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_universes_tab.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_metrics_tab.js?v=17.2"></script>
+  <script src="js/mission_control/tabs/mc_import_tab.js?v=17.2"></script>
 
-  <script src="js/modals/interview_modal.js?v=17.1"></script>
-  <script src="js/modals/universe_genre_modal.js?v=17.1"></script>
-  <script src="js/modals/new_project_modal.js?v=17.1"></script>
-  <script src="js/modals/delphi_modal.js?v=17.1"></script>
-  <script src="js/mission-control.js?v=17.1"></script>
-  <script src="js/omni-search.js?v=17.1"></script>
-  <script src="js/app.js?v=17.1"></script>
+  <script src="js/modals/interview_modal.js?v=17.2"></script>
+  <script src="js/modals/universe_genre_modal.js?v=17.2"></script>
+  <script src="js/modals/new_project_modal.js?v=17.2"></script>
+  <script src="js/modals/delphi_modal.js?v=17.2"></script>
+  <script src="js/mission-control.js?v=17.2"></script>
+  <script src="js/omni-search.js?v=17.2"></script>
+  <script src="js/app.js?v=17.2"></script>
   <!-- UNIVERSE MANAGER MODAL -->
   <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
     <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">

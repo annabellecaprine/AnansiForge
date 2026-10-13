@@ -13,7 +13,12 @@
 
   let modalEl = null;
   let activeComp = null;
+  let activeReportTab = 'synthesis';
   let isRunning = false;
+
+  function getSecondaryConfig() {
+    return window.ForgeLLM && window.ForgeLLM.getSecondaryConfig ? window.ForgeLLM.getSecondaryConfig() : null;
+  }
 
   function escapeHTML(str) {
     if (str === null || str === undefined) return '';
@@ -112,24 +117,24 @@
     modalEl.setAttribute('role', 'dialog');
     modalEl.setAttribute('aria-modal', 'true');
     modalEl.innerHTML = `
-      <div class="modal delphi-modal-content" style="max-width: 780px; width: 92%; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal delphi-modal-content" style="max-width: 800px; width: 92%; max-height: 90vh; display: flex; flex-direction: column;">
         <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border-color);">
           <div>
             <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
               🔮 Delphi — Character Design QA Gate
             </h3>
             <span style="font-size: 0.78rem; color: var(--text-muted);">
-              Audits trait dominance, internal contradictions, and behavioral triggers before stamping ⭐ Golden Template
+              Audits trait dominance, internal contradictions, and cross-model agreement before stamping ⭐ Golden Template
             </span>
           </div>
           <button id="btn-close-delphi-modal" class="btn btn-ghost btn-icon" style="font-size: 1.2rem; cursor: pointer;" title="Close">&times;</button>
         </div>
 
-        <div id="delphi-modal-body" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+        <div id="delphi-modal-body" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
           <!-- Dynamically injected state views: pre-run, running, or report -->
         </div>
 
-        <div id="delphi-modal-footer" class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border-color);">
+        <div id="delphi-modal-footer" class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap;">
           <!-- Dynamically injected footer actions -->
         </div>
       </div>
@@ -161,28 +166,34 @@
     if (!body || !footer) return;
 
     const cfg = window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {};
+    const secCfg = getSecondaryConfig();
     const hasKey = !!cfg.apiKey || ['lmstudio', 'kobold', 'custom', 'chutes', 'local'].includes(cfg.provider);
+    const hasSecondary = !!(secCfg && secCfg.provider && secCfg.provider !== 'none');
     const existing = comp.delphi || null;
 
     let historyHTML = '';
     if (existing && existing.verdict) {
       const dateStr = existing.timestamp ? new Date(existing.timestamp).toLocaleString() : 'Previous run';
+      const modelDetail = existing.comparedModel
+        ? `${escapeHTML(existing.model || cfg.model || 'primary')} vs ${escapeHTML(existing.comparedModel)}`
+        : escapeHTML(existing.model || cfg.model || 'model');
       historyHTML = `
         <div class="delphi-prerun-history">
           <div>
             <strong>Last Diagnostic:</strong>
             <span class="mc-delphi-badge mc-delphi-${existing.verdict.toLowerCase().replace(/\s+/g, '-')}">🔮 ${escapeHTML(existing.verdict)}</span>
-            <span style="font-size:0.78rem; color:var(--text-muted); margin-left:6px;">(${dateStr} via ${escapeHTML(existing.model || cfg.model || 'model')})</span>
+            <span style="font-size:0.78rem; color:var(--text-muted); margin-left:6px;">(${dateStr} via ${modelDetail})</span>
           </div>
           <button id="btn-delphi-view-last" class="btn btn-secondary btn-sm">View Last Report</button>
         </div>`;
     }
 
     body.innerHTML = `
-      <div class="delphi-meta-bar">
+      <div class="delphi-meta-bar" style="display:flex; flex-wrap:wrap; gap:12px; font-size:0.8rem; background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
         <span class="delphi-meta-item"><strong>Component:</strong> ${escapeHTML(comp.name)}</span>
         <span class="delphi-meta-item"><strong>Category:</strong> ${escapeHTML(comp.category)}</span>
-        <span class="delphi-meta-item"><strong>Model:</strong> ${escapeHTML(cfg.provider || 'gemini')} / ${escapeHTML(cfg.model || 'default')}</span>
+        <span class="delphi-meta-item"><strong>Primary Model:</strong> ${escapeHTML(cfg.provider || 'gemini')} / ${escapeHTML(cfg.model || 'default')}</span>
+        <span class="delphi-meta-item"><strong>Secondary Model:</strong> ${hasSecondary ? `${escapeHTML(secCfg.provider)} / ${escapeHTML(secCfg.model || 'default')}` : '<span style="color:var(--text-muted);">Disabled (Single model mode)</span>'}</span>
       </div>
 
       <div class="delphi-explainer-box">
@@ -194,7 +205,7 @@
           <li><strong>Dominance Hierarchy:</strong> Which traits shape behavior strongest vs. which get suppressed.</li>
           <li><strong>Contradictions:</strong> Conflicting traits and which trait wording wins in ambiguity.</li>
           <li><strong>Triggers:</strong> Sycophancy traps, instruction hierarchy risks, and persona drift.</li>
-          <li><strong>Rewordings:</strong> Actionable BEFORE/AFTER harmonizations.</li>
+          <li><strong>Cross-Model Agreement:</strong> Audits cited wording across two models to catch architecture bias.</li>
         </ul>
       </div>
 
@@ -210,6 +221,10 @@
 
     footer.innerHTML = `
       <button id="btn-delphi-close" class="btn btn-ghost">Close</button>
+      ${hasSecondary ? `
+        <button id="btn-delphi-run-compare" class="btn btn-secondary" style="border-color: rgba(168,85,247,0.4); color: #d8b4fe;" ${!hasKey ? 'disabled' : ''}>
+          ⇄ Run Cross-Model Comparison
+        </button>` : ''}
       <button id="btn-delphi-run" class="btn btn-primary" ${!hasKey ? 'disabled' : ''}>
         ▶ Run Diagnostic
       </button>
@@ -217,24 +232,36 @@
 
     document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
     document.getElementById('btn-delphi-run')?.addEventListener('click', () => runDiagnostic(comp.id));
-    document.getElementById('btn-delphi-view-last')?.addEventListener('click', () => renderReport(comp.delphi, comp));
+    document.getElementById('btn-delphi-run-compare')?.addEventListener('click', () => runComparison(comp.id));
+    document.getElementById('btn-delphi-view-last')?.addEventListener('click', () => {
+      activeReportTab = existing && existing.secondaryReport ? 'synthesis' : 'primary';
+      renderReport(comp.delphi, comp);
+    });
     document.getElementById('btn-delphi-open-settings')?.addEventListener('click', () => {
       closeModal();
       document.getElementById('btn-api-config')?.click();
     });
   }
 
-  function renderRunning(comp) {
+  function renderRunning(comp, mode = 'primary') {
     const body = document.getElementById('delphi-modal-body');
     const footer = document.getElementById('delphi-modal-footer');
     if (!body || !footer) return;
 
+    const isCompare = mode === 'cross-model';
+    const cfg = window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {};
+    const secCfg = getSecondaryConfig();
+
     body.innerHTML = `
       <div style="text-align: center; padding: 48px 20px;">
         <div class="delphi-spinner"></div>
-        <h4 style="margin: 16px 0 6px 0; color: var(--text-primary); font-size: 1.05rem;">Consulting the oracle…</h4>
-        <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
-          Auditing <em>"${escapeHTML(comp.name)}"</em> for trait dominance, contradictions, and behavioral triggers.
+        <h4 style="margin: 16px 0 6px 0; color: var(--text-primary); font-size: 1.05rem;">
+          ${isCompare ? 'Consulting both oracles…' : 'Consulting the oracle…'}
+        </h4>
+        <p style="margin: 0 auto; color: var(--text-muted); font-size: 0.85rem; max-width: 540px; line-height: 1.5;">
+          ${isCompare
+            ? `Auditing <em>"${escapeHTML(comp.name)}"</em> across <strong>${escapeHTML(cfg.model || 'Primary')}</strong> and <strong>${escapeHTML(secCfg?.model || 'Secondary')}</strong> to synthesize behavioral interpretations and detect disputed wording.`
+            : `Auditing <em>"${escapeHTML(comp.name)}"</em> for trait dominance, contradictions, and behavioral triggers via <strong>${escapeHTML(cfg.model || 'model')}</strong>.`}
         </p>
       </div>
     `;
@@ -249,6 +276,16 @@
     const footer = document.getElementById('delphi-modal-footer');
     if (!body || !footer) return;
 
+    const secCfg = getSecondaryConfig();
+    const hasSecondary = !!(secCfg && secCfg.provider && secCfg.provider !== 'none');
+    const hasComparison = !!(delphiData.secondaryReport || delphiData.comparisonReport);
+
+    if (hasComparison && !['synthesis', 'primary', 'secondary'].includes(activeReportTab)) {
+      activeReportTab = 'synthesis';
+    } else if (!hasComparison) {
+      activeReportTab = 'primary';
+    }
+
     const verdict = delphiData.verdict || 'UNREADABLE';
     const dims = delphiData.dimensions || null;
     const notes = delphiData.notes || {};
@@ -262,16 +299,17 @@
       if (dims.coherence === 'flag' || dims.coherence === 'fail') flagCount++;
       if (dims.dominance === 'flag' || dims.dominance === 'fail') flagCount++;
       if (dims.triggers === 'flag' || dims.triggers === 'fail') flagCount++;
+      if (dims.crossModel === 'flag') flagCount++;
     }
 
     if (verdict === 'FAIL') {
       bannerCls = 'delphi-banner-fail';
       bannerIcon = '🛑';
-      bannerTitle = `FAIL — Critical design conflicts identified (${flagCount} flag${flagCount === 1 ? '' : 's'})`;
+      bannerTitle = `FAIL — Critical design defect identified (${flagCount} flag${flagCount === 1 ? '' : 's'})`;
     } else if (verdict === 'NEEDS WORK') {
       bannerCls = 'delphi-banner-warn';
       bannerIcon = '⚠️';
-      bannerTitle = `NEEDS WORK — Behavioral pulls or contradictions detected (${flagCount} flag${flagCount === 1 ? '' : 's'})`;
+      bannerTitle = `NEEDS WORK — Behavioral pulls or ambiguities detected (${flagCount} flag${flagCount === 1 ? '' : 's'})`;
     } else if (verdict === 'READY') {
       bannerCls = 'delphi-banner-ready';
       bannerIcon = '🔮';
@@ -296,20 +334,104 @@
               <span class="delphi-dim-title">${name}</span>
               <span class="delphi-dim-badge">${icon} ${label}</span>
             </div>
-            <div class="delphi-dim-note">${escapeHTML(note || (v === 'unrun' ? 'Single model in Phase 1' : ''))}</div>
+            <div class="delphi-dim-note">${escapeHTML(note || '')}</div>
           </div>
         `;
       };
+
+      const crossModelVal = dims.crossModel || 'unrun';
+      let crossModelNote = notes.crossModel || '';
+      if (!crossModelNote) {
+        if (crossModelVal === 'pass') {
+          crossModelNote = delphiData.comparedModel
+            ? `Compatible interpretations between ${delphiData.model} and ${delphiData.comparedModel}`
+            : 'Compatible interpretations across models';
+        } else if (crossModelVal === 'flag') {
+          crossModelNote = 'Material interpretation difference detected';
+        } else {
+          crossModelNote = hasSecondary
+            ? 'Secondary model configured — click "Compare" to audit'
+            : 'Configure secondary model in API Settings to enable';
+        }
+      }
 
       dimsHTML = `
         <div class="delphi-dim-grid">
           ${dimPill('1. Trait Coherence', dims.coherence, notes.coherence)}
           ${dimPill('2. Dominance Hierarchy', dims.dominance, notes.dominance)}
           ${dimPill('3. Behavioral Triggers', dims.triggers, notes.triggers)}
-          ${dimPill('4. Cross-Model Agreement', dims.crossModel || 'unrun', notes.crossModel || 'Single model configured')}
+          ${dimPill('4. Cross-Model Agreement', crossModelVal, crossModelNote)}
         </div>
       `;
     }
+
+    // Sub-Tabs for Cross-Model Reports
+    let tabsHTML = '';
+    if (hasComparison) {
+      tabsHTML = `
+        <div class="delphi-report-tabs">
+          <button class="delphi-report-tab ${activeReportTab === 'synthesis' ? 'active' : ''}" data-tab="synthesis">
+            🔮 Cross-Model Synthesis
+          </button>
+          <button class="delphi-report-tab ${activeReportTab === 'primary' ? 'active' : ''}" data-tab="primary">
+            Primary: ${escapeHTML(delphiData.model || 'Model 1')}
+          </button>
+          <button class="delphi-report-tab ${activeReportTab === 'secondary' ? 'active' : ''}" data-tab="secondary">
+            Secondary: ${escapeHTML(delphiData.comparedModel || 'Model 2')}
+          </button>
+        </div>
+      `;
+    }
+
+    // Report content according to active tab
+    let reportBodyHTML = '';
+    if (activeReportTab === 'synthesis' && hasComparison) {
+      let disputedHTML = '';
+      const compData = delphiData.comparisonData || {};
+      const disputed = Array.isArray(compData.disputedWording) ? compData.disputedWording : [];
+      if (disputed.length > 0 || (dims && dims.crossModel === 'flag')) {
+        disputedHTML = `
+          <div class="delphi-disputed-box">
+            <div class="delphi-disputed-title">⚠️ Cross-Model Disputed Wording & Behavioral Consequences</div>
+            ${disputed.length > 0 ? disputed.map(dw => {
+              const quote = typeof dw === 'string' ? dw : (dw.wording || JSON.stringify(dw));
+              const cons = typeof dw === 'object' && dw.consequence ? dw.consequence : (compData.consequence || null);
+              return `
+                <div class="delphi-disputed-item">
+                  <div class="delphi-disputed-wording">"${escapeHTML(quote)}"</div>
+                  ${cons ? `<div class="delphi-disputed-consequence"><strong>Likely Behavioral Consequence:</strong> ${escapeHTML(cons)}</div>` : ''}
+                </div>
+              `;
+            }).join('') : `
+              <div class="delphi-disputed-consequence">
+                ${compData.consequence ? `<strong>Consequence:</strong> ${escapeHTML(compData.consequence)}` : 'Models arrived at materially divergent interpretations of the prompt definition.'}
+              </div>
+            `}
+          </div>
+        `;
+      }
+      reportBodyHTML = disputedHTML + formatMarkdown(delphiData.comparisonReport || delphiData.report || '');
+    } else if (activeReportTab === 'secondary' && hasComparison) {
+      let secMeta = '';
+      if (delphiData.secondaryDimensions) {
+        const s = delphiData.secondaryDimensions;
+        secMeta = `
+          <div style="margin-bottom: 12px; font-size: 0.78rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <strong>${escapeHTML(delphiData.comparedModel || 'Secondary Model')} Dimensions:</strong>
+            Coherence: <code class="delphi-inline-code">${escapeHTML(s.coherence || '—')}</code> ·
+            Dominance: <code class="delphi-inline-code">${escapeHTML(s.dominance || '—')}</code> ·
+            Triggers: <code class="delphi-inline-code">${escapeHTML(s.triggers || '—')}</code>
+          </div>
+        `;
+      }
+      reportBodyHTML = secMeta + formatMarkdown(delphiData.secondaryReport || 'No secondary report recorded.');
+    } else {
+      reportBodyHTML = formatMarkdown(delphiData.report || '');
+    }
+
+    const testSubtitle = delphiData.comparedModel
+      ? `${escapeHTML(delphiData.model || 'primary')} vs ${escapeHTML(delphiData.comparedModel)} · Tested ${delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleTimeString() : 'just now'}`
+      : `Model: ${escapeHTML(delphiData.model || 'model')} · Tested ${delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleTimeString() : 'just now'}`;
 
     body.innerHTML = `
       ${unreadableNotice ? `
@@ -323,28 +445,52 @@
             <strong>${escapeHTML(bannerTitle)}</strong>
           </div>
           <div style="font-size: 0.78rem; opacity: 0.85; margin-top: 4px;">
-            Model: ${escapeHTML(delphiData.model || 'model')} · Tested ${delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleTimeString() : 'just now'}
+            ${testSubtitle}
           </div>
         </div>`}
 
       ${dimsHTML}
+      ${tabsHTML}
 
       <div class="delphi-report-content">
-        ${formatMarkdown(delphiData.report || '')}
+        ${reportBodyHTML}
       </div>
     `;
 
     footer.innerHTML = `
       <button id="btn-delphi-copy" class="btn btn-secondary">📋 Copy Report</button>
-      <button id="btn-delphi-rerun" class="btn btn-secondary">🔁 Re-run</button>
+      <button id="btn-delphi-rerun" class="btn btn-secondary">🔁 Re-run Primary</button>
+      ${hasSecondary ? `
+        <button id="btn-delphi-compare" class="btn btn-secondary" style="border-color: rgba(168,85,247,0.4); color: #d8b4fe;">
+          ⇄ ${hasComparison ? 'Re-run Comparison' : `Compare with ${escapeHTML(secCfg.model || 'Second Model')}`}
+        </button>` : ''}
       <button id="btn-delphi-close" class="btn btn-primary">Close</button>
     `;
 
+    // Event listeners
+    body.querySelectorAll('.delphi-report-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', (e) => {
+        const tab = e.currentTarget.getAttribute('data-tab');
+        if (tab) {
+          activeReportTab = tab;
+          renderReport(delphiData, comp, false);
+        }
+      });
+    });
+
     document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
     document.getElementById('btn-delphi-rerun')?.addEventListener('click', () => runDiagnostic(comp.id));
+    document.getElementById('btn-delphi-compare')?.addEventListener('click', () => runComparison(comp.id));
     document.getElementById('btn-delphi-copy')?.addEventListener('click', async (e) => {
       try {
-        const textToCopy = `Delphi Diagnostic Report: ${comp.name}\nVerdict: ${verdict}\nDate: ${delphiData.timestamp || new Date().toISOString()}\n\n${delphiData.report || ''}`;
+        let textToCopy = '';
+        if (activeReportTab === 'synthesis' && delphiData.comparisonReport) {
+          textToCopy = `Delphi Cross-Model Comparison: ${comp.name}\nVerdict: ${verdict}\nDate: ${delphiData.timestamp || new Date().toISOString()}\nPrimary: ${delphiData.model} · Secondary: ${delphiData.comparedModel}\n\n${delphiData.comparisonReport}`;
+        } else if (activeReportTab === 'secondary' && delphiData.secondaryReport) {
+          textToCopy = `Delphi Secondary Diagnostic (${delphiData.comparedModel}): ${comp.name}\nDate: ${delphiData.timestamp || new Date().toISOString()}\n\n${delphiData.secondaryReport}`;
+        } else {
+          textToCopy = `Delphi Diagnostic Report: ${comp.name}\nVerdict: ${verdict}\nDate: ${delphiData.timestamp || new Date().toISOString()}\n\n${delphiData.report || ''}`;
+        }
         await navigator.clipboard.writeText(textToCopy);
         const btn = e.currentTarget;
         const original = btn.textContent;
@@ -365,7 +511,7 @@
       if (!comp) throw new Error('Component not found in database.');
       activeComp = comp;
 
-      renderRunning(comp);
+      renderRunning(comp, 'primary');
 
       const result = await window.Delphi.diagnoseComponent(compId);
 
@@ -407,6 +553,7 @@
         detail: { id: comp.id, verdict: result.verdict }
       }));
 
+      activeReportTab = 'primary';
       renderReport(delphiRecord, comp, false);
     } catch (err) {
       console.error('[DelphiModal] Diagnostic failed:', err);
@@ -432,6 +579,45 @@
     }
   }
 
+  async function runComparison(compId) {
+    if (isRunning) return;
+    isRunning = true;
+
+    try {
+      const comp = await window.ForgeDB.getComponent(compId);
+      if (!comp) throw new Error('Component not found in database.');
+      activeComp = comp;
+
+      renderRunning(comp, 'cross-model');
+
+      const result = await window.Delphi.runCrossModelComparison(compId);
+
+      activeReportTab = 'synthesis';
+      renderReport(result, comp, false);
+    } catch (err) {
+      console.error('[DelphiModal] Cross-model comparison failed:', err);
+      const body = document.getElementById('delphi-modal-body');
+      const footer = document.getElementById('delphi-modal-footer');
+      if (body) {
+        body.innerHTML = `
+          <div class="delphi-warning-banner">
+            🛑 <strong>Cross-Model Audit Failed:</strong> ${escapeHTML(err.message || 'An unexpected error occurred.')}
+          </div>
+        `;
+      }
+      if (footer) {
+        footer.innerHTML = `
+          <button id="btn-delphi-close" class="btn btn-secondary">Close</button>
+          <button id="btn-delphi-retry-comp" class="btn btn-primary">Try Again</button>
+        `;
+        document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
+        document.getElementById('btn-delphi-retry-comp')?.addEventListener('click', () => runComparison(compId));
+      }
+    } finally {
+      isRunning = false;
+    }
+  }
+
   async function open(compId) {
     if (!compId) return;
     ensureModalDOM();
@@ -448,6 +634,7 @@
       // If already has a valid verdict and report, jump to the report state directly;
       // otherwise, show pre-run state.
       if (comp.delphi && comp.delphi.verdict && comp.delphi.report) {
+        activeReportTab = comp.delphi.secondaryReport || comp.delphi.comparisonReport ? 'synthesis' : 'primary';
         renderReport(comp.delphi, comp, false);
       } else {
         renderPreRun(comp);
@@ -458,6 +645,8 @@
   }
 
   window.DelphiModal = {
-    open
+    open,
+    runDiagnostic,
+    runComparison
   };
 })();

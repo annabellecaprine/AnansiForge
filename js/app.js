@@ -53,11 +53,22 @@
   const modalOverlay = document.getElementById('modal-overlay');
   const btnCloseModal = document.getElementById('btn-close-modal');
   const btnSaveApi = document.getElementById('btn-save-api');
+  const tabApiPrimary = document.getElementById('tab-api-primary');
+  const tabApiSecondary = document.getElementById('tab-api-secondary');
+  const apiPanePrimary = document.getElementById('api-pane-primary');
+  const apiPaneSecondary = document.getElementById('api-pane-secondary');
   const apiProvider = document.getElementById('api-provider');
   const apiModel = document.getElementById('api-model');
   const apiKey = document.getElementById('api-key');
   const apiUrl = document.getElementById('api-url');
   const apiUrlGroup = document.getElementById('api-url-group');
+  const apiProvider2 = document.getElementById('api-provider-2');
+  const apiModel2 = document.getElementById('api-model-2');
+  const apiKey2 = document.getElementById('api-key-2');
+  const apiUrl2 = document.getElementById('api-url-2');
+  const apiUrlGroup2 = document.getElementById('api-url-group-2');
+  const btnClearApi2 = document.getElementById('btn-clear-api-2');
+  let activeApiTab = 'primary';
 
   // File Import Inputs
   const btnImportCard = document.getElementById('btn-import-card');
@@ -1012,8 +1023,41 @@
     apiKey.value = config.apiKey || '';
     apiUrl.value = config.baseUrl || '';
 
+    const config2 = window.ForgeLLM.getSecondaryConfig ? window.ForgeLLM.getSecondaryConfig() : null;
+    if (config2 && config2.provider) {
+      apiProvider2.value = config2.provider;
+      apiModel2.value = config2.model || '';
+      apiKey2.value = config2.apiKey || '';
+      apiUrl2.value = config2.baseUrl || '';
+    } else {
+      apiProvider2.value = 'none';
+      apiModel2.value = '';
+      apiKey2.value = '';
+      apiUrl2.value = '';
+    }
+
+    switchApiTab('primary');
     toggleApiUrlGroup();
+    toggleApiUrlGroup2();
     modalOverlay.classList.remove('hidden');
+  }
+
+  function switchApiTab(tab) {
+    activeApiTab = tab;
+    const btnTest = document.getElementById('btn-test-api');
+    if (tab === 'primary') {
+      tabApiPrimary?.classList.add('active');
+      tabApiSecondary?.classList.remove('active');
+      if (apiPanePrimary) apiPanePrimary.style.display = 'block';
+      if (apiPaneSecondary) apiPaneSecondary.style.display = 'none';
+      if (btnTest) btnTest.textContent = 'Test Connection';
+    } else {
+      tabApiPrimary?.classList.remove('active');
+      tabApiSecondary?.classList.add('active');
+      if (apiPanePrimary) apiPanePrimary.style.display = 'none';
+      if (apiPaneSecondary) apiPaneSecondary.style.display = 'block';
+      if (btnTest) btnTest.textContent = 'Test Secondary Connection';
+    }
   }
 
   function toggleApiUrlGroup() {
@@ -1028,6 +1072,19 @@
     }
   }
 
+  function toggleApiUrlGroup2() {
+    if (!apiProvider2 || !apiUrlGroup2) return;
+    const provider = apiProvider2.value;
+    if (['chutes', 'lmstudio', 'custom'].includes(provider)) {
+      apiUrlGroup2.style.display = 'block';
+      if (provider === 'chutes' && !apiUrl2.value.trim()) {
+        apiUrl2.value = 'https://llm.chutes.ai/v1';
+      }
+    } else {
+      apiUrlGroup2.style.display = 'none';
+    }
+  }
+
   function saveApiConfig() {
     const config = {
       provider: apiProvider.value,
@@ -1038,6 +1095,24 @@
     };
 
     window.ForgeLLM.saveConfig(config);
+
+    if (apiProvider2 && apiProvider2.value && apiProvider2.value !== 'none') {
+      const config2 = {
+        provider: apiProvider2.value,
+        model: apiModel2.value.trim(),
+        apiKey: apiKey2.value.trim(),
+        baseUrl: apiUrl2.value.trim(),
+        maxTokens: 2048
+      };
+      if (window.ForgeLLM.saveSecondaryConfig) {
+        window.ForgeLLM.saveSecondaryConfig(config2);
+      }
+    } else {
+      if (window.ForgeLLM.saveSecondaryConfig) {
+        window.ForgeLLM.saveSecondaryConfig(null);
+      }
+    }
+
     showToast('API Configuration saved!', 'success');
     modalOverlay.classList.add('hidden');
   }
@@ -1200,25 +1275,39 @@
     btn.textContent = 'Testing…';
     btn.disabled = true;
 
-    const config = {
-      provider: apiProvider.value,
-      model: apiModel.value.trim(),
-      apiKey: apiKey.value.trim(),
-      baseUrl: apiUrl.value.trim(),
-      maxTokens: 16
-    };
+    const isSecondary = activeApiTab === 'secondary';
+    const config = isSecondary
+      ? {
+          provider: apiProvider2 ? apiProvider2.value : 'none',
+          model: apiModel2 ? apiModel2.value.trim() : '',
+          apiKey: apiKey2 ? apiKey2.value.trim() : '',
+          baseUrl: apiUrl2 ? apiUrl2.value.trim() : '',
+          maxTokens: 16
+        }
+      : {
+          provider: apiProvider.value,
+          model: apiModel.value.trim(),
+          apiKey: apiKey.value.trim(),
+          baseUrl: apiUrl.value.trim(),
+          maxTokens: 16
+        };
 
-    // Save temporarily so ForgeLLM can use it
-    window.ForgeLLM.saveConfig(config);
+    if (isSecondary && (!config.provider || config.provider === 'none')) {
+      showToast('Secondary model is currently disabled. Select a provider first.', 'info');
+      btn.textContent = origText;
+      btn.disabled = false;
+      return;
+    }
 
     try {
       const reply = await window.ForgeLLM.generate(
         'You are a test assistant.',
-        [{ role: 'user', content: 'Reply with exactly the word "OK".' }]
+        [{ role: 'user', content: 'Reply with exactly the word "OK".' }],
+        config
       );
-      showToast(`✅ Connection OK — model replied: "${reply.substring(0, 60)}"`, 'success');
+      showToast(`✅ ${isSecondary ? 'Secondary' : 'Primary'} Connection OK — replied: "${reply.substring(0, 60)}"`, 'success');
     } catch (err) {
-      showToast(`❌ Connection failed: ${err.message}`, 'error');
+      showToast(`❌ ${isSecondary ? 'Secondary' : 'Primary'} Connection failed: ${err.message}`, 'error');
     } finally {
       btn.textContent = origText;
       btn.disabled = false;
@@ -1544,7 +1633,19 @@
     // API Config events
     btnApiConfig.addEventListener('click', openApiModal);
     btnCloseModal.addEventListener('click', () => modalOverlay.classList.add('hidden'));
+    tabApiPrimary?.addEventListener('click', () => switchApiTab('primary'));
+    tabApiSecondary?.addEventListener('click', () => switchApiTab('secondary'));
     apiProvider.addEventListener('change', toggleApiUrlGroup);
+    apiProvider2?.addEventListener('change', toggleApiUrlGroup2);
+    btnClearApi2?.addEventListener('click', () => {
+      if (apiProvider2) apiProvider2.value = 'none';
+      if (apiModel2) apiModel2.value = '';
+      if (apiKey2) apiKey2.value = '';
+      if (apiUrl2) apiUrl2.value = '';
+      toggleApiUrlGroup2();
+      if (window.ForgeLLM?.saveSecondaryConfig) window.ForgeLLM.saveSecondaryConfig(null);
+      showToast('Secondary model disabled.', 'info');
+    });
     btnSaveApi.addEventListener('click', saveApiConfig);
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) modalOverlay.classList.add('hidden');

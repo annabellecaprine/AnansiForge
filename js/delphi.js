@@ -17,6 +17,17 @@
   const SYSTEM_PROMPT_COMPONENT = `You are a character design analyst auditing a chatbot component for production use.
 Do not roleplay as the character. You are evaluating the definition below — not performing it.
 
+SEVERITY CALIBRATION RULES:
+- PASS: No material defect identified.
+- FLAG: A plausible risk, ambiguous interpretation, or concern that requires author judgment or behavioral testing.
+- FAIL: A clear defect supported by specific quoted wording and an explained consequence that directly undermines the component's stated purpose.
+
+IMPORTANT EVALUATION PRINCIPLES:
+- Contrasting traits, situational behavior, intentional tension, and room for character development are NOT inherently defects. Assess whether the definition explains how they coexist.
+- If authorial intent is inferred rather than explicitly stated, label that inference. Uncertainty about intent must NOT by itself produce FAIL.
+- For every FLAG or FAIL, you MUST cite the relevant wording and explain the likely behavioral consequence.
+- When evidence is insufficient, use FLAG rather than FAIL.
+
 Analyze the definition and return TWO parts.
 
 PART 1 — a markdown diagnostic with these sections:
@@ -42,14 +53,23 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
   "dominance": "pass|flag|fail",
   "triggers": "pass|flag|fail",
   "notes": {
-    "coherence": "<one line>",
-    "dominance": "<one line>",
-    "triggers": "<one line>"
+    "coherence": "<one line citing reason/evidence>",
+    "dominance": "<one line citing reason/evidence>",
+    "triggers": "<one line citing reason/evidence>"
   }
 }`;
 
   const SYSTEM_PROMPT_ASSEMBLED = `You are auditing an assembled chatbot card for production coherence across its staged components.
 Do not roleplay as any character. You are evaluating the complete assembled card definition.
+
+SEVERITY CALIBRATION RULES:
+- PASS: No material defect identified across assembled components.
+- WARNING: A plausible risk, ambiguous interpretation, or concern that requires author judgment or behavioral testing.
+- CRITICAL: A clear defect supported by specific quoted wording and an explained consequence that directly undermines the assembled card's purpose.
+
+IMPORTANT EVALUATION PRINCIPLES:
+- Contrasting dynamics, situational tension, and complex relationships are NOT inherently defects. If authorial intent is inferred, label that inference.
+- For every WARNING or CRITICAL flag, cite the relevant wording and explain the likely behavioral consequence. When evidence is insufficient, use WARNING rather than CRITICAL.
 
 Analyze the assembled components, mappings, and relationships. Return TWO parts:
 
@@ -65,10 +85,47 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape:
     {
       "severity": "warning|critical",
       "components": ["<name>", "..."],
-      "summary": "<one line description>",
+      "summary": "<one line description citing wording>",
       "suggestion": "<actionable fix>"
     }
   ]
+}`;
+
+  const SYSTEM_PROMPT_CROSS_MODEL_COMPARISON = `You are an expert character prompt analyst comparing two independent diagnostic audits produced by two different LLMs for the same chatbot component.
+
+Compare the models' findings and cited wording, not only their dimension labels.
+
+CRITERIA:
+- "pass": Both models identify substantially compatible behavioral interpretations. Minor differences in emphasis or verdict labels do not affect the intended characterization.
+- "flag": The models identify materially different interpretations, disagree about a defect, or provide insufficient evidence to resolve the difference. Report the disputed wording, each interpretation, and its potential behavioral consequence.
+
+RULES:
+- Cross-model disagreement alone must NEVER produce "fail". The verdict for crossModel can ONLY be "pass" or "flag". A substantive defect remains recorded under coherence, dominance, or triggers.
+- If flagging, you MUST report:
+  1. The disputed wording from the component definition.
+  2. Each model's interpretation.
+  3. The potential behavioral consequence in roleplay / LLM execution.
+- If passing, explain why differences are minor, compatible, or variations in emphasis.
+
+Return TWO parts:
+
+PART 1 — a markdown comparative analysis:
+### Cross-Model Comparison & Synthesis
+[Compare the models' findings, cited wording, and behavioral consequences]
+
+[If divergent interpretations exist, include this section:]
+#### Disputed Wording & Divergent Interpretations
+- **Disputed Wording**: "[exact quoted text from component]"
+  - **Model 1 Interpretation**: [how model 1 read it]
+  - **Model 2 Interpretation**: [how model 2 read it]
+  - **Behavioral Consequence**: [how this alters character behavior in roleplay]
+
+PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and nothing else:
+{
+  "crossModel": "pass|flag",
+  "summary": "<one line summary of agreement or divergence>",
+  "disputedWording": ["<quote 1>", ...],
+  "consequence": "<behavioral consequence if flagged, or null>"
 }`;
 
   /**
@@ -211,14 +268,7 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape:
     let verdict = null;
 
     if (parsed.dimensions) {
-      const { coherence, dominance, triggers } = parsed.dimensions;
-      if (coherence === 'fail' || dominance === 'fail' || triggers === 'fail') {
-        verdict = 'FAIL';
-      } else if (coherence === 'flag' || dominance === 'flag' || triggers === 'flag') {
-        verdict = 'NEEDS WORK';
-      } else {
-        verdict = 'READY';
-      }
+      verdict = computeOverallVerdict(parsed.dimensions, 'unrun');
     }
 
     return {
@@ -230,6 +280,195 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape:
       provider: execConfig.provider || 'unknown',
       raw
     };
+  }
+
+  /**
+   * Parse comparison synthesis output.
+   */
+  function parseComparison(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) {
+      return { report: '', crossModel: 'flag', summary: 'No output received.', disputedWording: [], consequence: null };
+    }
+
+    const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+    let match;
+    let lastMatch = null;
+    while ((match = jsonBlockRegex.exec(raw)) !== null) {
+      lastMatch = match;
+    }
+
+    if (!lastMatch) {
+      return { report: raw, crossModel: 'flag', summary: 'Cross-model comparison returned unstructured analysis.', disputedWording: [], consequence: null };
+    }
+
+    const jsonText = lastMatch[1].trim();
+    const beforeBlock = raw.substring(0, lastMatch.index).trim();
+    const afterBlock = raw.substring(lastMatch.index + lastMatch[0].length).trim();
+    const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
+
+    try {
+      const data = JSON.parse(jsonText);
+      const rawC = String(data.crossModel || '').toLowerCase().trim();
+      // Bradley/User rule: Cross-model disagreement alone must never produce 'fail'.
+      // Only 'pass' or 'flag' are permitted.
+      const crossModel = rawC === 'pass' ? 'pass' : 'flag';
+      const summary = typeof data.summary === 'string' ? data.summary.trim() : '';
+      const disputedWording = Array.isArray(data.disputedWording) ? data.disputedWording.map(String) : [];
+      const consequence = typeof data.consequence === 'string' && data.consequence.trim() ? data.consequence.trim() : null;
+
+      return {
+        report: reportText,
+        crossModel,
+        summary,
+        disputedWording,
+        consequence
+      };
+    } catch (_) {
+      return { report: raw, crossModel: 'flag', summary: 'Could not parse JSON verdict block.', disputedWording: [], consequence: null };
+    }
+  }
+
+  /**
+   * Compute overall verdict following the exact amended spec:
+   * - FAIL if a primary diagnostic dimension is fail.
+   * - Otherwise NEEDS WORK if a primary dimension or crossModel is flag.
+   * - Otherwise READY.
+   */
+  function computeOverallVerdict(primaryDimensions, crossModel = 'unrun') {
+    if (!primaryDimensions) return 'NEEDS WORK';
+    const { coherence, dominance, triggers } = primaryDimensions;
+    // FAIL if a primary diagnostic dimension is fail
+    if (coherence === 'fail' || dominance === 'fail' || triggers === 'fail') {
+      return 'FAIL';
+    }
+    // Otherwise NEEDS WORK if a primary dimension or crossModel is flag
+    if (coherence === 'flag' || dominance === 'flag' || triggers === 'flag' || crossModel === 'flag') {
+      return 'NEEDS WORK';
+    }
+    // Otherwise READY
+    return 'READY';
+  }
+
+  /**
+   * Run cross-model comparison for a component.
+   */
+  async function runCrossModelComparison(compId, options = {}) {
+    if (!window.ForgeDB || !window.ForgeDB.getComponent) {
+      throw new Error('Database is not initialized.');
+    }
+    const comp = await window.ForgeDB.getComponent(compId);
+    if (!comp) {
+      throw new Error(`Component "${compId}" was not found.`);
+    }
+
+    const primaryConfig = options.primaryConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
+    const secondaryConfig = options.secondaryConfig || (window.ForgeLLM && window.ForgeLLM.getSecondaryConfig ? window.ForgeLLM.getSecondaryConfig() : null);
+
+    if (!secondaryConfig || !secondaryConfig.provider) {
+      throw new Error('No secondary model is configured in API settings.');
+    }
+
+    // 1. Ensure primary diagnostic exists or run it
+    let primaryResult = options.primaryResult || null;
+    if (!primaryResult) {
+      if (comp.delphi && comp.delphi.dimensions && comp.delphi.report) {
+        primaryResult = comp.delphi;
+      } else {
+        primaryResult = await diagnoseComponent(compId, primaryConfig);
+      }
+    }
+
+    // 2. Run diagnostic with secondary model
+    const secondaryResult = await diagnoseComponent(compId, secondaryConfig);
+
+    // 3. Run cross-model comparison analysis
+    const model1Name = `${primaryResult.provider || primaryConfig.provider || 'primary'} / ${primaryResult.model || primaryConfig.model || 'model'}`;
+    const model2Name = `${secondaryResult.provider || secondaryConfig.provider || 'secondary'} / ${secondaryResult.model || secondaryConfig.model || 'model'}`;
+
+    let comparisonPromptUser = `[COMPONENT DEFINITION]\nname: ${comp.name}\ncategory: ${comp.category}\ncontent:\n${comp.content || ''}\n\n`;
+    comparisonPromptUser += `=== MODEL 1 (${model1Name}) DIAGNOSTIC ===\n${primaryResult.report || ''}\n\n`;
+    comparisonPromptUser += `Dimensions: coherence=${primaryResult.dimensions?.coherence}, dominance=${primaryResult.dimensions?.dominance}, triggers=${primaryResult.dimensions?.triggers}\n\n`;
+    comparisonPromptUser += `=== MODEL 2 (${model2Name}) DIAGNOSTIC ===\n${secondaryResult.report || ''}\n\n`;
+    comparisonPromptUser += `Dimensions: coherence=${secondaryResult.dimensions?.coherence}, dominance=${secondaryResult.dimensions?.dominance}, triggers=${secondaryResult.dimensions?.triggers}\n\n`;
+
+    let comparisonRaw = '';
+    let comparisonParsed = null;
+
+    try {
+      comparisonRaw = await window.ForgeLLM.generate(
+        SYSTEM_PROMPT_CROSS_MODEL_COMPARISON,
+        [{ role: 'user', content: comparisonPromptUser }],
+        { ...primaryConfig, temperature: 0.3 }
+      );
+      comparisonParsed = parseComparison(comparisonRaw);
+    } catch (cmpErr) {
+      console.warn('[Delphi] Comparison synthesis LLM call failed, falling back to heuristic:', cmpErr);
+      const pDims = primaryResult.dimensions || {};
+      const sDims = secondaryResult.dimensions || {};
+      const dimsAgree = pDims.coherence === sDims.coherence && pDims.dominance === sDims.dominance && pDims.triggers === sDims.triggers;
+      comparisonParsed = {
+        crossModel: dimsAgree ? 'pass' : 'flag',
+        summary: dimsAgree
+          ? `Both ${model1Name} and ${model2Name} returned compatible dimension ratings.`
+          : `Material difference between ${model1Name} and ${model2Name} findings.`,
+        disputedWording: [],
+        consequence: null,
+        report: `### Cross-Model Comparison\n\n- **${model1Name}**: Coherence=${pDims.coherence}, Dominance=${pDims.dominance}, Triggers=${pDims.triggers}\n- **${model2Name}**: Coherence=${sDims.coherence}, Dominance=${sDims.dominance}, Triggers=${sDims.triggers}`
+      };
+    }
+
+    const crossModelDim = comparisonParsed.crossModel === 'pass' ? 'pass' : 'flag';
+    const overallVerdict = computeOverallVerdict(primaryResult.dimensions, crossModelDim);
+
+    const prevDelphi = comp.delphi || {};
+    const history = Array.isArray(prevDelphi.history) ? [...prevDelphi.history] : [];
+    if (prevDelphi.verdict) {
+      history.unshift({
+        verdict: prevDelphi.verdict,
+        timestamp: prevDelphi.timestamp || new Date().toISOString(),
+        model: prevDelphi.model || primaryResult.model
+      });
+      if (history.length > 10) history.length = 10;
+    }
+
+    const delphiRecord = {
+      verdict: overallVerdict,
+      dimensions: {
+        coherence: primaryResult.dimensions.coherence,
+        dominance: primaryResult.dimensions.dominance,
+        triggers: primaryResult.dimensions.triggers,
+        crossModel: crossModelDim
+      },
+      notes: {
+        ...(primaryResult.notes || {}),
+        crossModel: comparisonParsed.summary || `${model1Name} vs ${model2Name}`
+      },
+      model: primaryResult.model || primaryConfig.model || 'primary',
+      provider: primaryResult.provider || primaryConfig.provider || 'primary',
+      comparedModel: secondaryResult.model || secondaryConfig.model || 'secondary',
+      comparedProvider: secondaryResult.provider || secondaryConfig.provider || 'secondary',
+      timestamp: new Date().toISOString(),
+      report: primaryResult.report,
+      secondaryReport: secondaryResult.report,
+      secondaryDimensions: secondaryResult.dimensions,
+      secondaryNotes: secondaryResult.notes,
+      comparisonReport: comparisonParsed.report,
+      comparisonData: {
+        summary: comparisonParsed.summary,
+        disputedWording: comparisonParsed.disputedWording || [],
+        consequence: comparisonParsed.consequence || null
+      },
+      history
+    };
+
+    comp.delphi = delphiRecord;
+    await window.ForgeDB.saveComponent(comp);
+
+    window.dispatchEvent(new CustomEvent('delphi:verdict-saved', {
+      detail: { id: comp.id, verdict: overallVerdict }
+    }));
+
+    return delphiRecord;
   }
 
   /**
@@ -302,7 +541,10 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape:
   window.Delphi = {
     diagnoseComponent,
     diagnoseAssembled,
+    runCrossModelComparison,
     parseVerdict,
-    parseAssembledVerdict
+    parseAssembledVerdict,
+    parseComparison,
+    computeOverallVerdict
   };
 })();

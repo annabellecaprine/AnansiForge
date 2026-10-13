@@ -256,10 +256,33 @@
     localStorage.setItem('anansi_forge_api_config', JSON.stringify(config));
   }
 
+  function getSecondaryConfig() {
+    try {
+      const saved = localStorage.getItem('anansi_forge_api_config_2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.provider && parsed.provider !== 'none') return parsed;
+      }
+    } catch (e) {
+      console.warn('[ForgeLLM] Failed to parse secondary API settings:', e);
+    }
+    return null;
+  }
+
+  function saveSecondaryConfig(config) {
+    if (!config || !config.provider || config.provider === 'none') {
+      localStorage.removeItem('anansi_forge_api_config_2');
+    } else {
+      localStorage.setItem('anansi_forge_api_config_2', JSON.stringify(config));
+    }
+  }
+
   // Export
   window.ForgeLLM = {
     generate,
     getConfig: getStoredConfig,
-    saveConfig
+    saveConfig,
+    getSecondaryConfig,
+    saveSecondaryConfig
   };
 })();
