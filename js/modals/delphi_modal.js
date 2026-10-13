@@ -433,16 +433,66 @@
       ? `${escapeHTML(delphiData.model || 'primary')} vs ${escapeHTML(delphiData.comparedModel)} · Tested ${delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleTimeString() : 'just now'}`
       : `Model: ${escapeHTML(delphiData.model || 'model')} · Tested ${delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleTimeString() : 'just now'}`;
 
+    const recoveryBadge = delphiData.repaired
+      ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(168,85,247,0.25); color:#d8b4fe;">⚡ Auto-Repaired Format</span>`
+      : (delphiData.inferredFromText
+        ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(59,130,246,0.25); color:#93c5fd;">🔍 Extracted from Markdown</span>`
+        : (delphiData.manual ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(34,197,94,0.25); color:#86efac;">✍️ Author Verified</span>` : ''));
+
     body.innerHTML = `
       ${unreadableNotice ? `
-        <div class="delphi-warning-banner" style="margin-bottom: 12px;">
-          ⚠️ <strong>Verdict unreadable:</strong> The LLM output did not contain a valid JSON verdict block.
-          Previous verdict retained. Showing raw diagnostic text below.
+        <div class="delphi-warning-banner" style="margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div>
+              ⚠️ <strong>Verdict unreadable:</strong> The LLM output omitted a standard JSON verdict block. Showing raw diagnostic text below.
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button id="btn-delphi-autorepair" class="btn btn-secondary btn-sm" style="border-color: rgba(168,85,247,0.5); color: #d8b4fe;">
+                🔧 Auto-Repair Verdict
+              </button>
+              <button id="btn-delphi-manual-toggle" class="btn btn-secondary btn-sm">
+                ✏️ Set Manually
+              </button>
+            </div>
+          </div>
+          <div id="delphi-manual-panel" style="display: none; padding-top: 10px; border-top: 1px dashed rgba(245,158,11,0.3);">
+            <div style="font-size: 0.8rem; margin-bottom: 8px; color: var(--text-secondary);">
+              Based on the diagnostic findings in the report below, set the dimension ratings:
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; font-size: 0.82rem;">
+              <div>
+                <label style="display:block; margin-bottom:3px; font-weight:600; color:var(--text-primary);">1. Coherence:</label>
+                <select id="delphi-manual-coherence" class="form-control" style="padding: 3px 8px; font-size: 0.82rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm);">
+                  <option value="pass">PASS</option>
+                  <option value="flag">FLAG</option>
+                  <option value="fail">FAIL</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; margin-bottom:3px; font-weight:600; color:var(--text-primary);">2. Dominance:</label>
+                <select id="delphi-manual-dominance" class="form-control" style="padding: 3px 8px; font-size: 0.82rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm);">
+                  <option value="pass">PASS</option>
+                  <option value="flag">FLAG</option>
+                  <option value="fail">FAIL</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; margin-bottom:3px; font-weight:600; color:var(--text-primary);">3. Triggers:</label>
+                <select id="delphi-manual-triggers" class="form-control" style="padding: 3px 8px; font-size: 0.82rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm);">
+                  <option value="pass">PASS</option>
+                  <option value="flag">FLAG</option>
+                  <option value="fail">FAIL</option>
+                </select>
+              </div>
+            </div>
+            <button id="btn-delphi-save-manual" class="btn btn-primary btn-sm">Save Dimensions & Stamp Verdict</button>
+          </div>
         </div>` : `
         <div class="delphi-verdict-banner ${bannerCls}">
           <div class="delphi-verdict-banner-header">
             <span style="font-size: 1.2rem;">${bannerIcon}</span>
             <strong>${escapeHTML(bannerTitle)}</strong>
+            ${recoveryBadge}
           </div>
           <div style="font-size: 0.78rem; opacity: 0.85; margin-top: 4px;">
             ${testSubtitle}
@@ -476,6 +526,43 @@
           renderReport(delphiData, comp, false);
         }
       });
+    });
+
+    document.getElementById('btn-delphi-autorepair')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const origText = btn.textContent;
+      btn.textContent = 'Repairing…';
+      btn.disabled = true;
+      try {
+        const repaired = await window.Delphi.repairComponentVerdict(comp.id, delphiData.report);
+        renderReport(repaired, comp, false);
+        if (typeof showToast === 'function') showToast('Verdict format repaired successfully!', 'success');
+      } catch (err) {
+        alert('Auto-repair could not extract structured dimensions: ' + err.message);
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('btn-delphi-manual-toggle')?.addEventListener('click', () => {
+      const panel = document.getElementById('delphi-manual-panel');
+      if (panel) {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      }
+    });
+
+    document.getElementById('btn-delphi-save-manual')?.addEventListener('click', async () => {
+      const c = document.getElementById('delphi-manual-coherence')?.value || 'pass';
+      const d = document.getElementById('delphi-manual-dominance')?.value || 'pass';
+      const t = document.getElementById('delphi-manual-triggers')?.value || 'pass';
+
+      const manualDelphi = await window.Delphi.setManualVerdict(comp.id, {
+        coherence: c,
+        dominance: d,
+        triggers: t
+      });
+      renderReport(manualDelphi, comp, false);
+      if (typeof showToast === 'function') showToast('Verdict saved manually.', 'success');
     });
 
     document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);

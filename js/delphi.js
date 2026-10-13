@@ -129,60 +129,151 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
 }`;
 
   /**
+   * Sanitize JSON text to handle common LLM output defects:
+   * - Strips line and block comments
+   * - Normalizes smart / curly quotes
+   * - Removes trailing commas before } or ]
+   */
+  function cleanJsonString(str) {
+    if (!str || typeof str !== 'string') return '';
+    return str
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/,\s*([}\]])/g, '$1')
+      .trim();
+  }
+
+  /**
+   * Find candidate JSON substring from fenced blocks, unclosed fences, or bare JSON objects.
+   */
+  function extractCandidateJson(raw, keyPatterns = ['coherence', 'crossModel', 'dominance']) {
+    if (typeof raw !== 'string') return null;
+
+    // 1. Standard fenced block: ```json ... ``` or ``` ... ```
+    const fencedRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+    let match;
+    let lastFenced = null;
+    while ((match = fencedRegex.exec(raw)) !== null) {
+      lastFenced = { content: match[1], start: match.index, end: match.index + match[0].length };
+    }
+    if (lastFenced) return lastFenced;
+
+    // 2. Unclosed fence at end of string: ```(?:json)?\s*({[\s\S]*)$
+    const unclosedMatch = raw.match(/```(?:json)?\s*({[\s\S]*)$/i);
+    if (unclosedMatch) {
+      return { content: unclosedMatch[1], start: unclosedMatch.index, end: raw.length };
+    }
+
+    // 3. Bare JSON object containing expected dimension keys
+    const patternStr = keyPatterns.map(k => `"${k}"`).join('|');
+    const bareRegex = new RegExp(`(\\{[\\s\\S]*?(?:${patternStr})[\\s\\S]*?\\})`, 'i');
+    const bareMatch = raw.match(bareRegex);
+    if (bareMatch) {
+      return { content: bareMatch[1], start: bareMatch.index, end: bareMatch.index + bareMatch[0].length };
+    }
+
+    return null;
+  }
+
+  /**
+   * Normalizes fuzzy dimension value strings to strict 'pass' | 'flag' | 'fail'.
+   */
+  function normalizeDimension(val) {
+    if (!val) return null;
+    const s = String(val).toLowerCase().trim();
+    if (/\b(?:fail|failed)\b/.test(s)) return 'fail';
+    if (/\b(?:flag|flagged|warn|warning|needs work)\b/.test(s)) return 'flag';
+    if (/\b(?:pass|passed|ready|clean|ok)\b/.test(s)) return 'pass';
+    return null;
+  }
+
+  /**
+   * Tier 2 Fallback: Extract verdict dimensions directly from markdown headings and bullet points.
+   */
+  function extractFromTextHeuristic(text) {
+    if (!text || typeof text !== 'string') return null;
+    const cMatch = text.match(/(?:coherence|trait coherence)[\s*:\-—]+(pass|flag|fail|passed|failed|flagged)/i);
+    const dMatch = text.match(/(?:dominance|dominance hierarchy)[\s*:\-—]+(pass|flag|fail|passed|failed|flagged)/i);
+    const tMatch = text.match(/(?:triggers|behavioral triggers)[\s*:\-—]+(pass|flag|fail|passed|failed|flagged)/i);
+
+    if (cMatch || dMatch || tMatch) {
+      const c = normalizeDimension(cMatch ? cMatch[1] : null) || 'flag';
+      const d = normalizeDimension(dMatch ? dMatch[1] : null) || 'flag';
+      const t = normalizeDimension(tMatch ? tMatch[1] : null) || 'flag';
+      return {
+        coherence: c,
+        dominance: d,
+        triggers: t,
+        notes: {
+          coherence: cMatch ? `Extracted from text: "${cMatch[0].trim()}"` : 'Inferred from analysis findings',
+          dominance: dMatch ? `Extracted from text: "${dMatch[0].trim()}"` : 'Inferred from analysis findings',
+          triggers: tMatch ? `Extracted from text: "${tMatch[0].trim()}"` : 'Inferred from analysis findings'
+        },
+        inferredFromText: true
+      };
+    }
+    return null;
+  }
+
+  /**
    * Parse the structured JSON verdict block from the LLM output.
-   * Returns { report: string, dimensions: object|null, notes: object|null }
+   * Multi-tier failover: Sanitized JSON -> Text Heuristics -> Returns null for Tier 3 repair.
    */
   function parseVerdict(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
       return { report: '', dimensions: null, notes: null };
     }
 
-    // Match the last ```json ... ``` block or ``` ... ``` containing json
-    const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
-    let match;
-    let lastMatch = null;
-    while ((match = jsonBlockRegex.exec(raw)) !== null) {
-      lastMatch = match;
-    }
+    const candidate = extractCandidateJson(raw, ['coherence', 'dominance', 'triggers']);
+    if (candidate) {
+      const beforeBlock = raw.substring(0, candidate.start).trim();
+      const afterBlock = raw.substring(candidate.end).trim();
+      const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
 
-    if (!lastMatch) {
-      return { report: raw, dimensions: null, notes: null };
-    }
+      const cleaned = cleanJsonString(candidate.content);
+      try {
+        const data = JSON.parse(cleaned);
+        const c = normalizeDimension(data.coherence);
+        const d = normalizeDimension(data.dominance);
+        const t = normalizeDimension(data.triggers);
 
-    const jsonText = lastMatch[1].trim();
-    const beforeBlock = raw.substring(0, lastMatch.index).trim();
-    const afterBlock = raw.substring(lastMatch.index + lastMatch[0].length).trim();
-    const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
+        if (c && d && t) {
+          const notes = {
+            coherence: typeof data.notes?.coherence === 'string' ? data.notes.coherence.trim() : '',
+            dominance: typeof data.notes?.dominance === 'string' ? data.notes.dominance.trim() : '',
+            triggers: typeof data.notes?.triggers === 'string' ? data.notes.triggers.trim() : ''
+          };
 
-    try {
-      const data = JSON.parse(jsonText);
-      const validValues = ['pass', 'flag', 'fail'];
-      const c = String(data.coherence || '').toLowerCase().trim();
-      const d = String(data.dominance || '').toLowerCase().trim();
-      const t = String(data.triggers || '').toLowerCase().trim();
-
-      if (!validValues.includes(c) || !validValues.includes(d) || !validValues.includes(t)) {
-        return { report: raw, dimensions: null, notes: null };
+          return {
+            report: reportText,
+            dimensions: { coherence: c, dominance: d, triggers: t },
+            notes
+          };
+        }
+      } catch (jsonErr) {
+        console.warn('[Delphi] JSON parse error on candidate block, falling back to heuristics:', jsonErr);
       }
-
-      const notes = {
-        coherence: typeof data.notes?.coherence === 'string' ? data.notes.coherence.trim() : '',
-        dominance: typeof data.notes?.dominance === 'string' ? data.notes.dominance.trim() : '',
-        triggers: typeof data.notes?.triggers === 'string' ? data.notes.triggers.trim() : ''
-      };
-
-      return {
-        report: reportText,
-        dimensions: {
-          coherence: c,
-          dominance: d,
-          triggers: t
-        },
-        notes
-      };
-    } catch (_) {
-      return { report: raw, dimensions: null, notes: null };
     }
+
+    // Tier 2 Fallback: Scan the markdown prose for explicit dimension verdicts
+    const heuristic = extractFromTextHeuristic(raw);
+    if (heuristic) {
+      console.info('[Delphi] Recovered verdict dimensions via markdown text heuristics:', heuristic);
+      return {
+        report: raw,
+        dimensions: {
+          coherence: heuristic.coherence,
+          dominance: heuristic.dominance,
+          triggers: heuristic.triggers
+        },
+        notes: heuristic.notes,
+        inferredFromText: true
+      };
+    }
+
+    return { report: raw, dimensions: null, notes: null };
   }
 
   /**
@@ -191,22 +282,16 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
   function parseAssembledVerdict(raw) {
     if (typeof raw !== 'string') return { report: '', flags: [] };
 
-    const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
-    let match;
-    let lastMatch = null;
-    while ((match = jsonBlockRegex.exec(raw)) !== null) {
-      lastMatch = match;
-    }
+    const candidate = extractCandidateJson(raw, ['flags']);
+    if (!candidate) return { report: raw, flags: [] };
 
-    if (!lastMatch) return { report: raw, flags: [] };
-
-    const jsonText = lastMatch[1].trim();
-    const beforeBlock = raw.substring(0, lastMatch.index).trim();
-    const afterBlock = raw.substring(lastMatch.index + lastMatch[0].length).trim();
+    const beforeBlock = raw.substring(0, candidate.start).trim();
+    const afterBlock = raw.substring(candidate.end).trim();
     const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
+    const cleaned = cleanJsonString(candidate.content);
 
     try {
-      const data = JSON.parse(jsonText);
+      const data = JSON.parse(cleaned);
       const flags = Array.isArray(data.flags) ? data.flags.map(f => ({
         severity: f.severity === 'critical' ? 'critical' : 'warning',
         components: Array.isArray(f.components) ? f.components.map(String) : [],
@@ -264,9 +349,53 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
       execConfig
     );
 
-    const parsed = parseVerdict(raw);
-    let verdict = null;
+    let parsed = parseVerdict(raw);
 
+    // Tier 3: Automated Self-Healing LLM Extraction Pass if raw output lacked valid format
+    if (!parsed.dimensions && window.ForgeLLM && typeof window.ForgeLLM.generate === 'function') {
+      try {
+        console.warn('[Delphi] Diagnostic output lacked structured verdict block, initiating Tier 3 self-healing repair...');
+        const repairPrompt = `You are a character QA formatting assistant. Extract the structured verdict from this character QA diagnostic analysis into strict JSON.
+
+Do not re-evaluate or change findings. Extract what the text concluded.
+If a dimension was not explicitly concluded, infer pass, flag, or fail from the text findings.
+
+Respond ONLY with this JSON block:
+\`\`\`json
+{
+  "coherence": "pass|flag|fail",
+  "dominance": "pass|flag|fail",
+  "triggers": "pass|flag|fail",
+  "notes": {
+    "coherence": "<short summary from text>",
+    "dominance": "<short summary from text>",
+    "triggers": "<short summary from text>"
+  }
+}
+\`\`\``;
+
+        const repairRaw = await window.ForgeLLM.generate(
+          repairPrompt,
+          [{ role: 'user', content: raw.substring(0, 3000) }],
+          { ...execConfig, temperature: 0.0, maxTokens: 256 }
+        );
+
+        const repaired = parseVerdict(repairRaw);
+        if (repaired.dimensions) {
+          console.info('[Delphi] Tier 3 self-healing repair succeeded!', repaired.dimensions);
+          parsed = {
+            report: raw,
+            dimensions: repaired.dimensions,
+            notes: repaired.notes || {},
+            repaired: true
+          };
+        }
+      } catch (repairErr) {
+        console.warn('[Delphi] Tier 3 self-healing repair pass failed:', repairErr);
+      }
+    }
+
+    let verdict = null;
     if (parsed.dimensions) {
       verdict = computeOverallVerdict(parsed.dimensions, 'unrun');
     }
@@ -278,6 +407,8 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
       verdict,
       model: execConfig.model || 'unknown',
       provider: execConfig.provider || 'unknown',
+      repaired: !!parsed.repaired,
+      inferredFromText: !!parsed.inferredFromText,
       raw
     };
   }
@@ -290,24 +421,23 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
       return { report: '', crossModel: 'flag', summary: 'No output received.', disputedWording: [], consequence: null };
     }
 
-    const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
-    let match;
-    let lastMatch = null;
-    while ((match = jsonBlockRegex.exec(raw)) !== null) {
-      lastMatch = match;
+    const candidate = extractCandidateJson(raw, ['crossModel']);
+    let reportText = raw;
+    let data = null;
+
+    if (candidate) {
+      const beforeBlock = raw.substring(0, candidate.start).trim();
+      const afterBlock = raw.substring(candidate.end).trim();
+      reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
+      const cleaned = cleanJsonString(candidate.content);
+      try {
+        data = JSON.parse(cleaned);
+      } catch (e) {
+        console.warn('[Delphi] parseComparison JSON error:', e);
+      }
     }
 
-    if (!lastMatch) {
-      return { report: raw, crossModel: 'flag', summary: 'Cross-model comparison returned unstructured analysis.', disputedWording: [], consequence: null };
-    }
-
-    const jsonText = lastMatch[1].trim();
-    const beforeBlock = raw.substring(0, lastMatch.index).trim();
-    const afterBlock = raw.substring(lastMatch.index + lastMatch[0].length).trim();
-    const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
-
-    try {
-      const data = JSON.parse(jsonText);
+    if (data) {
       const rawC = String(data.crossModel || '').toLowerCase().trim();
       // Bradley/User rule: Cross-model disagreement alone must never produce 'fail'.
       // Only 'pass' or 'flag' are permitted.
@@ -323,9 +453,17 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
         disputedWording,
         consequence
       };
-    } catch (_) {
-      return { report: raw, crossModel: 'flag', summary: 'Could not parse JSON verdict block.', disputedWording: [], consequence: null };
     }
+
+    // Heuristic scan for cross-model in text:
+    const passMatch = /cross[- ]?model[:\s*-]+pass/i.test(raw);
+    return {
+      report: raw,
+      crossModel: passMatch ? 'pass' : 'flag',
+      summary: passMatch ? 'Both models returned compatible interpretations.' : 'Cross-model comparison returned unstructured analysis.',
+      disputedWording: [],
+      consequence: null
+    };
   }
 
   /**
@@ -538,6 +676,124 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
     };
   }
 
+  /**
+   * Failover helper: Run targeted LLM extraction repair on an unreadable raw report.
+   */
+  async function repairComponentVerdict(compId, rawText = null) {
+    if (!window.ForgeDB || !window.ForgeDB.getComponent) {
+      throw new Error('Database is not initialized.');
+    }
+    const comp = await window.ForgeDB.getComponent(compId);
+    if (!comp) throw new Error(`Component "${compId}" was not found.`);
+
+    const textToRepair = rawText || comp.delphi?.report || comp.delphi?.raw || '';
+    if (!textToRepair.trim()) {
+      throw new Error('No diagnostic report text found to repair.');
+    }
+
+    const config = window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {};
+    const repairPrompt = `You are a character QA formatting assistant. Extract the structured verdict from this character QA diagnostic analysis into strict JSON.
+
+Do not re-evaluate or add creative text. Extract what the text concluded.
+If a dimension was not explicitly concluded, infer pass, flag, or fail from the text findings.
+
+Respond ONLY with this JSON block:
+\`\`\`json
+{
+  "coherence": "pass|flag|fail",
+  "dominance": "pass|flag|fail",
+  "triggers": "pass|flag|fail",
+  "notes": {
+    "coherence": "<short summary from text>",
+    "dominance": "<short summary from text>",
+    "triggers": "<short summary from text>"
+  }
+}
+\`\`\``;
+
+    const repairRaw = await window.ForgeLLM.generate(
+      repairPrompt,
+      [{ role: 'user', content: textToRepair.substring(0, 3000) }],
+      { ...config, temperature: 0.0, maxTokens: 256 }
+    );
+
+    const parsed = parseVerdict(repairRaw);
+    if (!parsed.dimensions) {
+      throw new Error('Could not extract dimensions from the report text.');
+    }
+
+    const overallVerdict = computeOverallVerdict(parsed.dimensions, comp.delphi?.dimensions?.crossModel || 'unrun');
+    const prevDelphi = comp.delphi || {};
+
+    const updatedDelphi = {
+      ...prevDelphi,
+      verdict: overallVerdict,
+      dimensions: {
+        ...parsed.dimensions,
+        crossModel: prevDelphi.dimensions?.crossModel || 'unrun'
+      },
+      notes: {
+        ...(prevDelphi.notes || {}),
+        ...(parsed.notes || {})
+      },
+      repaired: true,
+      timestamp: new Date().toISOString()
+    };
+
+    comp.delphi = updatedDelphi;
+    await window.ForgeDB.saveComponent(comp);
+
+    window.dispatchEvent(new CustomEvent('delphi:verdict-saved', {
+      detail: { id: comp.id, verdict: overallVerdict }
+    }));
+
+    return updatedDelphi;
+  }
+
+  /**
+   * Failover helper: Author manual override of dimensions.
+   */
+  async function setManualVerdict(compId, dimensions = {}, notes = {}) {
+    if (!window.ForgeDB || !window.ForgeDB.getComponent) {
+      throw new Error('Database is not initialized.');
+    }
+    const comp = await window.ForgeDB.getComponent(compId);
+    if (!comp) throw new Error(`Component "${compId}" was not found.`);
+
+    const c = normalizeDimension(dimensions.coherence) || 'pass';
+    const d = normalizeDimension(dimensions.dominance) || 'pass';
+    const t = normalizeDimension(dimensions.triggers) || 'pass';
+    const cm = normalizeDimension(dimensions.crossModel) || comp.delphi?.dimensions?.crossModel || 'unrun';
+
+    const dims = { coherence: c, dominance: d, triggers: t, crossModel: cm };
+    const overallVerdict = computeOverallVerdict(dims, cm);
+    const prevDelphi = comp.delphi || {};
+
+    const updatedDelphi = {
+      ...prevDelphi,
+      verdict: overallVerdict,
+      dimensions: dims,
+      notes: {
+        ...(prevDelphi.notes || {}),
+        coherence: notes.coherence || prevDelphi.notes?.coherence || 'Set by author',
+        dominance: notes.dominance || prevDelphi.notes?.dominance || 'Set by author',
+        triggers: notes.triggers || prevDelphi.notes?.triggers || 'Set by author',
+        crossModel: notes.crossModel || prevDelphi.notes?.crossModel || ''
+      },
+      manual: true,
+      timestamp: new Date().toISOString()
+    };
+
+    comp.delphi = updatedDelphi;
+    await window.ForgeDB.saveComponent(comp);
+
+    window.dispatchEvent(new CustomEvent('delphi:verdict-saved', {
+      detail: { id: comp.id, verdict: overallVerdict }
+    }));
+
+    return updatedDelphi;
+  }
+
   window.Delphi = {
     diagnoseComponent,
     diagnoseAssembled,
@@ -545,6 +801,8 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
     parseVerdict,
     parseAssembledVerdict,
     parseComparison,
-    computeOverallVerdict
+    computeOverallVerdict,
+    repairComponentVerdict,
+    setManualVerdict
   };
 })();
