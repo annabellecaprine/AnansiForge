@@ -38,7 +38,7 @@
       const body = {
         contents: contents,
         generationConfig: {
-          temperature: 0.8,
+          temperature: config.temperature ?? 0.8,
           maxOutputTokens: maxTokens
         }
       };
@@ -130,7 +130,7 @@
       const body = {
         model: model,
         messages: messages,
-        temperature: 0.8,
+        temperature: config.temperature ?? 0.8,
         max_tokens: maxTokens
       };
 
@@ -181,7 +181,7 @@
           max_tokens: maxTokens,
           system: systemPrompt,
           messages: messages,
-          temperature: 0.8
+          temperature: config.temperature ?? 0.8
         })
       });
 
@@ -219,7 +219,7 @@
           prompt: rawPrompt,
           max_context_length: 4096,
           max_length: 512,
-          temperature: 0.8
+          temperature: config.temperature ?? 0.8
         })
       });
 

@@ -478,13 +478,16 @@
         return false;
     }
 
-    function pipelineCheckboxes(pipeline, steps, recordId, isVault) {
+    function pipelineCheckboxes(pipeline, steps, recordId, isVault, comp = null) {
         return steps.map(step => {
             const checked = pipeline && pipeline[step];
             const storeType = isVault ? 'vault' : 'record';
+            const isSuggest = step === 'goldenTemplate' && !checked && comp?.delphi?.verdict === 'READY';
+            const suggestClass = isSuggest ? ' tpl-suggest' : '';
+            const suggestTitle = isSuggest ? 'Delphi suggests stamping ⭐ — verdict READY. Click to stamp.' : (STEP_LABELS[step] || step);
             return `<td class="mc-pipe-cell">
-        <button class="mc-pipe-btn${checked ? ' checked' : ''}"
-          title="${STEP_LABELS[step] || step}"
+        <button class="mc-pipe-btn${checked ? ' checked' : ''}${suggestClass}"
+          title="${suggestTitle}"
           data-id="${recordId}" data-step="${step}" data-store="${storeType}"
           aria-label="${STEP_LABELS[step] || step}: ${checked ? 'checked' : 'unchecked'}">
           ${checked ? '✓' : ''}

@@ -278,6 +278,16 @@
         return;
       }
 
+      // Open Delphi Diagnostic Modal (Action button or name badge click)
+      const delphiTrigger = t.closest('.mc-open-delphi') || t.closest('.mc-delphi-badge');
+      if (delphiTrigger) {
+        const compId = delphiTrigger.dataset.id;
+        if (compId && window.DelphiModal?.open) {
+          window.DelphiModal.open(compId);
+        }
+        return;
+      }
+
       // Open Quick Asset Creator (opens Vault editor pre-filled with active category)
       const quickAssetBtn = t.closest('.mc-quick-add-asset') || t.closest('#mc-quick-add-asset');
       if (quickAssetBtn) {
@@ -1438,6 +1448,11 @@
     });
 
     window.addEventListener('universeChanged', async () => {
+      await loadAll();
+      await renderCurrentTab();
+    });
+
+    window.addEventListener('delphi:verdict-saved', async () => {
       await loadAll();
       await renderCurrentTab();
     });

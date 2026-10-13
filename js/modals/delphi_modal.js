@@ -1,0 +1,463 @@
+/**
+ * delphi_modal.js - Delphi Character Design QA Diagnostic Modal
+ *
+ * Implements the Delphi QA inspection modal (Pre-run, Running, Report).
+ * Persists verdicts onto comp.delphi and dispatches 'delphi:verdict-saved'.
+ *
+ * Usage:
+ *   window.DelphiModal.open(compId);
+ */
+
+(() => {
+  'use strict';
+
+  let modalEl = null;
+  let activeComp = null;
+  let isRunning = false;
+
+  function escapeHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatMarkdown(str) {
+    if (!str) return '';
+    const lines = str.split('\n');
+    const out = [];
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Headers
+      if (line.startsWith('### ')) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push(`<h4 class="delphi-report-h4">${formatInline(line.slice(4))}</h4>`);
+        continue;
+      }
+      if (line.startsWith('## ')) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push(`<h3 class="delphi-report-h3">${formatInline(line.slice(3))}</h3>`);
+        continue;
+      }
+      if (line.startsWith('# ')) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push(`<h2 class="delphi-report-h2">${formatInline(line.slice(2))}</h2>`);
+        continue;
+      }
+
+      // Blockquotes
+      if (line.startsWith('> ')) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push(`<blockquote class="delphi-report-quote">${formatInline(line.slice(2))}</blockquote>`);
+        continue;
+      }
+
+      // Unordered lists
+      if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+        if (!inList) { out.push('<ul class="delphi-report-list">'); inList = true; }
+        const itemText = line.trim().replace(/^[-*]\s+/, '');
+        out.push(`<li>${formatInline(itemText)}</li>`);
+        continue;
+      }
+
+      // Numbered lists (e.g. 1. )
+      if (/^\s*\d+\.\s+/.test(line)) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        const itemText = line.trim().replace(/^\d+\.\s+/, '');
+        out.push(`<div class="delphi-report-num-item"><span class="delphi-report-num">${line.match(/^\s*(\d+)\./)[1]}.</span><span>${formatInline(itemText)}</span></div>`);
+        continue;
+      }
+
+      if (inList) { out.push('</ul>'); inList = false; }
+
+      // Empty line
+      if (!line.trim()) {
+        out.push('<div class="delphi-report-spacer"></div>');
+        continue;
+      }
+
+      out.push(`<p class="delphi-report-p">${formatInline(line)}</p>`);
+    }
+
+    if (inList) out.push('</ul>');
+    return out.join('\n');
+  }
+
+  function formatInline(str) {
+    let text = escapeHTML(str);
+    // Bold
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Code
+    text = text.replace(/`([^`]+)`/g, '<code class="delphi-inline-code">$1</code>');
+    return text;
+  }
+
+  function ensureModalDOM() {
+    if (document.getElementById('delphi-modal-overlay')) {
+      modalEl = document.getElementById('delphi-modal-overlay');
+      return;
+    }
+
+    modalEl = document.createElement('div');
+    modalEl.id = 'delphi-modal-overlay';
+    modalEl.className = 'modal-overlay hidden';
+    modalEl.setAttribute('role', 'dialog');
+    modalEl.setAttribute('aria-modal', 'true');
+    modalEl.innerHTML = `
+      <div class="modal delphi-modal-content" style="max-width: 780px; width: 92%; max-height: 90vh; display: flex; flex-direction: column;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border-color);">
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+              🔮 Delphi — Character Design QA Gate
+            </h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">
+              Audits trait dominance, internal contradictions, and behavioral triggers before stamping ⭐ Golden Template
+            </span>
+          </div>
+          <button id="btn-close-delphi-modal" class="btn btn-ghost btn-icon" style="font-size: 1.2rem; cursor: pointer;" title="Close">&times;</button>
+        </div>
+
+        <div id="delphi-modal-body" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+          <!-- Dynamically injected state views: pre-run, running, or report -->
+        </div>
+
+        <div id="delphi-modal-footer" class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border-color);">
+          <!-- Dynamically injected footer actions -->
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modalEl);
+
+    const closeBtn = document.getElementById('btn-close-delphi-modal');
+    closeBtn.addEventListener('click', closeModal);
+    modalEl.addEventListener('click', (e) => {
+      if (e.target === modalEl) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modalEl && !modalEl.classList.contains('hidden') && !isRunning) {
+        closeModal();
+      }
+    });
+  }
+
+  function closeModal() {
+    if (modalEl) modalEl.classList.add('hidden');
+    isRunning = false;
+  }
+
+  function renderPreRun(comp) {
+    const body = document.getElementById('delphi-modal-body');
+    const footer = document.getElementById('delphi-modal-footer');
+    if (!body || !footer) return;
+
+    const cfg = window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {};
+    const hasKey = !!cfg.apiKey || ['lmstudio', 'kobold', 'custom', 'chutes', 'local'].includes(cfg.provider);
+    const existing = comp.delphi || null;
+
+    let historyHTML = '';
+    if (existing && existing.verdict) {
+      const dateStr = existing.timestamp ? new Date(existing.timestamp).toLocaleString() : 'Previous run';
+      historyHTML = `
+        <div class="delphi-prerun-history">
+          <div>
+            <strong>Last Diagnostic:</strong>
+            <span class="mc-delphi-badge mc-delphi-${existing.verdict.toLowerCase().replace(/\s+/g, '-')}">🔮 ${escapeHTML(existing.verdict)}</span>
+            <span style="font-size:0.78rem; color:var(--text-muted); margin-left:6px;">(${dateStr} via ${escapeHTML(existing.model || cfg.model || 'model')})</span>
+          </div>
+          <button id="btn-delphi-view-last" class="btn btn-secondary btn-sm">View Last Report</button>
+        </div>`;
+    }
+
+    body.innerHTML = `
+      <div class="delphi-meta-bar">
+        <span class="delphi-meta-item"><strong>Component:</strong> ${escapeHTML(comp.name)}</span>
+        <span class="delphi-meta-item"><strong>Category:</strong> ${escapeHTML(comp.category)}</span>
+        <span class="delphi-meta-item"><strong>Model:</strong> ${escapeHTML(cfg.provider || 'gemini')} / ${escapeHTML(cfg.model || 'default')}</span>
+      </div>
+
+      <div class="delphi-explainer-box">
+        <p style="margin: 0 0 8px 0; font-size: 0.88rem; line-height: 1.5; color: var(--text-primary);">
+          Delphi evaluates whether this definition is structurally coherent enough for production use.
+          The LLM operates as a character design analyst (never roleplaying) to check:
+        </p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6;">
+          <li><strong>Dominance Hierarchy:</strong> Which traits shape behavior strongest vs. which get suppressed.</li>
+          <li><strong>Contradictions:</strong> Conflicting traits and which trait wording wins in ambiguity.</li>
+          <li><strong>Triggers:</strong> Sycophancy traps, instruction hierarchy risks, and persona drift.</li>
+          <li><strong>Rewordings:</strong> Actionable BEFORE/AFTER harmonizations.</li>
+        </ul>
+      </div>
+
+      ${!hasKey ? `
+        <div class="delphi-warning-banner">
+          ⚠️ <strong>API key is missing for ${escapeHTML(cfg.provider || 'configured provider')}.</strong>
+          Configure your LLM settings before running Delphi.
+          <button id="btn-delphi-open-settings" class="btn btn-secondary btn-sm" style="margin-left: 10px;">Open API Settings</button>
+        </div>` : ''}
+
+      ${historyHTML}
+    `;
+
+    footer.innerHTML = `
+      <button id="btn-delphi-close" class="btn btn-ghost">Close</button>
+      <button id="btn-delphi-run" class="btn btn-primary" ${!hasKey ? 'disabled' : ''}>
+        ▶ Run Diagnostic
+      </button>
+    `;
+
+    document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-run')?.addEventListener('click', () => runDiagnostic(comp.id));
+    document.getElementById('btn-delphi-view-last')?.addEventListener('click', () => renderReport(comp.delphi, comp));
+    document.getElementById('btn-delphi-open-settings')?.addEventListener('click', () => {
+      closeModal();
+      document.getElementById('btn-api-config')?.click();
+    });
+  }
+
+  function renderRunning(comp) {
+    const body = document.getElementById('delphi-modal-body');
+    const footer = document.getElementById('delphi-modal-footer');
+    if (!body || !footer) return;
+
+    body.innerHTML = `
+      <div style="text-align: center; padding: 48px 20px;">
+        <div class="delphi-spinner"></div>
+        <h4 style="margin: 16px 0 6px 0; color: var(--text-primary); font-size: 1.05rem;">Consulting the oracle…</h4>
+        <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
+          Auditing <em>"${escapeHTML(comp.name)}"</em> for trait dominance, contradictions, and behavioral triggers.
+        </p>
+      </div>
+    `;
+
+    footer.innerHTML = `
+      <button class="btn btn-ghost" disabled>Running…</button>
+    `;
+  }
+
+  function renderReport(delphiData, comp, unreadableNotice = false) {
+    const body = document.getElementById('delphi-modal-body');
+    const footer = document.getElementById('delphi-modal-footer');
+    if (!body || !footer) return;
+
+    const verdict = delphiData.verdict || 'UNREADABLE';
+    const dims = delphiData.dimensions || null;
+    const notes = delphiData.notes || {};
+
+    let bannerCls = 'delphi-banner-ready';
+    let bannerIcon = '✅';
+    let bannerTitle = 'READY — Stamping ⭐ Golden Template Suggested';
+    let flagCount = 0;
+
+    if (dims) {
+      if (dims.coherence === 'flag' || dims.coherence === 'fail') flagCount++;
+      if (dims.dominance === 'flag' || dims.dominance === 'fail') flagCount++;
+      if (dims.triggers === 'flag' || dims.triggers === 'fail') flagCount++;
+    }
+
+    if (verdict === 'FAIL') {
+      bannerCls = 'delphi-banner-fail';
+      bannerIcon = '🛑';
+      bannerTitle = `FAIL — Critical design conflicts identified (${flagCount} flag${flagCount === 1 ? '' : 's'})`;
+    } else if (verdict === 'NEEDS WORK') {
+      bannerCls = 'delphi-banner-warn';
+      bannerIcon = '⚠️';
+      bannerTitle = `NEEDS WORK — Behavioral pulls or contradictions detected (${flagCount} flag${flagCount === 1 ? '' : 's'})`;
+    } else if (verdict === 'READY') {
+      bannerCls = 'delphi-banner-ready';
+      bannerIcon = '🔮';
+      bannerTitle = 'READY — Coherent and structurally sound for production';
+    }
+
+    // 2x2 Dimension Cards HTML
+    let dimsHTML = '';
+    if (dims) {
+      const dimPill = (name, val, note) => {
+        const v = String(val || 'unrun').toLowerCase();
+        let cls = 'delphi-dim-unrun';
+        let icon = '—';
+        let label = 'UNRUN';
+        if (v === 'pass') { cls = 'delphi-dim-pass'; icon = '✓'; label = 'PASS'; }
+        if (v === 'flag') { cls = 'delphi-dim-flag'; icon = '⚑'; label = 'FLAG'; }
+        if (v === 'fail') { cls = 'delphi-dim-fail'; icon = '✕'; label = 'FAIL'; }
+
+        return `
+          <div class="delphi-dim-card ${cls}">
+            <div class="delphi-dim-header">
+              <span class="delphi-dim-title">${name}</span>
+              <span class="delphi-dim-badge">${icon} ${label}</span>
+            </div>
+            <div class="delphi-dim-note">${escapeHTML(note || (v === 'unrun' ? 'Single model in Phase 1' : ''))}</div>
+          </div>
+        `;
+      };
+
+      dimsHTML = `
+        <div class="delphi-dim-grid">
+          ${dimPill('1. Trait Coherence', dims.coherence, notes.coherence)}
+          ${dimPill('2. Dominance Hierarchy', dims.dominance, notes.dominance)}
+          ${dimPill('3. Behavioral Triggers', dims.triggers, notes.triggers)}
+          ${dimPill('4. Cross-Model Agreement', dims.crossModel || 'unrun', notes.crossModel || 'Single model configured')}
+        </div>
+      `;
+    }
+
+    body.innerHTML = `
+      ${unreadableNotice ? `
+        <div class="delphi-warning-banner" style="margin-bottom: 12px;">
+          ⚠️ <strong>Verdict unreadable:</strong> The LLM output did not contain a valid JSON verdict block.
+          Previous verdict retained. Showing raw diagnostic text below.
+        </div>` : `
+        <div class="delphi-verdict-banner ${bannerCls}">
+          <div class="delphi-verdict-banner-header">
+            <span style="font-size: 1.2rem;">${bannerIcon}</span>
+            <strong>${escapeHTML(bannerTitle)}</strong>
+          </div>
+          <div style="font-size: 0.78rem; opacity: 0.85; margin-top: 4px;">
+            Model: ${escapeHTML(delphiData.model || 'model')} · Tested ${delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleTimeString() : 'just now'}
+          </div>
+        </div>`}
+
+      ${dimsHTML}
+
+      <div class="delphi-report-content">
+        ${formatMarkdown(delphiData.report || '')}
+      </div>
+    `;
+
+    footer.innerHTML = `
+      <button id="btn-delphi-copy" class="btn btn-secondary">📋 Copy Report</button>
+      <button id="btn-delphi-rerun" class="btn btn-secondary">🔁 Re-run</button>
+      <button id="btn-delphi-close" class="btn btn-primary">Close</button>
+    `;
+
+    document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-rerun')?.addEventListener('click', () => runDiagnostic(comp.id));
+    document.getElementById('btn-delphi-copy')?.addEventListener('click', async (e) => {
+      try {
+        const textToCopy = `Delphi Diagnostic Report: ${comp.name}\nVerdict: ${verdict}\nDate: ${delphiData.timestamp || new Date().toISOString()}\n\n${delphiData.report || ''}`;
+        await navigator.clipboard.writeText(textToCopy);
+        const btn = e.currentTarget;
+        const original = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = original; }, 2000);
+      } catch (err) {
+        console.error('Failed to copy report:', err);
+      }
+    });
+  }
+
+  async function runDiagnostic(compId) {
+    if (isRunning) return;
+    isRunning = true;
+
+    try {
+      const comp = await window.ForgeDB.getComponent(compId);
+      if (!comp) throw new Error('Component not found in database.');
+      activeComp = comp;
+
+      renderRunning(comp);
+
+      const result = await window.Delphi.diagnoseComponent(compId);
+
+      if (!result.dimensions) {
+        // Unparseable JSON block — show raw text, do NOT update stored verdict
+        renderReport({ report: result.report, verdict: null }, comp, true);
+        isRunning = false;
+        return;
+      }
+
+      // Valid run — persist into component record
+      const prevDelphi = comp.delphi || {};
+      const history = Array.isArray(prevDelphi.history) ? [...prevDelphi.history] : [];
+      if (prevDelphi.verdict) {
+        history.unshift({
+          verdict: prevDelphi.verdict,
+          timestamp: prevDelphi.timestamp || new Date().toISOString(),
+          model: prevDelphi.model || result.model
+        });
+      }
+      if (history.length > 10) history.length = 10;
+
+      const delphiRecord = {
+        verdict: result.verdict,
+        dimensions: result.dimensions,
+        notes: result.notes,
+        model: result.model,
+        provider: result.provider,
+        timestamp: new Date().toISOString(),
+        report: result.report,
+        history
+      };
+
+      comp.delphi = delphiRecord;
+      await window.ForgeDB.saveComponent(comp);
+
+      // Notify Mission Control & other listeners
+      window.dispatchEvent(new CustomEvent('delphi:verdict-saved', {
+        detail: { id: comp.id, verdict: result.verdict }
+      }));
+
+      renderReport(delphiRecord, comp, false);
+    } catch (err) {
+      console.error('[DelphiModal] Diagnostic failed:', err);
+      const body = document.getElementById('delphi-modal-body');
+      const footer = document.getElementById('delphi-modal-footer');
+      if (body) {
+        body.innerHTML = `
+          <div class="delphi-warning-banner">
+            🛑 <strong>Diagnostic Failed:</strong> ${escapeHTML(err.message || 'An unexpected error occurred.')}
+          </div>
+        `;
+      }
+      if (footer) {
+        footer.innerHTML = `
+          <button id="btn-delphi-close" class="btn btn-secondary">Close</button>
+          <button id="btn-delphi-retry" class="btn btn-primary">Try Again</button>
+        `;
+        document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
+        document.getElementById('btn-delphi-retry')?.addEventListener('click', () => runDiagnostic(compId));
+      }
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  async function open(compId) {
+    if (!compId) return;
+    ensureModalDOM();
+
+    try {
+      const comp = await window.ForgeDB.getComponent(compId);
+      if (!comp) {
+        if (typeof showToast === 'function') showToast('Component not found', 'error');
+        return;
+      }
+      activeComp = comp;
+      modalEl.classList.remove('hidden');
+
+      // If already has a valid verdict and report, jump to the report state directly;
+      // otherwise, show pre-run state.
+      if (comp.delphi && comp.delphi.verdict && comp.delphi.report) {
+        renderReport(comp.delphi, comp, false);
+      } else {
+        renderPreRun(comp);
+      }
+    } catch (err) {
+      console.error('[DelphiModal] Failed to open component:', err);
+    }
+  }
+
+  window.DelphiModal = {
+    open
+  };
+})();

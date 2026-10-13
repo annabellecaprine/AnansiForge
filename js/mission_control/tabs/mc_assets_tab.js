@@ -50,6 +50,26 @@
         ${comp.isTemplate ? '<span class="mc-template-star" title="Golden Template">⭐</span>' : ''}
         ${isPinned ? '<span class="mc-pin-icon" title="Pinned">📌</span>' : ''}
         ${depCount > 0 ? `<span class="mc-dep-badge" title="Used in ${depCount} project${depCount > 1 ? 's' : ''}">📦 ${depCount}</span>` : ''}
+        ${(() => {
+          const isAuditable = comp.category === 'character' || comp.category === 'scenario';
+          if (!isAuditable && !comp.delphi?.verdict) return '';
+          const v = comp.delphi?.verdict;
+          if (v === 'READY') {
+            return `<span class="mc-delphi-badge mc-delphi-ready" data-id="${comp.id}" title="Delphi: READY — click to view report">🔮 READY</span>`;
+          } else if (v === 'NEEDS WORK') {
+            const dims = comp.delphi?.dimensions || {};
+            let flagCount = 0;
+            if (dims.coherence === 'flag' || dims.coherence === 'fail') flagCount++;
+            if (dims.dominance === 'flag' || dims.dominance === 'fail') flagCount++;
+            if (dims.triggers === 'flag' || dims.triggers === 'fail') flagCount++;
+            return `<span class="mc-delphi-badge mc-delphi-flag" data-id="${comp.id}" title="Delphi: NEEDS WORK — click to view report">🔮 NEEDS WORK · ${flagCount}⚑</span>`;
+          } else if (v === 'FAIL') {
+            return `<span class="mc-delphi-badge mc-delphi-fail" data-id="${comp.id}" title="Delphi: FAIL — click to view report">🔮 FAIL</span>`;
+          } else if (isAuditable) {
+            return `<span class="mc-delphi-badge mc-delphi-none" data-id="${comp.id}" title="Delphi: Not run — click to diagnose">🔮 —</span>`;
+          }
+          return '';
+        })()}
       </td>
       <td>${S.universeSelectBadge(tracker.universe, comp.id, 'vault')}</td>
       <td>${comp.category === 'character' || comp.category === 'organization' ? S.roleSelectBadge(tracker.role, comp.id, 'vault') : '—'}</td>
@@ -62,13 +82,14 @@
           ${['P1', 'P2', 'P3', 'P4'].map(p => `<option value="${p}" ${tracker.priority === p ? 'selected' : ''}>${p}</option>`).join('')}
         </select>
       </td>
-      ${S.pipelineCheckboxes(tracker.pipeline, steps, comp.id, true)}
+      ${S.pipelineCheckboxes(tracker.pipeline, steps, comp.id, true, comp)}
       <td class="mc-cell-tags">${tags.slice(0, 3).map(t => S.tagChip ? S.tagChip(t, t === S.state.activeTagFilter) : `<span class="mc-tag-chip">#${esc(t)}</span>`).join('')}${tags.length > 3 ? `<span class="mc-more-tags">+${tags.length - 3}</span>` : ''}</td>
       <td class="mc-cell-readiness">${S.readinessPct(score)}</td>
       <td class="mc-cell-actions">
         <button class="mc-action-btn mc-pin-toggle" data-id="${comp.id}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '📌' : '☆'}</button>
         <button class="mc-action-btn" data-vault-id="${comp.id}" title="Open in Vault">✏️</button>
         ${comp.category === 'character' ? `<button class="mc-action-btn mc-open-interview" data-char-id="${comp.id}" data-name="${esc(comp.name)}" title="Character Voice Rapid Interview Tester">🎙️</button>` : ''}
+        ${comp.category === 'character' || comp.category === 'scenario' ? `<button class="mc-action-btn mc-open-delphi" data-id="${comp.id}" title="Diagnose with Delphi">🔮</button>` : ''}
       </td>
     </tr>`;
   }

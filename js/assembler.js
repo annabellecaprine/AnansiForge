@@ -24,6 +24,10 @@
   // Selected Universe ID for export merge
   let selectedUniverseId = null;
 
+  // Delphi assembled card coherence cache
+  let assembledDelphiResult = null;
+  let isRunningAssembledDelphi = false;
+
   // Tweak Modal elements
   let tweakModalOverlay;
   let tweakModalTitle;
@@ -107,6 +111,12 @@
     });
     window.addEventListener('universeChanged', () => {
       populateUniverseSelect();
+    });
+
+    document.getElementById('assembler-health-status')?.addEventListener('click', async (e) => {
+      if (e.target.closest('#btn-delphi-assembled-run')) {
+        await handleRunAssembledDelphi();
+      }
     });
 
     // Tweak Modal DOM references
@@ -430,6 +440,7 @@
         relationships = [...project.relationships];
         contentOverrides = { ...(project.contentOverrides || {}) };
         selectedUniverseId = project.universeId || null;
+        assembledDelphiResult = project.assembledDelphi || null;
         projNameInput.value = project.name;
 
         // Fetch cover from library under project ID
@@ -450,6 +461,7 @@
 
     // Default open from Bottom Drawer staging
     activeProjectId = null;
+    assembledDelphiResult = null;
     if (stagedIds.length === 0) {
       if (typeof showToast === 'function') {
         showToast('Please stage at least 1 component before assembling.', 'info');
@@ -648,6 +660,7 @@
 
     totalTokensBadge.textContent = `${Math.round(totalLength / 4)} tokens`;
     renderRelationships();
+    updateTokensEstimate();
   }
 
   function renderRelationships() {
@@ -826,6 +839,7 @@
     }
 
     // 6. Warning Check: Crossover Conflict (staged components belong to multiple universes)
+    const stagedComps = stagedIds.map(id => allComponents.find(c => c.id === id)).filter(Boolean);
     const stagedUniverses = new Set();
     stagedComps.forEach(comp => {
       const uVal = comp?.universe || comp?.tracker?.universe;
@@ -879,6 +893,149 @@
         `;
         healthContainer.appendChild(div);
       });
+    }
+
+    // --- Delphi: Assembled Coherence Block ---
+    const delphiSection = document.createElement('div');
+    delphiSection.className = 'assembler-delphi-block';
+    delphiSection.style.cssText = 'margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-color);';
+
+    // Header row
+    const headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;';
+    headerRow.innerHTML = `
+      <div style="font-size:0.85rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+        <span>🔮</span> Delphi — Assembled Coherence
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btn-delphi-assembled-run" ${stagedIds.length === 0 || isRunningAssembledDelphi ? 'disabled' : ''} style="font-size:0.75rem; padding:4px 10px;">
+        ${isRunningAssembledDelphi ? 'Running…' : '▶ Run on assembled card'}
+      </button>
+    `;
+    delphiSection.appendChild(headerRow);
+
+    // Staged Component Status Chips
+    const chipsRow = document.createElement('div');
+    chipsRow.className = 'assembler-delphi-chips';
+    chipsRow.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;';
+
+    stagedIds.forEach(id => {
+      const comp = allComponents.find(c => c.id === id);
+      if (comp) {
+        const v = comp.delphi?.verdict;
+        let dotColor = '#6b7280';
+        let vText = 'not run';
+        if (v === 'READY') { dotColor = '#22c55e'; vText = 'READY'; }
+        else if (v === 'NEEDS WORK') { dotColor = '#f59e0b'; vText = 'NEEDS WORK'; }
+        else if (v === 'FAIL') { dotColor = '#ef4444'; vText = 'FAIL'; }
+
+        const chip = document.createElement('span');
+        chip.className = 'delphi-staged-chip';
+        chip.style.cssText = 'display:inline-flex; align-items:center; gap:5px; font-size:0.72rem; padding:2px 8px; border-radius:12px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary);';
+        chip.innerHTML = `<span style="width:6px; height:6px; border-radius:50%; background:${dotColor}; display:inline-block;"></span><span style="font-weight:500; color:var(--text-primary);">${comp.name}</span> <span style="font-size:0.68rem; opacity:0.8;">· ${vText}</span>`;
+        chipsRow.appendChild(chip);
+      }
+    });
+
+    if (stagedIds.length === 0) {
+      chipsRow.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">No components staged yet.</span>';
+    }
+    delphiSection.appendChild(chipsRow);
+
+    // Render Assembled Delphi Flags (if available)
+    if (assembledDelphiResult) {
+      if (assembledDelphiResult.error) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'health-item warning';
+        errDiv.innerHTML = `
+          <span class="health-item-icon">⚠️</span>
+          <span class="health-item-text">Delphi run failed: ${assembledDelphiResult.error}</span>
+        `;
+        delphiSection.appendChild(errDiv);
+      } else if (Array.isArray(assembledDelphiResult.flags) && assembledDelphiResult.flags.length > 0) {
+        assembledDelphiResult.flags.forEach(flag => {
+          const div = document.createElement('div');
+          const isCrit = flag.severity === 'critical';
+          div.className = `health-item ${isCrit ? 'critical' : 'warning'}`;
+          const compsStr = flag.components && flag.components.length > 0 ? ` [${flag.components.join(', ')}]` : '';
+          div.innerHTML = `
+            <span class="health-item-icon">${isCrit ? '🛑' : '⚠️'}</span>
+            <span class="health-item-text"><strong>${flag.summary}</strong>${compsStr} — ${flag.suggestion}</span>
+          `;
+          delphiSection.appendChild(div);
+        });
+      } else {
+        const passDiv = document.createElement('div');
+        passDiv.className = 'health-item success';
+        passDiv.innerHTML = `
+          <span class="health-item-icon">🔮</span>
+          <span class="health-item-text">Assembled coherence passed! No cross-component contradictions detected.</span>
+        `;
+        delphiSection.appendChild(passDiv);
+      }
+    }
+
+    healthContainer.appendChild(delphiSection);
+  }
+
+  async function handleRunAssembledDelphi() {
+    if (isRunningAssembledDelphi) return;
+    if (stagedIds.length === 0) {
+      if (window.showToast) window.showToast('Please stage components before running Delphi.', 'info');
+      return;
+    }
+
+    isRunningAssembledDelphi = true;
+    updateTokensEstimate();
+
+    try {
+      const allComponents = await window.ForgeDB.getAllComponents();
+      const stagedComponents = stagedIds.map(id => allComponents.find(c => c.id === id)).filter(Boolean);
+
+      const payload = {
+        stagedComponents,
+        mappings,
+        relationships,
+        contentOverrides
+      };
+
+      if (!window.Delphi || !window.Delphi.diagnoseAssembled) {
+        throw new Error('Delphi service is not loaded.');
+      }
+
+      const res = await window.Delphi.diagnoseAssembled(payload);
+      assembledDelphiResult = {
+        flags: res.flags,
+        timestamp: res.timestamp,
+        model: res.model
+      };
+
+      if (activeProjectId) {
+        try {
+          const p = await window.ForgeDB.getProject(activeProjectId);
+          if (p) {
+            p.assembledDelphi = assembledDelphiResult;
+            await window.ForgeDB.saveProject(p);
+          }
+        } catch (saveErr) {
+          console.warn('Could not persist assembledDelphi to project:', saveErr);
+        }
+      }
+
+      if (window.showToast) {
+        const flagCount = res.flags ? res.flags.length : 0;
+        window.showToast(`Delphi assembled audit complete (${flagCount} flag${flagCount === 1 ? '' : 's'})`, flagCount > 0 ? 'warning' : 'success');
+      }
+    } catch (err) {
+      console.error('Delphi assembled diagnostic failed:', err);
+      assembledDelphiResult = {
+        error: err.message || 'Diagnostic failed',
+        flags: []
+      };
+      if (window.showToast) window.showToast(`Delphi run failed: ${err.message}`, 'error');
+    } finally {
+      isRunningAssembledDelphi = false;
+      const all = await window.ForgeDB.getAllComponents();
+      runHealthCheck(all);
     }
   }
 
