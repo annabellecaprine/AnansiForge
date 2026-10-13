@@ -117,6 +117,7 @@
         focusedRowIndex: -1,           // keyboard nav focused row
         sortDir: 'desc',               // 'desc' = most ready first
         groupByPriority: false,
+        showStubs: (() => { try { return localStorage.getItem('mc_showStubs') !== 'false'; } catch (e) { return true; } })(),
         filters: { search: '', universe: 'all', priority: 'all', role: 'all', tag: '', series: 'all' },
         overviewFilters: { universeCat: 'all', roleMode: 'role' },
         leaderboardSort: 'messages',
@@ -537,6 +538,12 @@
         <button id="mc-group-priority-toggle" class="mc-sort-btn${state.groupByPriority ? ' active' : ''}" title="Group rows by priority level">
           📌 ${state.groupByPriority ? 'Grouped' : 'Group by Priority'}
         </button>
+        ${showAddStub ? (() => {
+          const stubCount = filterTrackerRecords(state.allTrackerRecords.filter(r => r.assetType === 'concept_stub' && r.intendedCategory === state.activeCategory && !r.promotedToVaultId)).length;
+          return `<button id="mc-stub-toggle" class="mc-sort-btn${state.showStubs ? ' active' : ''}" title="${state.showStubs ? 'Hide' : 'Show'} concept stubs">
+          💡 ${state.showStubs ? 'Stubs' : 'Stubs hidden'} (${stubCount})
+        </button>`;
+        })() : ''}
         ${quickAsset ? `<button id="mc-quick-add-asset" class="mc-btn mc-btn-primary mc-quick-add-asset" data-cat="${quickAsset.cat}">${quickAsset.label}</button>` : ''}
         ${showAddRecord ? `<button id="mc-add-record" class="mc-btn mc-btn-primary" data-type="${recordType}">+ ${recordType === 'story' ? 'Story' : recordType === 'release' ? 'Release' : 'Record'}</button>` : ''}
         ${showAddStub ? `

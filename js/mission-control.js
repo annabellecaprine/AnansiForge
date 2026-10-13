@@ -217,6 +217,14 @@
         return;
       }
 
+      // Show / hide concept stubs toggle
+      if (t.closest('#mc-stub-toggle')) {
+        state.showStubs = !state.showStubs;
+        try { localStorage.setItem('mc_showStubs', String(state.showStubs)); } catch (e) { }
+        await renderCurrentTab();
+        return;
+      }
+
       // Clear tag filter button
       if (t.id === 'mc-clear-tag' || t.closest('#mc-clear-tag')) {
         state.activeTagFilter = '';

@@ -160,7 +160,10 @@
       rows = displayItems.map(c => assetRow(c, steps)).join('');
     }
 
-    const stubRows = stubs.map(stub => stubRow(stub, steps)).join('');
+    const stubRows = S.state.showStubs ? stubs.map(stub => stubRow(stub, steps)).join('') : '';
+    const hiddenStubNote = (!S.state.showStubs && stubs.length)
+      ? ` ${stubs.length} concept stub${stubs.length > 1 ? 's are' : ' is'} hidden.`
+      : '';
     const pagHTML = paginationHTML(total);
 
     const pageIds = displayItems.map(c => String(c.id));
@@ -200,7 +203,7 @@
           </thead>
           <tbody>
             ${stubRows}
-            ${rows || `<tr><td colspan="${steps.length + 10}" class="mc-empty-state">No ${S.CATEGORY_LABELS[category] || category} tracked yet. Add a Concept to start.</td></tr>`}
+            ${rows || (stubRows ? '' : `<tr><td colspan="${steps.length + 10}" class="mc-empty-state">No ${S.CATEGORY_LABELS[category] || category} tracked yet.${hiddenStubNote || ' Add a Concept to start.'}</td></tr>`)}
           </tbody>
         </table>
       </div>
