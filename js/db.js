@@ -25,6 +25,20 @@
     });
   }
 
+  let vaultDirtySinceBackup = false;
+
+  function markVaultDirty() {
+    vaultDirtySinceBackup = true;
+  }
+
+  function isVaultDirty() {
+    return vaultDirtySinceBackup;
+  }
+
+  function clearVaultDirty() {
+    vaultDirtySinceBackup = false;
+  }
+
   function promisify(request) {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
@@ -367,6 +381,7 @@
   }
 
   async function saveProject(project) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const tx = db.transaction('projects', 'readwrite');
     const store = tx.objectStore('projects');
@@ -389,6 +404,7 @@
   }
 
   async function deleteProject(id) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const tx = db.transaction('projects', 'readwrite');
     const store = tx.objectStore('projects');
@@ -460,6 +476,7 @@
   }
 
   async function savePersona(persona) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const tx = db.transaction('personas', 'readwrite');
     const store = tx.objectStore('personas');
@@ -476,6 +493,7 @@
   }
 
   async function deletePersona(id) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const tx = db.transaction('personas', 'readwrite');
     const store = tx.objectStore('personas');
@@ -551,6 +569,7 @@
   }
 
   async function saveTrackerRecord(rec) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const now = new Date().toISOString();
     const aType = rec.assetType || 'concept_stub';
@@ -676,6 +695,7 @@
   }
 
   async function deleteTrackerRecord(id) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const tx = db.transaction('tracker_records', 'readwrite');
     const store = tx.objectStore('tracker_records');
@@ -782,6 +802,7 @@
   }
 
   async function saveUniverse(uni) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     if (!db.objectStoreNames.contains('universes')) return null;
     const name = (uni.name || 'Universe').trim();
@@ -802,6 +823,7 @@
   }
 
   async function deleteUniverse(id) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     if (!db.objectStoreNames.contains('universes')) return;
     const tx = db.transaction('universes', 'readwrite');
@@ -860,6 +882,7 @@
 
   // --- Activity Logging ---
   async function logActivity(entry) {
+    markVaultDirty();
     const db = dbInstance || await initDB();
     const tx = db.transaction('activity_log', 'readwrite');
     const store = tx.objectStore('activity_log');
@@ -1049,20 +1072,68 @@
     const record = { id: generateId(), bundle: bundleJSON, createdAt: new Date().toISOString() };
     await promisify(store.put(record));
 
-    const all = await getAllAutoBackups();
-    if (all.length > 3) {
-      const toDelete = all.slice(3);
+    await pruneAutoBackups(3);
+    clearVaultDirty();
+  }
+
+  async function pruneAutoBackups(keepCount = 3) {
+    try {
+      const db = dbInstance || await initDB();
+      const summaries = await getAutoBackupSummaries();
+      if (summaries.length <= keepCount) return;
+
+      const toDelete = summaries.slice(keepCount);
       const txDelete = db.transaction('auto_backups', 'readwrite');
       const storeDelete = txDelete.objectStore('auto_backups');
       for (const b of toDelete) {
         storeDelete.delete(b.id);
       }
+      await new Promise((resolve, reject) => {
+        txDelete.oncomplete = resolve;
+        txDelete.onerror = () => reject(txDelete.error);
+        txDelete.onabort = () => reject(new Error('Prune auto-backups transaction aborted'));
+      });
+      console.log(`[Auto-Backup] Pruned ${toDelete.length} old backups, kept latest ${keepCount}.`);
+    } catch (e) {
+      console.warn('[Auto-Backup] Prune error:', e);
     }
   }
 
+  async function getAutoBackupSummaries() {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('auto_backups', 'readonly');
+    const store = tx.objectStore('auto_backups');
+    const index = store.index('createdAt');
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev'); // newest first
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          // Read only ID and timestamp — avoids loading multi-megabyte bundle strings into RAM
+          results.push({ id: cursor.value.id, createdAt: cursor.value.createdAt });
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
   async function getLatestAutoBackup() {
-    const all = await getAllAutoBackups();
-    return all.length > 0 ? all[0] : null;
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('auto_backups', 'readonly');
+    const store = tx.objectStore('auto_backups');
+    const index = store.index('createdAt');
+    return new Promise((resolve, reject) => {
+      const cursorReq = index.openCursor(null, 'prev'); // newest first
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        resolve(cursor ? cursor.value : null);
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
   }
 
   async function getAllAutoBackups() {
@@ -1070,12 +1141,20 @@
     const tx = db.transaction('auto_backups', 'readonly');
     const store = tx.objectStore('auto_backups');
     const index = store.index('createdAt');
-    const results = await new Promise((resolve, reject) => {
-      const req = index.getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
     });
-    return results.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 
   // --- Duplicate Detection ---
@@ -1263,6 +1342,7 @@
         tx.onerror = () => reject(tx.error);
       });
     }
+    markVaultDirty();
   }
 
 
@@ -1354,8 +1434,13 @@
     getSnapshots,
     saveSnapshot,
     saveAutoBackup,
+    pruneAutoBackups,
+    getAutoBackupSummaries,
     getLatestAutoBackup,
     getAllAutoBackups,
+    isVaultDirty,
+    markVaultDirty,
+    clearVaultDirty,
     findSimilarComponents,
     levenshteinDistance
   };

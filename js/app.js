@@ -1790,13 +1790,35 @@
     }
 
     // Auto-Backup Timer (IndexedDB target as requested)
-    function initAutoBackupTimer() {
+    async function initAutoBackupTimer() {
+      // Purge any excess backlog backups on startup so we strictly keep <= 3
+      if (window.ForgeDB && window.ForgeDB.pruneAutoBackups) {
+        window.ForgeDB.pruneAutoBackups(3).catch(e => console.warn('[Auto-Backup] Startup prune error:', e));
+      }
+
+      // If no backups exist yet, mark dirty so the first scheduled backup will create one
+      try {
+        if (window.ForgeDB && window.ForgeDB.getAutoBackupSummaries) {
+          const summaries = await window.ForgeDB.getAutoBackupSummaries();
+          if (summaries.length === 0 && window.ForgeDB.markVaultDirty) {
+            window.ForgeDB.markVaultDirty();
+          }
+        }
+      } catch (e) {
+        console.warn('[Auto-Backup] Check summaries error:', e);
+      }
+
       const intervalMs = 30 * 60 * 1000; // 30 minutes
       setInterval(async () => {
         try {
+          if (window.ForgeDB && window.ForgeDB.isVaultDirty && !window.ForgeDB.isVaultDirty()) {
+            console.log('[Auto-Backup] Vault unchanged since last backup. Skipping silent cycle.');
+            return;
+          }
           // Slim auto-backups: covers are presentation-only and dominate file
           // size, so they are excluded from the silent 30-minute snapshots.
-          const bundle = await window.ForgeDB.exportVault({ includeCovers: false });
+          // Exclude activity log and cap versions to 1 to keep background memory minimal.
+          const bundle = await window.ForgeDB.exportVault({ includeCovers: false, includeActivityLog: false, versionCap: 1 });
           await window.ForgeDB.saveAutoBackup(JSON.stringify(bundle));
           console.log('[Auto-Backup] Saved silent IndexedDB vault backup.');
         } catch (e) {
