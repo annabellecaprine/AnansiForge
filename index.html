@@ -366,6 +366,8 @@
           </button>
           <h2 id="editor-title">Create Vault Component</h2>
           <div class="view-header-actions">
+            <button id="btn-delphi-editor-qa" class="btn btn-ghost" style="display:none;"
+              title="Delphi QA Diagnostic">🔮 Delphi QA</button>
             <button id="btn-version-history" class="btn btn-ghost" style="display:none;"
               title="View component version history">📜 History</button>
             <button id="btn-save-component" class="btn btn-primary">Save to Vault</button>
@@ -509,6 +511,24 @@
                 <span id="comp-modified-at"
                   style="color:var(--text-primary); font-family:var(--font-mono); font-weight:500;">—</span>
               </div>
+            </div>
+            <div id="editor-delphi-card" class="editor-info-card"
+              style="display:none; margin-top:0; margin-bottom:12px; font-size:0.78rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:5px;">
+                  <span>🔮</span> Delphi QA
+                </span>
+                <span id="editor-delphi-badge" class="mc-delphi-badge mc-delphi-none" style="cursor:pointer;"
+                  title="Click to view/run Delphi">Not Run</span>
+              </div>
+              <div id="editor-delphi-meta"
+                style="font-size:0.72rem; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
+                Audit traits, contradictions, and triggers
+              </div>
+              <button type="button" id="btn-editor-open-delphi" class="btn btn-secondary btn-sm"
+                style="width:100%; font-size:0.75rem; padding:4px 8px; justify-content:center;">
+                ▶ Run Diagnostic
+              </button>
             </div>
             <div class="form-group">
               <label for="comp-category">Category</label>
@@ -1131,7 +1151,7 @@
   <script src="js/modals/delphi_modal.js?v=17.5"></script>
   <script src="js/mission-control.js?v=17.7"></script>
   <script src="js/omni-search.js?v=17.2"></script>
-  <script src="js/app.js?v=17.8"></script>
+  <script src="js/app.js?v=17.9"></script>
   <!-- UNIVERSE MANAGER MODAL -->
   <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
     <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">

@@ -631,12 +631,16 @@
 
         // Load Dependency Map (projects referencing this component)
         await loadComponentDependencies(id);
+
+        // Update Delphi QA Diagnostic UI
+        updateEditorDelphiUI(comp);
       }
     } else {
       const timestampsCard = document.getElementById('editor-timestamps-card');
       if (timestampsCard) timestampsCard.style.display = 'none';
       const depContainer = document.getElementById('editor-dep-container');
       if (depContainer) depContainer.innerHTML = '';
+      updateEditorDelphiUI(null);
     }
 
     // Toggle Version History button visibility
@@ -681,6 +685,88 @@
       `;
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  function updateEditorDelphiUI(comp) {
+    const btnDelphi = document.getElementById('btn-delphi-editor-qa');
+    const delphiCard = document.getElementById('editor-delphi-card');
+    const delphiBadge = document.getElementById('editor-delphi-badge');
+    const delphiMeta = document.getElementById('editor-delphi-meta');
+    const delphiOpenBtn = document.getElementById('btn-editor-open-delphi');
+
+    if (!comp || !editingComponentId) {
+      if (btnDelphi) btnDelphi.style.display = 'none';
+      if (delphiCard) delphiCard.style.display = 'none';
+      return;
+    }
+
+    const cat = comp.category || compCategorySelect.value || 'character';
+    const isApplicable = cat === 'character' || cat === 'scenario';
+
+    if (btnDelphi) btnDelphi.style.display = isApplicable ? 'inline-flex' : 'none';
+    if (delphiCard) delphiCard.style.display = isApplicable ? 'block' : 'none';
+
+    if (!isApplicable) return;
+
+    const delphi = comp.delphi || null;
+    if (delphi && delphi.verdict) {
+      const v = String(delphi.verdict).toUpperCase();
+      let cls = 'mc-delphi-none';
+      let color = 'var(--text-primary)';
+      if (v === 'READY') { cls = 'mc-delphi-ready'; color = '#4ade80'; }
+      else if (v === 'NEEDS WORK') { cls = 'mc-delphi-warn'; color = '#fbbf24'; }
+      else if (v === 'FAIL') { cls = 'mc-delphi-fail'; color = '#f87171'; }
+
+      let flagSuffix = '';
+      if (delphi.dimensions) {
+        let flags = 0;
+        ['coherence', 'dominance', 'triggers', 'crossModel'].forEach(k => {
+          if (delphi.dimensions[k] === 'flag' || delphi.dimensions[k] === 'fail') flags++;
+        });
+        if (flags > 0 && v !== 'READY') flagSuffix = ` · ${flags}⚑`;
+      }
+
+      if (btnDelphi) {
+        btnDelphi.innerHTML = `🔮 Delphi: <span style="color:${color}; font-weight:600; margin-left:3px;">${escapeHTML(v)}${flagSuffix}</span>`;
+        btnDelphi.title = `Delphi QA: ${v} — Click to view diagnostic report`;
+      }
+
+      if (delphiBadge) {
+        delphiBadge.className = `mc-delphi-badge ${cls}`;
+        delphiBadge.textContent = `${v}${flagSuffix}`;
+        delphiBadge.title = `Delphi QA: ${v} — Click to view report`;
+      }
+
+      if (delphiMeta) {
+        const dateStr = delphi.timestamp ? new Date(delphi.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Previous run';
+        delphiMeta.innerHTML = `Audited ${dateStr} via <strong>${escapeHTML(delphi.model || 'model')}</strong>`;
+      }
+
+      if (delphiOpenBtn) {
+        delphiOpenBtn.textContent = 'View Full Report';
+        delphiOpenBtn.className = 'btn btn-secondary btn-sm';
+      }
+    } else {
+      if (btnDelphi) {
+        btnDelphi.innerHTML = '🔮 Delphi QA';
+        btnDelphi.title = 'Run Delphi QA Diagnostic';
+      }
+
+      if (delphiBadge) {
+        delphiBadge.className = 'mc-delphi-badge mc-delphi-none';
+        delphiBadge.textContent = 'Not Run';
+        delphiBadge.title = 'No diagnostic run yet — click to run';
+      }
+
+      if (delphiMeta) {
+        delphiMeta.textContent = 'Audit traits, contradictions, and triggers';
+      }
+
+      if (delphiOpenBtn) {
+        delphiOpenBtn.textContent = '▶ Run Diagnostic';
+        delphiOpenBtn.className = 'btn btn-primary btn-sm';
+      }
     }
   }
 
@@ -1595,6 +1681,14 @@
         editorTabsContainer.style.display = 'none';
         switchEditorTab('raw');
       }
+      if (editingComponentId) {
+        window.ForgeDB.getComponent(editingComponentId).then(c => {
+          if (c) {
+            c.category = cat;
+            updateEditorDelphiUI(c);
+          }
+        });
+      }
     });
 
     // Mark editor dirty on any field change
@@ -1788,6 +1882,29 @@
         }
       });
     }
+
+    // Delphi QA In-Editor Actions
+    const btnDelphiEditor = document.getElementById('btn-delphi-editor-qa');
+    const btnEditorOpenDelphi = document.getElementById('btn-editor-open-delphi');
+    const badgeEditorDelphi = document.getElementById('editor-delphi-badge');
+
+    const openDelphiForCurrent = () => {
+      if (!editingComponentId) return;
+      if (window.DelphiModal && window.DelphiModal.open) {
+        window.DelphiModal.open(editingComponentId);
+      }
+    };
+
+    btnDelphiEditor?.addEventListener('click', openDelphiForCurrent);
+    btnEditorOpenDelphi?.addEventListener('click', openDelphiForCurrent);
+    badgeEditorDelphi?.addEventListener('click', openDelphiForCurrent);
+
+    window.addEventListener('delphi:verdict-saved', async (e) => {
+      if (editingComponentId && e.detail && e.detail.id === editingComponentId) {
+        const comp = await window.ForgeDB.getComponent(editingComponentId);
+        if (comp) updateEditorDelphiUI(comp);
+      }
+    });
 
     // Auto-Backup Timer (IndexedDB target as requested)
     async function initAutoBackupTimer() {
