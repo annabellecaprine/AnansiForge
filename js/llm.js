@@ -67,7 +67,25 @@
       if (candidate?.finishReason === 'SAFETY') {
         return '⚠️ Output was blocked by Gemini safety filters.';
       }
-      return candidate?.content?.parts?.[0]?.text || '(No response)';
+
+      const parts = candidate?.content?.parts || [];
+      let mainText = '';
+      let thoughtText = '';
+      for (const p of parts) {
+        if (p.thought) {
+          thoughtText += (thoughtText ? '\n' : '') + (p.text || '');
+        } else if (p.text) {
+          mainText += p.text;
+        }
+      }
+
+      if (!mainText && thoughtText) {
+        mainText = thoughtText;
+      } else if (thoughtText) {
+        mainText = `<think>${thoughtText}</think>\n${mainText}`;
+      }
+
+      return mainText || '(No response)';
     }
 
     // 2. OpenAI / OpenRouter / Chutes / LM Studio / Custom Endpoints

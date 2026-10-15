@@ -28,26 +28,10 @@ IMPORTANT EVALUATION PRINCIPLES:
 - For every FLAG or FAIL, you MUST cite the relevant wording and explain the likely behavioral consequence.
 - When evidence is insufficient, use FLAG rather than FAIL.
 
-Analyze the definition and return TWO parts.
+Analyze the definition and return TWO parts:
 
-PART 1 — a markdown diagnostic with these sections:
-
-1. DOMINANCE — Rank the traits and descriptors by how strongly they shape behavior,
-   strongest first, with a 1–10 signal strength for each. Flag any trait that dominates
-   contrary to apparent authorial intent, and note WHY it dominates (wording, placement,
-   repetition, emotional weight).
-
-2. CONTRADICTIONS — List competing trait pairs. For each: which wins in ambiguous
-   situations, and what evidence in the wording decides it?
-
-3. TRIGGERS — Flag phrases likely to cause unintended behavioral pulls with current LLMs:
-   sycophantic positivity, instruction-hierarchy confusion (persona instructions fighting
-   system-style instructions), persona drift risks over multi-turn conversation, over-literal
-   readings of figurative traits. For each: the mechanism and an alternative phrasing.
-
-4. REWORDINGS — BEFORE/AFTER for each fix, with a one-line rationale per pair.
-
-PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and nothing else outside it:
+PART 1 — a \`\`\`json block with the structured verdict ratings FIRST:
+\`\`\`json
 {
   "coherence": "pass|flag|fail",
   "dominance": "pass|flag|fail",
@@ -57,7 +41,17 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
     "dominance": "<one line citing reason/evidence>",
     "triggers": "<one line citing reason/evidence>"
   }
-}`;
+}
+\`\`\`
+
+PART 2 — a focused markdown diagnostic explaining the findings:
+
+1. DOMINANCE — Rank traits and descriptors by behavioral signal strength (1–10). Note any trait that dominates contrary to apparent authorial intent and why.
+2. CONTRADICTIONS — List competing trait pairs, which wins in ambiguous situations, and cited wording evidence.
+3. TRIGGERS — Flag phrases causing unintended behavioral pulls (sycophancy, instruction-hierarchy confusion, persona drift) with mechanisms and alternative phrasings.
+4. REWORDINGS — Specific BEFORE/AFTER improvements with a one-line rationale per pair.
+
+Keep markdown explanations concise, direct, and grounded in quoted wording.`;
 
   const SYSTEM_PROMPT_ASSEMBLED = `You are auditing an assembled chatbot card for production coherence across its staged components.
 Do not roleplay as any character. You are evaluating the complete assembled card definition.
@@ -73,13 +67,8 @@ IMPORTANT EVALUATION PRINCIPLES:
 
 Analyze the assembled components, mappings, and relationships. Return TWO parts:
 
-PART 1 — a markdown diagnostic evaluating:
-1. CROSS-COMPONENT CONTRADICTIONS — traits in different components that fight (which wins, what wording decides it).
-2. SCENARIO/PERSONALITY TENSION — does the scenario's pull fight any character's dominant traits?
-3. RELATIONSHIP TENSION — do declared dynamics contradict any component's traits?
-4. REWORDINGS & HARMONIZATIONS — specific text edits to harmonize the prompt.
-
-PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape:
+PART 1 — a \`\`\`json block with the structured ratings FIRST:
+\`\`\`json
 {
   "flags": [
     {
@@ -89,7 +78,16 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape:
       "suggestion": "<actionable fix>"
     }
   ]
-}`;
+}
+\`\`\`
+
+PART 2 — a focused markdown diagnostic evaluating:
+1. CROSS-COMPONENT CONTRADICTIONS — traits in different components that fight (which wins, what wording decides it).
+2. SCENARIO/PERSONALITY TENSION — does the scenario's pull fight any character's dominant traits?
+3. RELATIONSHIP TENSION — do declared dynamics contradict any component's traits?
+4. REWORDINGS & HARMONIZATIONS — specific text edits to harmonize the prompt.
+
+Keep markdown concise, direct, and grounded in quoted wording.`;
 
   const SYSTEM_PROMPT_CROSS_MODEL_COMPARISON = `You are an expert character prompt analyst comparing two independent diagnostic audits produced by two different LLMs for the same chatbot component.
 
@@ -109,7 +107,17 @@ RULES:
 
 Return TWO parts:
 
-PART 1 — a markdown comparative analysis:
+PART 1 — a \`\`\`json block with the comparison verdict ratings FIRST:
+\`\`\`json
+{
+  "crossModel": "pass|flag",
+  "summary": "<one line summary of agreement or divergence>",
+  "disputedWording": ["<quote 1>", ...],
+  "consequence": "<behavioral consequence if flagged, or null>"
+}
+\`\`\`
+
+PART 2 — a focused markdown comparative analysis:
 ### Cross-Model Comparison & Synthesis
 [Compare the models' findings, cited wording, and behavioral consequences]
 
@@ -120,13 +128,7 @@ PART 1 — a markdown comparative analysis:
   - **Model 2 Interpretation**: [how model 2 read it]
   - **Behavioral Consequence**: [how this alters character behavior in roleplay]
 
-PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and nothing else:
-{
-  "crossModel": "pass|flag",
-  "summary": "<one line summary of agreement or divergence>",
-  "disputedWording": ["<quote 1>", ...],
-  "consequence": "<behavioral consequence if flagged, or null>"
-}`;
+Keep markdown concise and focused on cited evidence.`;
 
   /**
    * Sanitize JSON text to handle common LLM output defects:
@@ -146,19 +148,96 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
   }
 
   /**
+   * Extract thinking/reasoning blocks (<think>...</think> or <thought>...</thought>)
+   * so they do not pollute user-facing forms, markdown reports, or JSON extraction.
+   */
+  function extractThinking(raw) {
+    if (typeof raw !== 'string') return { clean: '', thinking: '' };
+
+    let thinking = '';
+    let clean = raw;
+
+    // 1. <think>...</think> (DeepSeek, OpenRouter, Qwen, etc.)
+    clean = clean.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, (_, p1) => {
+      if (p1 && p1.trim()) {
+        thinking = (thinking ? thinking + '\n\n' : '') + p1.trim();
+      }
+      return '';
+    }).trim();
+
+    // 2. <thought>...</thought> (Gemini thinking tags)
+    clean = clean.replace(/<thought>([\s\S]*?)(?:<\/thought>|$)/gi, (_, p1) => {
+      if (p1 && p1.trim()) {
+        thinking = (thinking ? thinking + '\n\n' : '') + p1.trim();
+      }
+      return '';
+    }).trim();
+
+    return { clean, thinking };
+  }
+
+  /**
+   * Failover recovery for incomplete/truncated JSON blocks caused by token limits.
+   * Extracts available dimension ratings even if closing braces or notes were cut off.
+   */
+  function parsePartialJsonVerdict(str) {
+    if (!str || typeof str !== 'string') return null;
+
+    const cMatch = str.match(/"coherence"\s*:\s*"([^"]+)"/i);
+    const dMatch = str.match(/"dominance"\s*:\s*"([^"]+)"/i);
+    const tMatch = str.match(/"triggers"\s*:\s*"([^"]+)"/i);
+
+    const c = normalizeDimension(cMatch ? cMatch[1] : null);
+    const d = normalizeDimension(dMatch ? dMatch[1] : null);
+    const t = normalizeDimension(tMatch ? tMatch[1] : null);
+
+    if (c || d || t) {
+      const noteC = (str.match(/"notes"\s*:\s*\{[\s\S]*?"coherence"\s*:\s*"([^"]*)"/i) || [])[1] || '';
+      const noteD = (str.match(/"notes"\s*:\s*\{[\s\S]*?"dominance"\s*:\s*"([^"]*)"/i) || [])[1] || '';
+      const noteT = (str.match(/"notes"\s*:\s*\{[\s\S]*?"triggers"\s*:\s*"([^"]*)"/i) || [])[1] || '';
+
+      return {
+        dimensions: {
+          coherence: c || 'flag',
+          dominance: d || 'flag',
+          triggers: t || 'flag'
+        },
+        notes: {
+          coherence: noteC.trim() || (c ? 'Recovered from structured ratings' : 'Inferred from findings'),
+          dominance: noteD.trim() || (d ? 'Recovered from structured ratings' : 'Inferred from findings'),
+          triggers: noteT.trim() || (t ? 'Recovered from structured ratings' : 'Inferred from findings')
+        },
+        recoveredFromPartialJson: true
+      };
+    }
+    return null;
+  }
+
+  /**
    * Find candidate JSON substring from fenced blocks, unclosed fences, or bare JSON objects.
    */
-  function extractCandidateJson(raw, keyPatterns = ['coherence', 'crossModel', 'dominance']) {
+  function extractCandidateJson(raw, keyPatterns = ['coherence', 'crossModel', 'dominance', 'flags']) {
     if (typeof raw !== 'string') return null;
 
-    // 1. Standard fenced block: ```json ... ``` or ``` ... ```
+    // 1. Check all fenced blocks (```json ... ``` or ``` ... ```) and find the one containing target keys
     const fencedRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
     let match;
-    let lastFenced = null;
+    const candidates = [];
     while ((match = fencedRegex.exec(raw)) !== null) {
-      lastFenced = { content: match[1], start: match.index, end: match.index + match[0].length };
+      candidates.push({ content: match[1], start: match.index, end: match.index + match[0].length });
     }
-    if (lastFenced) return lastFenced;
+
+    const patternStr = keyPatterns.map(k => `"${k}"`).join('|');
+    const keyRegex = new RegExp(patternStr, 'i');
+
+    for (const cand of candidates) {
+      if (keyRegex.test(cand.content)) {
+        return cand;
+      }
+    }
+    if (candidates.length > 0) {
+      return candidates[0];
+    }
 
     // 2. Unclosed fence at end of string: ```(?:json)?\s*({[\s\S]*)$
     const unclosedMatch = raw.match(/```(?:json)?\s*({[\s\S]*)$/i);
@@ -167,7 +246,6 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
     }
 
     // 3. Bare JSON object containing expected dimension keys
-    const patternStr = keyPatterns.map(k => `"${k}"`).join('|');
     const bareRegex = new RegExp(`(\\{[\\s\\S]*?(?:${patternStr})[\\s\\S]*?\\})`, 'i');
     const bareMatch = raw.match(bareRegex);
     if (bareMatch) {
@@ -219,17 +297,19 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
 
   /**
    * Parse the structured JSON verdict block from the LLM output.
-   * Multi-tier failover: Sanitized JSON -> Text Heuristics -> Returns null for Tier 3 repair.
+   * Multi-tier failover: Sanitized JSON -> Partial JSON Recovery -> Text Heuristics -> Returns null for Tier 3 repair.
    */
   function parseVerdict(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
-      return { report: '', dimensions: null, notes: null };
+      return { report: '', dimensions: null, notes: null, thinking: '' };
     }
 
-    const candidate = extractCandidateJson(raw, ['coherence', 'dominance', 'triggers']);
+    const { clean: cleanRaw, thinking } = extractThinking(raw);
+
+    const candidate = extractCandidateJson(cleanRaw, ['coherence', 'dominance', 'triggers']);
     if (candidate) {
-      const beforeBlock = raw.substring(0, candidate.start).trim();
-      const afterBlock = raw.substring(candidate.end).trim();
+      const beforeBlock = cleanRaw.substring(0, candidate.start).trim();
+      const afterBlock = cleanRaw.substring(candidate.end).trim();
       const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
 
       const cleaned = cleanJsonString(candidate.content);
@@ -249,44 +329,73 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
           return {
             report: reportText,
             dimensions: { coherence: c, dominance: d, triggers: t },
-            notes
+            notes,
+            thinking
           };
         }
       } catch (jsonErr) {
-        console.warn('[Delphi] JSON parse error on candidate block, falling back to heuristics:', jsonErr);
+        console.warn('[Delphi] JSON parse error on candidate block, attempting partial recovery:', jsonErr);
+        const recovered = parsePartialJsonVerdict(candidate.content);
+        if (recovered && recovered.dimensions) {
+          console.info('[Delphi] Successfully recovered dimensions from truncated JSON block:', recovered.dimensions);
+          return {
+            report: reportText,
+            dimensions: recovered.dimensions,
+            notes: recovered.notes,
+            recoveredFromPartialJson: true,
+            thinking
+          };
+        }
       }
     }
 
+    // Also check if any partial JSON exists in cleanRaw text
+    const partialMatch = parsePartialJsonVerdict(cleanRaw);
+    if (partialMatch && partialMatch.dimensions) {
+      const cleanReport = cleanRaw.replace(/```(?:json)?[\s\S]*$/i, '').trim();
+      console.info('[Delphi] Recovered dimensions from partial JSON in cleanRaw:', partialMatch.dimensions);
+      return {
+        report: cleanReport || cleanRaw,
+        dimensions: partialMatch.dimensions,
+        notes: partialMatch.notes,
+        recoveredFromPartialJson: true,
+        thinking
+      };
+    }
+
     // Tier 2 Fallback: Scan the markdown prose for explicit dimension verdicts
-    const heuristic = extractFromTextHeuristic(raw);
+    const heuristic = extractFromTextHeuristic(cleanRaw);
     if (heuristic) {
       console.info('[Delphi] Recovered verdict dimensions via markdown text heuristics:', heuristic);
       return {
-        report: raw,
+        report: cleanRaw,
         dimensions: {
           coherence: heuristic.coherence,
           dominance: heuristic.dominance,
           triggers: heuristic.triggers
         },
         notes: heuristic.notes,
-        inferredFromText: true
+        inferredFromText: true,
+        thinking
       };
     }
 
-    return { report: raw, dimensions: null, notes: null };
+    return { report: cleanRaw, dimensions: null, notes: null, thinking };
   }
 
   /**
    * Parse assembled coherence flags from assembled card diagnostic.
    */
   function parseAssembledVerdict(raw) {
-    if (typeof raw !== 'string') return { report: '', flags: [] };
+    if (typeof raw !== 'string') return { report: '', flags: [], thinking: '' };
 
-    const candidate = extractCandidateJson(raw, ['flags']);
-    if (!candidate) return { report: raw, flags: [] };
+    const { clean: cleanRaw, thinking } = extractThinking(raw);
 
-    const beforeBlock = raw.substring(0, candidate.start).trim();
-    const afterBlock = raw.substring(candidate.end).trim();
+    const candidate = extractCandidateJson(cleanRaw, ['flags']);
+    if (!candidate) return { report: cleanRaw, flags: [], thinking };
+
+    const beforeBlock = cleanRaw.substring(0, candidate.start).trim();
+    const afterBlock = cleanRaw.substring(candidate.end).trim();
     const reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
     const cleaned = cleanJsonString(candidate.content);
 
@@ -299,9 +408,21 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
         suggestion: String(f.suggestion || '').trim()
       })) : [];
 
-      return { report: reportText, flags };
+      return { report: reportText, flags, thinking };
     } catch (_) {
-      return { report: raw, flags: [] };
+      // Partial recovery for incomplete JSON array
+      const flags = [];
+      const flagRegex = /\{\s*"severity"\s*:\s*"(warning|critical)"[\s\S]*?"summary"\s*:\s*"([^"]+)"[\s\S]*?"suggestion"\s*:\s*"([^"]+)"\s*\}/gi;
+      let fMatch;
+      while ((fMatch = flagRegex.exec(candidate.content)) !== null) {
+        flags.push({
+          severity: fMatch[1].toLowerCase(),
+          components: [],
+          summary: fMatch[2].trim(),
+          suggestion: fMatch[3].trim()
+        });
+      }
+      return { report: reportText, flags, thinking };
     }
   }
 
@@ -337,7 +458,9 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
     }
 
     const baseConfig = overrideConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
-    const execConfig = { ...baseConfig, temperature: 0.3 };
+    // Delphi requires substantial tokens for thinking/reasoning + diagnostic + JSON ratings
+    const delphiMaxTokens = Math.max(Number(baseConfig.maxTokens) || 4096, 4096);
+    const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: delphiMaxTokens };
 
     if (!window.ForgeLLM || typeof window.ForgeLLM.generate !== 'function') {
       throw new Error('ForgeLLM service is not available.');
@@ -349,7 +472,10 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
       execConfig
     );
 
-    let parsed = parseVerdict(raw);
+    // Extract thinking tokens so they do not pollute user-facing forms or report parsing
+    const { clean: cleanRaw, thinking } = extractThinking(raw);
+
+    let parsed = parseVerdict(cleanRaw);
 
     // Tier 3: Automated Self-Healing LLM Extraction Pass if raw output lacked valid format
     if (!parsed.dimensions && window.ForgeLLM && typeof window.ForgeLLM.generate === 'function') {
@@ -357,10 +483,7 @@ PART 2 — after the markdown, a \`\`\`json block with EXACTLY this shape and no
         console.warn('[Delphi] Diagnostic output lacked structured verdict block, initiating Tier 3 self-healing repair...');
         const repairPrompt = `You are a character QA formatting assistant. Extract the structured verdict from this character QA diagnostic analysis into strict JSON.
 
-Do not re-evaluate or change findings. Extract what the text concluded.
-If a dimension was not explicitly concluded, infer pass, flag, or fail from the text findings.
-
-Respond ONLY with this JSON block:
+Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
 \`\`\`json
 {
   "coherence": "pass|flag|fail",
@@ -376,15 +499,16 @@ Respond ONLY with this JSON block:
 
         const repairRaw = await window.ForgeLLM.generate(
           repairPrompt,
-          [{ role: 'user', content: raw.substring(0, 3000) }],
-          { ...execConfig, temperature: 0.0, maxTokens: 256 }
+          [{ role: 'user', content: cleanRaw.substring(0, 4000) }],
+          { ...execConfig, temperature: 0.0, maxTokens: 1024 }
         );
 
-        const repaired = parseVerdict(repairRaw);
+        const { clean: cleanRepair } = extractThinking(repairRaw);
+        const repaired = parseVerdict(cleanRepair);
         if (repaired.dimensions) {
           console.info('[Delphi] Tier 3 self-healing repair succeeded!', repaired.dimensions);
           parsed = {
-            report: raw,
+            report: cleanRaw,
             dimensions: repaired.dimensions,
             notes: repaired.notes || {},
             repaired: true
@@ -409,6 +533,8 @@ Respond ONLY with this JSON block:
       provider: execConfig.provider || 'unknown',
       repaired: !!parsed.repaired,
       inferredFromText: !!parsed.inferredFromText,
+      recoveredFromPartialJson: !!parsed.recoveredFromPartialJson,
+      thinking: thinking || null,
       raw
     };
   }
@@ -418,22 +544,39 @@ Respond ONLY with this JSON block:
    */
   function parseComparison(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
-      return { report: '', crossModel: 'flag', summary: 'No output received.', disputedWording: [], consequence: null };
+      return { report: '', crossModel: 'flag', summary: 'No output received.', disputedWording: [], consequence: null, thinking: '' };
     }
 
-    const candidate = extractCandidateJson(raw, ['crossModel']);
-    let reportText = raw;
+    const { clean: cleanRaw, thinking } = extractThinking(raw);
+
+    const candidate = extractCandidateJson(cleanRaw, ['crossModel']);
+    let reportText = cleanRaw;
     let data = null;
 
     if (candidate) {
-      const beforeBlock = raw.substring(0, candidate.start).trim();
-      const afterBlock = raw.substring(candidate.end).trim();
+      const beforeBlock = cleanRaw.substring(0, candidate.start).trim();
+      const afterBlock = cleanRaw.substring(candidate.end).trim();
       reportText = (beforeBlock + (afterBlock ? '\n\n' + afterBlock : '')).trim();
       const cleaned = cleanJsonString(candidate.content);
       try {
         data = JSON.parse(cleaned);
       } catch (e) {
-        console.warn('[Delphi] parseComparison JSON error:', e);
+        console.warn('[Delphi] parseComparison JSON error, attempting recovery:', e);
+        const crossModelMatch = candidate.content.match(/"crossModel"\s*:\s*"([^"]+)"/i);
+        if (crossModelMatch) {
+          const rawC = crossModelMatch[1].toLowerCase().trim();
+          const crossModel = rawC === 'pass' ? 'pass' : 'flag';
+          const summaryMatch = candidate.content.match(/"summary"\s*:\s*"([^"]+)"/i);
+          return {
+            report: reportText,
+            crossModel,
+            summary: summaryMatch ? summaryMatch[1].trim() : 'Recovered from cross-model verdict',
+            disputedWording: [],
+            consequence: null,
+            recoveredFromPartialJson: true,
+            thinking
+          };
+        }
       }
     }
 
@@ -451,18 +594,20 @@ Respond ONLY with this JSON block:
         crossModel,
         summary,
         disputedWording,
-        consequence
+        consequence,
+        thinking
       };
     }
 
     // Heuristic scan for cross-model in text:
-    const passMatch = /cross[- ]?model[:\s*-]+pass/i.test(raw);
+    const passMatch = /cross[- ]?model[:\s*-]+pass/i.test(cleanRaw);
     return {
-      report: raw,
+      report: reportText,
       crossModel: passMatch ? 'pass' : 'flag',
       summary: passMatch ? 'Both models returned compatible interpretations.' : 'Cross-model comparison returned unstructured analysis.',
       disputedWording: [],
-      consequence: null
+      consequence: null,
+      thinking
     };
   }
 
@@ -533,12 +678,15 @@ Respond ONLY with this JSON block:
     let comparisonParsed = null;
 
     try {
+      const cmpMaxTokens = Math.max(Number(primaryConfig.maxTokens) || 4096, 4096);
       comparisonRaw = await window.ForgeLLM.generate(
         SYSTEM_PROMPT_CROSS_MODEL_COMPARISON,
         [{ role: 'user', content: comparisonPromptUser }],
-        { ...primaryConfig, temperature: 0.3 }
+        { ...primaryConfig, temperature: 0.3, maxTokens: cmpMaxTokens }
       );
-      comparisonParsed = parseComparison(comparisonRaw);
+      const { clean: cleanCmp, thinking: cmpThinking } = extractThinking(comparisonRaw);
+      comparisonParsed = parseComparison(cleanCmp);
+      comparisonParsed.thinking = cmpThinking || null;
     } catch (cmpErr) {
       console.warn('[Delphi] Comparison synthesis LLM call failed, falling back to heuristic:', cmpErr);
       const pDims = primaryResult.dimensions || {};
@@ -646,7 +794,8 @@ Respond ONLY with this JSON block:
     }
 
     const baseConfig = overrideConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
-    const execConfig = { ...baseConfig, temperature: 0.3 };
+    const assembledMaxTokens = Math.max(Number(baseConfig.maxTokens) || 4096, 4096);
+    const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: assembledMaxTokens };
 
     if (!window.ForgeLLM || typeof window.ForgeLLM.generate !== 'function') {
       throw new Error('ForgeLLM service is not available.');
@@ -658,7 +807,8 @@ Respond ONLY with this JSON block:
       execConfig
     );
 
-    const parsed = parseAssembledVerdict(raw);
+    const { clean: cleanRaw, thinking } = extractThinking(raw);
+    const parsed = parseAssembledVerdict(cleanRaw);
     const perComponent = stagedComponents.map(c => ({
       id: c.id,
       name: c.name,
@@ -669,6 +819,7 @@ Respond ONLY with this JSON block:
       report: parsed.report,
       flags: parsed.flags,
       perComponent,
+      thinking: thinking || null,
       timestamp: new Date().toISOString(),
       model: execConfig.model || 'unknown',
       provider: execConfig.provider || 'unknown',
@@ -687,17 +838,15 @@ Respond ONLY with this JSON block:
     if (!comp) throw new Error(`Component "${compId}" was not found.`);
 
     const textToRepair = rawText || comp.delphi?.report || comp.delphi?.raw || '';
-    if (!textToRepair.trim()) {
+    const { clean: cleanTextToRepair } = extractThinking(textToRepair);
+    if (!cleanTextToRepair.trim()) {
       throw new Error('No diagnostic report text found to repair.');
     }
 
     const config = window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {};
     const repairPrompt = `You are a character QA formatting assistant. Extract the structured verdict from this character QA diagnostic analysis into strict JSON.
 
-Do not re-evaluate or add creative text. Extract what the text concluded.
-If a dimension was not explicitly concluded, infer pass, flag, or fail from the text findings.
-
-Respond ONLY with this JSON block:
+Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
 \`\`\`json
 {
   "coherence": "pass|flag|fail",
@@ -713,11 +862,12 @@ Respond ONLY with this JSON block:
 
     const repairRaw = await window.ForgeLLM.generate(
       repairPrompt,
-      [{ role: 'user', content: textToRepair.substring(0, 3000) }],
-      { ...config, temperature: 0.0, maxTokens: 256 }
+      [{ role: 'user', content: cleanTextToRepair.substring(0, 4000) }],
+      { ...config, temperature: 0.0, maxTokens: 1024 }
     );
 
-    const parsed = parseVerdict(repairRaw);
+    const { clean: cleanRepairRaw } = extractThinking(repairRaw);
+    const parsed = parseVerdict(cleanRepairRaw);
     if (!parsed.dimensions) {
       throw new Error('Could not extract dimensions from the report text.');
     }

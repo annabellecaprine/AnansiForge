@@ -32,7 +32,13 @@
 
   function formatMarkdown(str) {
     if (!str) return '';
-    const lines = str.split('\n');
+    // Strip any residual thinking tags so they never leak into the formatted report
+    const cleanStr = str
+      .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+      .replace(/<thought>[\s\S]*?(?:<\/thought>|$)/gi, '')
+      .trim();
+    if (!cleanStr) return '';
+    const lines = cleanStr.split('\n');
     const out = [];
     let inList = false;
 
@@ -435,9 +441,37 @@
 
     const recoveryBadge = delphiData.repaired
       ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(168,85,247,0.25); color:#d8b4fe;">⚡ Auto-Repaired Format</span>`
-      : (delphiData.inferredFromText
-        ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(59,130,246,0.25); color:#93c5fd;">🔍 Extracted from Markdown</span>`
-        : (delphiData.manual ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(34,197,94,0.25); color:#86efac;">✍️ Author Verified</span>` : ''));
+      : (delphiData.recoveredFromPartialJson
+        ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(245,158,11,0.25); color:#fbbf24;">⚡ Recovered from Partial JSON</span>`
+        : (delphiData.inferredFromText
+          ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(59,130,246,0.25); color:#93c5fd;">🔍 Extracted from Markdown</span>`
+          : (delphiData.manual ? `<span style="display:inline-block; margin-left:8px; padding:1px 6px; font-size:0.7rem; border-radius:4px; background:rgba(34,197,94,0.25); color:#86efac;">✍️ Author Verified</span>` : '')));
+
+    let thinkingHTML = '';
+    let thinkingContent = delphiData.thinking || '';
+    if (!thinkingContent && delphiData.report && (/<think>/i.test(delphiData.report) || /<thought>/i.test(delphiData.report))) {
+      delphiData.report.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, (_, p1) => {
+        if (p1 && p1.trim()) thinkingContent = (thinkingContent ? thinkingContent + '\n\n' : '') + p1.trim();
+        return '';
+      });
+      delphiData.report.replace(/<thought>([\s\S]*?)(?:<\/thought>|$)/gi, (_, p1) => {
+        if (p1 && p1.trim()) thinkingContent = (thinkingContent ? thinkingContent + '\n\n' : '') + p1.trim();
+        return '';
+      });
+    }
+
+    if (thinkingContent) {
+      thinkingHTML = `
+        <details class="delphi-thinking-details" style="margin-top: 16px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.78rem;">
+          <summary style="padding: 8px 12px; cursor: pointer; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <span>💭</span> Model Reasoning &amp; Thinking Process
+          </summary>
+          <div style="padding: 10px 14px; border-top: 1px solid var(--border-color); max-height: 240px; overflow-y: auto; color: var(--text-secondary); line-height: 1.5; white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.75rem;">
+            ${escapeHTML(thinkingContent)}
+          </div>
+        </details>
+      `;
+    }
 
     body.innerHTML = `
       ${unreadableNotice ? `
@@ -504,6 +538,7 @@
 
       <div class="delphi-report-content">
         ${reportBodyHTML}
+        ${thinkingHTML}
       </div>
     `;
 
@@ -629,6 +664,9 @@
         provider: result.provider,
         timestamp: new Date().toISOString(),
         report: result.report,
+        thinking: result.thinking || null,
+        repaired: result.repaired,
+        recoveredFromPartialJson: result.recoveredFromPartialJson,
         history
       };
 
