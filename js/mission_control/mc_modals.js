@@ -242,6 +242,13 @@
         <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
           Metric updates create an immutable, append-only performance snapshot with an automatic timestamp.
         </div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+          <button type="button" class="mc-btn mc-btn-secondary" id="mc-btn-fetch-janitor" style="white-space:nowrap;">🔄 Fetch from JanitorAI</button>
+          <span id="mc-janitor-status" style="font-size:0.8rem; color:var(--text-secondary);"></span>
+        </div>
+        <div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8; margin-bottom:12px;">
+          Fills Messages + Unique Chats from the bot's JanitorAI page (uses the publish URL saved on the release record). Favorites need a JanitorAI login, so enter those by hand.
+        </div>
         <div class="mc-form-row" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
           <div class="form-group"><label>Messages</label>
             <input type="number" id="mc-snap-msgs" value="${last.messages || 0}" class="mc-modal-input" min="0">
@@ -288,6 +295,38 @@
       document.getElementById('mc-snap-msgs')?.addEventListener('input', updatePreview);
       document.getElementById('mc-snap-chats')?.addEventListener('input', updatePreview);
       document.getElementById('mc-snap-favs')?.addEventListener('input', updatePreview);
+
+      document.getElementById('mc-btn-fetch-janitor')?.addEventListener('click', async () => {
+        const btn = document.getElementById('mc-btn-fetch-janitor');
+        const statusEl = document.getElementById('mc-janitor-status');
+        const setStatus = (msg, color) => {
+          if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color || ''; }
+        };
+        if (!window.JanitorAPI) {
+          setStatus('⚠ Metrics module did not load. Refresh the page and try again.', 'var(--error, #f87171)');
+          return;
+        }
+        if (!bot.janitorUrl) {
+          setStatus('⚠ No publish link on this bot — add it via the ✏️ Edit Record button.', 'var(--error, #f87171)');
+          return;
+        }
+        btn.disabled = true;
+        setStatus('Fetching from JanitorAI…', 'var(--text-secondary)');
+        try {
+          const m = await window.JanitorAPI.fetchMetrics(bot.janitorUrl);
+          const msgsEl = document.getElementById('mc-snap-msgs');
+          const chatsEl = document.getElementById('mc-snap-chats');
+          if (msgsEl) msgsEl.value = m.messages;
+          if (chatsEl) chatsEl.value = m.uniqueChats;
+          updatePreview();
+          setStatus(`✓ ${m.messages.toLocaleString()} messages · ${m.uniqueChats.toLocaleString()} chats${m.name ? ` — ${m.name}` : ''}`, 'var(--success, #22c55e)');
+        } catch (e) {
+          setStatus(`⚠ ${e && e.message ? e.message : 'Fetch failed.'}`, 'var(--error, #f87171)');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
       updatePreview();
     };
 
@@ -629,6 +668,9 @@
           <input type="date" id="mc-rec-date" value="${r.scheduledDate || ''}" class="mc-modal-input">
         </div>
       </div>
+      <div class="form-group"><label>JanitorAI Publish URL <span style="font-weight:400; color:var(--text-secondary);">(for one-click metric fetch)</span></label>
+        <input type="url" id="mc-rec-janitor-url" value="${S.esc(r.janitorUrl || '')}" placeholder="https://janitorai.com/characters/…_character-…" class="mc-modal-input" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      </div>
       <hr class="mc-modal-divider">
       <p class="mc-modal-section-label" style="font-weight:600; margin:10px 0 6px;">📈 Post-Release Metrics</p>
       <div class="mc-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -842,6 +884,7 @@
     if (r.assetType === 'release') {
       updated.visibility = document.getElementById('mc-rec-visibility')?.value || null;
       updated.scheduledDate = document.getElementById('mc-rec-date')?.value || null;
+      updated.janitorUrl = document.getElementById('mc-rec-janitor-url')?.value?.trim() || null;
       const uniqueChats = parseInt(document.getElementById('mc-rec-unique-chats')?.value) || 0;
       const messages = parseInt(document.getElementById('mc-rec-messages')?.value) || 0;
       updated.metrics = {
