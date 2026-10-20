@@ -413,6 +413,18 @@
         return;
       }
 
+      // Bulk "Run Metrics" update — fetch + snapshot every linked release
+      if (t.id === 'mc-btn-run-metrics') {
+        t.disabled = true;
+        try {
+          await M?.runBulkMetricsUpdate();
+        } finally {
+          const btn = document.getElementById('mc-btn-run-metrics');
+          if (btn) btn.disabled = false;
+        }
+        return;
+      }
+
       // Open Vault component in editor
       const vaultItemBtn = t.closest('[data-vault-id]');
       if (vaultItemBtn) {
@@ -1078,6 +1090,12 @@
         return;
       }
 
+      if (t.id === 'mc-auto-metrics-pull-cb') {
+        if (window.JanitorAPI) window.JanitorAPI.setAutoPullEnabled(t.checked);
+        if (typeof showToast === 'function') showToast(t.checked ? 'Daily metrics auto-pull enabled.' : 'Daily metrics auto-pull disabled.', 'info');
+        return;
+      }
+
       if (t.matches('.mc-hub-add-vault')) {
         const storyId = t.dataset.storyId;
         const compId = t.value;
@@ -1501,6 +1519,11 @@
     const tableScrollLeft = oldTableWrap ? oldTableWrap.scrollLeft : 0;
 
     contentEl.innerHTML = html;
+
+    // Once-daily metrics auto-pull, guarded internally (24h + once per session)
+    if (tab === 'metrics' && window.MissionControlModals?.maybeDailyMetricsPull) {
+      window.MissionControlModals.maybeDailyMetricsPull();
+    }
 
     window.scrollTo(0, scrollY);
     if (view) view.scrollTop = viewScrollTop;

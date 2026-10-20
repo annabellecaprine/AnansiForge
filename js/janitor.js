@@ -83,6 +83,69 @@
   window.JanitorAPI = {
     API_BASE,
     extractUuid,
-    fetchMetrics
+    fetchMetrics,
+    fetchMetricsForBots,
+    isPullDue,
+    getLastPullIso,
+    setLastPullNow,
+    isAutoPullEnabled,
+    setAutoPullEnabled
   };
+
+  /**
+   * Fetch metrics for several bots in sequence (polite: small delay between
+   * calls). `bots` = [{id, name, janitorUrl}]. Resolves to an array of
+   * {id, name, ok, messages?, uniqueChats?, fetchedName?, error?}.
+   * One bot failing never stops the rest.
+   */
+  async function fetchMetricsForBots(bots, opts = {}) {
+    const { onProgress = null, delayMs = 400 } = opts;
+    const results = [];
+    for (let i = 0; i < bots.length; i++) {
+      const b = bots[i];
+      if (typeof onProgress === 'function') {
+        try { onProgress(i + 1, bots.length, b); } catch (e) { /* ignore */ }
+      }
+      try {
+        const m = await fetchMetrics(b.janitorUrl);
+        results.push({ id: b.id, name: b.name, ok: true, messages: m.messages, uniqueChats: m.uniqueChats, fetchedName: m.name });
+      } catch (e) {
+        results.push({ id: b.id, name: b.name, ok: false, error: (e && e.message) || 'Fetch failed.' });
+      }
+      if (i < bots.length - 1 && delayMs > 0) {
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    }
+    return results;
+  }
+
+  const LS_LAST_PULL = 'anansiForge.lastMetricsPull';
+  const LS_AUTO_PULL = 'anansiForge.autoMetricsPull';
+
+  function lsGet(k) {
+    try { return window.localStorage.getItem(k); } catch (e) { return null; }
+  }
+  function lsSet(k, v) {
+    try { window.localStorage.setItem(k, v); } catch (e) { /* ignore */ }
+  }
+
+  function getLastPullIso() { return lsGet(LS_LAST_PULL); }
+  function setLastPullNow() { lsSet(LS_LAST_PULL, new Date().toISOString()); }
+
+  /** Auto-pull defaults ON; the Metrics tab has a toggle to disable it. */
+  function isAutoPullEnabled() { return lsGet(LS_AUTO_PULL) !== '0'; }
+  function setAutoPullEnabled(on) { lsSet(LS_AUTO_PULL, on ? '1' : '0'); }
+
+  /**
+   * True when a daily pull is due: enabled, never pulled or last pull is at
+   * least 24h ago. Pure logic — `nowMs` injectable for tests.
+   */
+  function isPullDue(nowMs = Date.now()) {
+    if (!isAutoPullEnabled()) return false;
+    const last = getLastPullIso();
+    if (!last) return true;
+    const t = Date.parse(last);
+    if (isNaN(t)) return true;
+    return (nowMs - t) >= 24 * 60 * 60 * 1000;
+  }
 })();

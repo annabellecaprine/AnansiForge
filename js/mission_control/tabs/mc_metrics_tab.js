@@ -162,6 +162,15 @@
           <input type="checkbox" id="mc-include-archived-cb" ${S.state.includeArchived ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;" />
           Include Archived Bots
         </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.82rem; color:var(--text-secondary); user-select:none;" title="Automatically fetch fresh JanitorAI metrics once per day when you open this tab">
+          <input type="checkbox" id="mc-auto-metrics-pull-cb" ${!window.JanitorAPI || window.JanitorAPI.isAutoPullEnabled() ? 'checked' : ''} style="accent-color:var(--accent); cursor:pointer;" />
+          Daily auto-pull
+        </label>
+        ${(() => {
+          const last = window.JanitorAPI ? window.JanitorAPI.getLastPullIso() : null;
+          const label = last ? new Date(last).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'never';
+          return `<span style="font-size:0.75rem; color:var(--text-muted);">Last pull: ${label}</span>`;
+        })()}
         ${(S.state.includePrivate || S.state.includePreRelease || S.state.includeArchived) ? `<span style="font-size:0.75rem; color:var(--text-muted);">KPIs, charts, and distribution include ${filterScopeLabel.replace(/[\(\)]/g, '').trim()} data</span>` : ''}
       </div>
 
@@ -253,6 +262,8 @@
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
             <h3 class="mc-section-title" style="margin-bottom:0;">📊 Leaderboard — by ${sortLabel}</h3>
             <button type="button" class="mc-btn mc-btn-primary mc-btn-sm mc-open-quick-metrics" title="Record Metric Snapshot for any release bot">⚡ Record Metric Snapshot</button>
+            <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm" id="mc-btn-run-metrics" title="Fetch fresh JanitorAI metrics for every release with a publish URL and record snapshots">▶ Run Metrics</button>
+            <span id="mc-bulk-metrics-status" style="font-size:0.8rem; color:var(--text-secondary);"></span>
           </div>
           <div class="mc-pill-group">
             <button class="mc-leaderboard-pill${sortMode === 'messages' ? ' active' : ''}" data-sort="messages">💬 By Messages</button>

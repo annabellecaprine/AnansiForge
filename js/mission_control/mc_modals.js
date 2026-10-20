@@ -335,15 +335,39 @@
   }
 
   async function submitMetricSnapshot(botId) {
-    const S = getS();
-    if (!S) return;
-
-    const bot = S.state.allTrackerRecords.find(r => r.id === botId);
-    if (!bot) return;
-
     const msgs = parseInt(document.getElementById('mc-snap-msgs')?.value) || 0;
     const chats = parseInt(document.getElementById('mc-snap-chats')?.value) || 0;
     const favs = parseInt(document.getElementById('mc-snap-favs')?.value) || 0;
+
+    const rec = await recordMetricSnapshot(botId, { messages: msgs, uniqueChats: chats, favorites: favs });
+    if (!rec) return;
+
+    const S = getS();
+    await S.loadAll();
+    if (window.MissionControl && window.MissionControl.renderCurrentTab) {
+      await window.MissionControl.renderCurrentTab();
+    }
+    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+    if (typeof showToast === 'function') showToast(`Metric snapshot recorded for ${rec.bot.name}!`, 'success');
+  }
+
+  /**
+   * Record one metric snapshot for a bot. Shared by the manual snapshot modal
+   * and the bulk "Run Metrics" update. Appends to metricSnapshots, updates
+   * bot.metrics, persists, and logs activity. Does NOT reload state or
+   * re-render — the caller does that once (bulk records many).
+   * Returns {bot, calc} or null when the bot is not found.
+   */
+  async function recordMetricSnapshot(botId, vals) {
+    const S = getS();
+    if (!S) return null;
+
+    const bot = S.state.allTrackerRecords.find(r => r.id === botId);
+    if (!bot) return null;
+
+    const msgs = Math.max(0, parseInt(vals.messages) || 0);
+    const chats = Math.max(0, parseInt(vals.uniqueChats) || 0);
+    const favs = Math.max(0, parseInt(vals.favorites) || 0);
 
     const prevSnap = (bot.metricSnapshots && bot.metricSnapshots.length > 0)
       ? bot.metricSnapshots[bot.metricSnapshots.length - 1]
@@ -380,12 +404,95 @@
       await window.AnansiEvents.logActivity('Metrics Updated', 'bot', bot.id, `Recorded snapshot: ${msgs} msgs, ${chats} chats, ${favs} favs`);
     }
 
+    return { bot, calc };
+  }
+
+  let bulkMetricsRunning = false;
+
+  /**
+   * "Run Metrics": fetch fresh numbers for every non-archived release that has
+   * a JanitorAI publish URL, and record a snapshot for each. Favorites are
+   * carried forward from the previous snapshot (the fetch only covers messages
+   * + chats; favorites stay a manual entry). One bot failing never stops the
+   * rest. `silent` suppresses the no-bots-configured notice (used by the
+   * daily auto-pull).
+   * Returns {updated, failed, total}.
+   */
+  async function runBulkMetricsUpdate({ silent = false } = {}) {
+    const S = getS();
+    if (!S) return { updated: 0, failed: [], total: 0 };
+    if (bulkMetricsRunning) return { updated: 0, failed: [], total: 0 };
+    if (!window.JanitorAPI) {
+      if (!silent && typeof showToast === 'function') showToast('Metrics module did not load. Refresh the page.', 'error');
+      return { updated: 0, failed: [], total: 0 };
+    }
+
+    const bots = S.state.allTrackerRecords.filter(r =>
+      r.assetType === 'release' && r.status !== 'Archived' && r.janitorUrl);
+    if (bots.length === 0) {
+      if (!silent && typeof showToast === 'function') {
+        showToast('No release bots have a JanitorAI publish URL yet — add one via ✏️ Edit Record.', 'warning');
+      }
+      return { updated: 0, failed: [], total: 0 };
+    }
+
+    bulkMetricsRunning = true;
+    const statusEl = document.getElementById('mc-bulk-metrics-status');
+    const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+    let updated = 0;
+    const failed = [];
+    try {
+      const results = await window.JanitorAPI.fetchMetricsForBots(bots, {
+        onProgress: (i, n, b) => setStatus(`Fetching ${i}/${n} — ${b.name}…`)
+      });
+      for (const res of results) {
+        if (!res.ok) { failed.push(res); continue; }
+        const bot = S.state.allTrackerRecords.find(r => r.id === res.id);
+        const favs = (bot && bot.metrics && bot.metrics.favorites) || 0;
+        const rec = await recordMetricSnapshot(res.id, {
+          messages: res.messages, uniqueChats: res.uniqueChats, favorites: favs
+        });
+        if (rec) updated++;
+        else failed.push({ ...res, ok: false, error: 'Bot record not found.' });
+      }
+      window.JanitorAPI.setLastPullNow();
+    } finally {
+      bulkMetricsRunning = false;
+    }
+
+    setStatus('');
     await S.loadAll();
     if (window.MissionControl && window.MissionControl.renderCurrentTab) {
       await window.MissionControl.renderCurrentTab();
     }
-    document.getElementById('mc-modal-overlay')?.classList.add('hidden');
-    if (typeof showToast === 'function') showToast(`Metric snapshot recorded for ${bot.name}!`, 'success');
+
+    if (typeof showToast === 'function') {
+      if (failed.length === 0) {
+        showToast(`📊 Metrics updated for ${updated} bot${updated === 1 ? '' : 's'}.`, 'success');
+      } else {
+        showToast(`📊 Metrics updated for ${updated}; ${failed.length} failed (${failed.map(f => f.name).join(', ')}).`, 'warning');
+      }
+    }
+    return { updated, failed, total: bots.length };
+  }
+
+  let dailyPullFiredThisSession = false;
+
+  /**
+   * Daily auto-pull: if enabled and no pull in the last 24h, run the bulk
+   * update once. Fire-and-forget safe — guarded against re-entry and double
+   * runs within a session. Called after the Metrics tab renders.
+   */
+  function maybeDailyMetricsPull() {
+    if (dailyPullFiredThisSession) return;
+    if (!window.JanitorAPI || !window.JanitorAPI.isPullDue()) return;
+    dailyPullFiredThisSession = true;
+    runBulkMetricsUpdate({ silent: true }).then(res => {
+      if (res.total === 0 || (res.updated === 0 && res.failed.length === 0)) return;
+      if (typeof showToast === 'function') {
+        showToast(`☀️ Daily metrics pull: ${res.updated} bot${res.updated === 1 ? '' : 's'} updated${res.failed.length ? `, ${res.failed.length} failed` : ''}.`, 'info');
+      }
+    }).catch(e => console.error('Daily metrics pull failed:', e));
   }
 
   function openStoryHubModal(storyId) {
@@ -1169,6 +1276,9 @@
     openBotAnalyticsModal,
     openQuickMetricsModal,
     submitMetricSnapshot,
+    recordMetricSnapshot,
+    runBulkMetricsUpdate,
+    maybeDailyMetricsPull,
     openStoryHubModal,
     openLinkVaultModal,
     openRecordModal,
