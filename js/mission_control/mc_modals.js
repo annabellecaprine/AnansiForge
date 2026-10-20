@@ -999,7 +999,8 @@
         time: document.getElementById('mc-rec-metrics-time')?.value || null,
         uniqueChats,
         messages,
-        msgPerChat: uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null
+        msgPerChat: uniqueChats > 0 ? parseFloat((messages / uniqueChats).toFixed(2)) : null,
+        favorites: (r.metrics && typeof r.metrics.favorites === 'number') ? r.metrics.favorites : 0
       };
     }
 
