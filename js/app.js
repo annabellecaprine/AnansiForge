@@ -53,22 +53,21 @@
   const modalOverlay = document.getElementById('modal-overlay');
   const btnCloseModal = document.getElementById('btn-close-modal');
   const btnSaveApi = document.getElementById('btn-save-api');
-  const tabApiPrimary = document.getElementById('tab-api-primary');
-  const tabApiSecondary = document.getElementById('tab-api-secondary');
-  const apiPanePrimary = document.getElementById('api-pane-primary');
-  const apiPaneSecondary = document.getElementById('api-pane-secondary');
+  const apiModelSelect = document.getElementById('api-model-select');
+  const apiModelName = document.getElementById('api-model-name');
   const apiProvider = document.getElementById('api-provider');
   const apiModel = document.getElementById('api-model');
   const apiKey = document.getElementById('api-key');
   const apiUrl = document.getElementById('api-url');
   const apiUrlGroup = document.getElementById('api-url-group');
-  const apiProvider2 = document.getElementById('api-provider-2');
-  const apiModel2 = document.getElementById('api-model-2');
-  const apiKey2 = document.getElementById('api-key-2');
-  const apiUrl2 = document.getElementById('api-url-2');
-  const apiUrlGroup2 = document.getElementById('api-url-group-2');
-  const btnClearApi2 = document.getElementById('btn-clear-api-2');
-  let activeApiTab = 'primary';
+  const apiActiveModelSelect = document.getElementById('api-active-model-select');
+  const apiDelphiModelSelect = document.getElementById('api-delphi-model-select');
+  const btnAddApiModel = document.getElementById('btn-add-api-model');
+  const btnDuplicateApiModel = document.getElementById('btn-duplicate-api-model');
+  const btnDeleteApiModel = document.getElementById('btn-delete-api-model');
+  // Working copy of the registry while the modal is open; saved on Save only.
+  let apiEditingModels = [];
+  let apiEditingId = null;
 
   // File Import Inputs
   const btnImportCard = document.getElementById('btn-import-card');
@@ -1102,103 +1101,167 @@
 
   // --- API Configuration ---
 
-  function openApiModal() {
-    const config = window.ForgeLLM.getConfig();
-    apiProvider.value = config.provider;
-    apiModel.value = config.model;
-    apiKey.value = config.apiKey || '';
-    apiUrl.value = config.baseUrl || '';
+  // --- API Configuration (model registry) ---
 
-    const config2 = window.ForgeLLM.getSecondaryConfig ? window.ForgeLLM.getSecondaryConfig() : null;
-    if (config2 && config2.provider) {
-      apiProvider2.value = config2.provider;
-      apiModel2.value = config2.model || '';
-      apiKey2.value = config2.apiKey || '';
-      apiUrl2.value = config2.baseUrl || '';
-    } else {
-      apiProvider2.value = 'none';
-      apiModel2.value = '';
-      apiKey2.value = '';
-      apiUrl2.value = '';
-    }
+  function apiEditingProfile() {
+    return apiEditingModels.find(m => m.id === apiEditingId) || apiEditingModels[0] || null;
+  }
 
-    switchApiTab('primary');
+  function syncFormToEditing() {
+    const prof = apiEditingProfile();
+    if (!prof) return;
+    if (apiModelName) prof.name = apiModelName.value.trim();
+    if (apiProvider) prof.provider = apiProvider.value;
+    if (apiModel) prof.model = apiModel.value.trim();
+    if (apiKey) prof.apiKey = apiKey.value.trim();
+    if (apiUrl) prof.baseUrl = apiUrl.value.trim();
+  }
+
+  function fillModelForm(prof) {
+    if (!prof) return;
+    if (apiModelName) apiModelName.value = prof.name || '';
+    if (apiProvider) apiProvider.value = prof.provider || 'gemini';
+    if (apiModel) apiModel.value = prof.model || '';
+    if (apiKey) apiKey.value = prof.apiKey || '';
+    if (apiUrl) apiUrl.value = prof.baseUrl || '';
     toggleApiUrlGroup();
-    toggleApiUrlGroup2();
+  }
+
+  function renderModelSelects() {
+    const forge = window.ForgeLLM || {};
+    const savedActive = forge.getActiveModelId ? forge.getActiveModelId() : null;
+    const savedDelphi = forge.getDelphiModelId ? forge.getDelphiModelId() : null;
+    const editHadOptions = apiModelSelect && apiModelSelect.options.length > 0;
+    const activeHadOptions = apiActiveModelSelect && apiActiveModelSelect.options.length > 0;
+    const delphiHadOptions = apiDelphiModelSelect && apiDelphiModelSelect.options.length > 0;
+    const prevActive = activeHadOptions ? apiActiveModelSelect.value : null;
+    const prevDelphi = delphiHadOptions ? apiDelphiModelSelect.value : null;
+    const editing = apiEditingProfile();
+    const editSel = (editing && apiEditingModels.find(m => m.id === editing.id)) ? editing.id : (apiEditingModels[0] ? apiEditingModels[0].id : '');
+    const activeSel = (prevActive !== null && apiEditingModels.find(m => m.id === prevActive))
+      ? prevActive
+      : (apiEditingModels.find(m => m.id === savedActive) ? savedActive : (apiEditingModels[0] ? apiEditingModels[0].id : ''));
+    const delphiSel = (prevDelphi !== null)
+      ? (apiEditingModels.find(m => m.id === prevDelphi) ? prevDelphi : '')
+      : (apiEditingModels.find(m => m.id === savedDelphi) ? savedDelphi : '');
+    const label = m => m.name || ((m.provider || '') + ' / ' + (m.model || ''));
+    if (apiModelSelect) {
+      apiModelSelect.innerHTML = '';
+      apiEditingModels.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = label(m);
+        apiModelSelect.appendChild(opt);
+      });
+      if (editSel) apiModelSelect.value = editSel;
+    }
+    if (apiActiveModelSelect) {
+      apiActiveModelSelect.innerHTML = '';
+      apiEditingModels.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = label(m);
+        apiActiveModelSelect.appendChild(opt);
+      });
+      if (activeSel) apiActiveModelSelect.value = activeSel;
+    }
+    if (apiDelphiModelSelect) {
+      apiDelphiModelSelect.innerHTML = '';
+      const noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '— Disabled (single-model audits only) —';
+      apiDelphiModelSelect.appendChild(noneOpt);
+      apiEditingModels.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = label(m);
+        apiDelphiModelSelect.appendChild(opt);
+      });
+      apiDelphiModelSelect.value = delphiSel;
+    }
+    if (btnDeleteApiModel) btnDeleteApiModel.disabled = apiEditingModels.length <= 1;
+  }
+
+  function openApiModal() {
+    const forge = window.ForgeLLM || {};
+    apiEditingModels = (forge.getModels ? forge.getModels() : []).map(m => ({ ...m }));
+    if (!apiEditingModels.length) {
+      apiEditingModels = [{ id: 'm_default', name: 'Gemini / gemini-1.5-flash', provider: 'gemini', model: 'gemini-1.5-flash', apiKey: '', baseUrl: '', maxTokens: 2048 }];
+    }
+    const savedActive = forge.getActiveModelId ? forge.getActiveModelId() : null;
+    apiEditingId = apiEditingModels.find(m => m.id === savedActive) ? savedActive : apiEditingModels[0].id;
+    renderModelSelects();
+    fillModelForm(apiEditingProfile());
     modalOverlay.classList.remove('hidden');
   }
 
-  function switchApiTab(tab) {
-    activeApiTab = tab;
-    const btnTest = document.getElementById('btn-test-api');
-    if (tab === 'primary') {
-      tabApiPrimary?.classList.add('active');
-      tabApiSecondary?.classList.remove('active');
-      if (apiPanePrimary) apiPanePrimary.style.display = 'block';
-      if (apiPaneSecondary) apiPaneSecondary.style.display = 'none';
-      if (btnTest) btnTest.textContent = 'Test Connection';
-    } else {
-      tabApiPrimary?.classList.remove('active');
-      tabApiSecondary?.classList.add('active');
-      if (apiPanePrimary) apiPanePrimary.style.display = 'none';
-      if (apiPaneSecondary) apiPaneSecondary.style.display = 'block';
-      if (btnTest) btnTest.textContent = 'Test Secondary Connection';
-    }
+  function onApiModelSelectChange() {
+    syncFormToEditing();
+    if (apiModelSelect) apiEditingId = apiModelSelect.value;
+    fillModelForm(apiEditingProfile());
   }
 
   function toggleApiUrlGroup() {
-    const provider = apiProvider.value;
-    if (['chutes', 'lmstudio', 'custom'].includes(provider)) {
-      apiUrlGroup.style.display = 'block';
-      if (provider === 'chutes' && !apiUrl.value.trim()) {
+    const provider = apiProvider ? apiProvider.value : '';
+    if (['chutes', 'lmstudio', 'ollama', 'custom'].includes(provider)) {
+      if (apiUrlGroup) apiUrlGroup.style.display = 'block';
+      if (provider === 'chutes' && apiUrl && !apiUrl.value.trim()) {
         apiUrl.value = 'https://llm.chutes.ai/v1';
       }
-    } else {
+      if (provider === 'ollama' && apiUrl && !apiUrl.value.trim()) {
+        apiUrl.value = 'http://localhost:11434/v1';
+      }
+    } else if (apiUrlGroup) {
       apiUrlGroup.style.display = 'none';
     }
   }
 
-  function toggleApiUrlGroup2() {
-    if (!apiProvider2 || !apiUrlGroup2) return;
-    const provider = apiProvider2.value;
-    if (['chutes', 'lmstudio', 'custom'].includes(provider)) {
-      apiUrlGroup2.style.display = 'block';
-      if (provider === 'chutes' && !apiUrl2.value.trim()) {
-        apiUrl2.value = 'https://llm.chutes.ai/v1';
-      }
-    } else {
-      apiUrlGroup2.style.display = 'none';
+  function newApiModelId() {
+    return 'm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function addApiModel() {
+    syncFormToEditing();
+    const prof = { id: newApiModelId(), name: 'New model', provider: 'gemini', model: '', apiKey: '', baseUrl: '', maxTokens: 2048 };
+    apiEditingModels.push(prof);
+    apiEditingId = prof.id;
+    renderModelSelects();
+    fillModelForm(prof);
+  }
+
+  function duplicateApiModel() {
+    syncFormToEditing();
+    const srcProf = apiEditingProfile();
+    if (!srcProf) return;
+    const prof = { ...srcProf, id: newApiModelId(), name: (srcProf.name || 'Model') + ' (copy)' };
+    apiEditingModels.push(prof);
+    apiEditingId = prof.id;
+    renderModelSelects();
+    fillModelForm(prof);
+  }
+
+  function deleteApiModel() {
+    if (apiEditingModels.length <= 1) {
+      showToast('Cannot delete the last model.', 'info');
+      return;
     }
+    const prof = apiEditingProfile();
+    if (!prof) return;
+    if (!window.confirm(`Delete model "${prof.name || prof.model}"?`)) return;
+    apiEditingModels = apiEditingModels.filter(m => m.id !== prof.id);
+    if (apiEditingId === prof.id) apiEditingId = apiEditingModels[0].id;
+    renderModelSelects();
+    fillModelForm(apiEditingProfile());
   }
 
   function saveApiConfig() {
-    const config = {
-      provider: apiProvider.value,
-      model: apiModel.value.trim(),
-      apiKey: apiKey.value.trim(),
-      baseUrl: apiUrl.value.trim(),
-      maxTokens: 2048
-    };
-
-    window.ForgeLLM.saveConfig(config);
-
-    if (apiProvider2 && apiProvider2.value && apiProvider2.value !== 'none') {
-      const config2 = {
-        provider: apiProvider2.value,
-        model: apiModel2.value.trim(),
-        apiKey: apiKey2.value.trim(),
-        baseUrl: apiUrl2.value.trim(),
-        maxTokens: 2048
-      };
-      if (window.ForgeLLM.saveSecondaryConfig) {
-        window.ForgeLLM.saveSecondaryConfig(config2);
-      }
-    } else {
-      if (window.ForgeLLM.saveSecondaryConfig) {
-        window.ForgeLLM.saveSecondaryConfig(null);
-      }
-    }
-
+    syncFormToEditing();
+    const forge = window.ForgeLLM || {};
+    if (forge.saveModels) forge.saveModels(apiEditingModels);
+    const activeId = apiActiveModelSelect ? apiActiveModelSelect.value : (apiEditingModels[0] ? apiEditingModels[0].id : null);
+    const delphiId = apiDelphiModelSelect ? apiDelphiModelSelect.value : '';
+    if (forge.setActiveModelId && activeId) forge.setActiveModelId(activeId);
+    if (forge.setDelphiModelId) forge.setDelphiModelId(delphiId || null);
     showToast('API Configuration saved!', 'success');
     modalOverlay.classList.add('hidden');
   }
@@ -1361,29 +1424,13 @@
     btn.textContent = 'Testing…';
     btn.disabled = true;
 
-    const isSecondary = activeApiTab === 'secondary';
-    const config = isSecondary
-      ? {
-          provider: apiProvider2 ? apiProvider2.value : 'none',
-          model: apiModel2 ? apiModel2.value.trim() : '',
-          apiKey: apiKey2 ? apiKey2.value.trim() : '',
-          baseUrl: apiUrl2 ? apiUrl2.value.trim() : '',
-          maxTokens: 16
-        }
-      : {
-          provider: apiProvider.value,
-          model: apiModel.value.trim(),
-          apiKey: apiKey.value.trim(),
-          baseUrl: apiUrl.value.trim(),
-          maxTokens: 16
-        };
-
-    if (isSecondary && (!config.provider || config.provider === 'none')) {
-      showToast('Secondary model is currently disabled. Select a provider first.', 'info');
-      btn.textContent = origText;
-      btn.disabled = false;
-      return;
-    }
+    const config = {
+      provider: apiProvider ? apiProvider.value : '',
+      model: apiModel ? apiModel.value.trim() : '',
+      apiKey: apiKey ? apiKey.value.trim() : '',
+      baseUrl: apiUrl ? apiUrl.value.trim() : '',
+      maxTokens: 16
+    };
 
     try {
       const reply = await window.ForgeLLM.generate(
@@ -1391,9 +1438,9 @@
         [{ role: 'user', content: 'Reply with exactly the word "OK".' }],
         config
       );
-      showToast(`✅ ${isSecondary ? 'Secondary' : 'Primary'} Connection OK — replied: "${reply.substring(0, 60)}"`, 'success');
+      showToast(`✅ Connection OK — replied: "${reply.substring(0, 60)}"`, 'success');
     } catch (err) {
-      showToast(`❌ ${isSecondary ? 'Secondary' : 'Primary'} Connection failed: ${err.message}`, 'error');
+      showToast(`❌ Connection failed: ${err.message}`, 'error');
     } finally {
       btn.textContent = origText;
       btn.disabled = false;
@@ -1727,19 +1774,11 @@
     // API Config events
     btnApiConfig.addEventListener('click', openApiModal);
     btnCloseModal.addEventListener('click', () => modalOverlay.classList.add('hidden'));
-    tabApiPrimary?.addEventListener('click', () => switchApiTab('primary'));
-    tabApiSecondary?.addEventListener('click', () => switchApiTab('secondary'));
+    if (apiModelSelect) apiModelSelect.addEventListener('change', onApiModelSelectChange);
     apiProvider.addEventListener('change', toggleApiUrlGroup);
-    apiProvider2?.addEventListener('change', toggleApiUrlGroup2);
-    btnClearApi2?.addEventListener('click', () => {
-      if (apiProvider2) apiProvider2.value = 'none';
-      if (apiModel2) apiModel2.value = '';
-      if (apiKey2) apiKey2.value = '';
-      if (apiUrl2) apiUrl2.value = '';
-      toggleApiUrlGroup2();
-      if (window.ForgeLLM?.saveSecondaryConfig) window.ForgeLLM.saveSecondaryConfig(null);
-      showToast('Secondary model disabled.', 'info');
-    });
+    if (btnAddApiModel) btnAddApiModel.addEventListener('click', addApiModel);
+    if (btnDuplicateApiModel) btnDuplicateApiModel.addEventListener('click', duplicateApiModel);
+    if (btnDeleteApiModel) btnDeleteApiModel.addEventListener('click', deleteApiModel);
     btnSaveApi.addEventListener('click', saveApiConfig);
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) modalOverlay.classList.add('hidden');

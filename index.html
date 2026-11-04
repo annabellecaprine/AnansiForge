@@ -891,80 +891,61 @@
         <h3>API Configuration</h3>
         <button id="btn-close-modal" class="btn btn-ghost btn-icon">&times;</button>
       </div>
-      <div class="api-modal-tabs" style="display:flex; border-bottom:1px solid var(--border-color); padding:0 16px;">
-        <button id="tab-api-primary" class="api-modal-tab active" type="button">Primary Model</button>
-        <button id="tab-api-secondary" class="api-modal-tab" type="button">Secondary Model (Delphi QA)</button>
-      </div>
       <div class="modal-body" style="padding: 16px 20px;">
-        <!-- PRIMARY MODEL PANE -->
-        <div id="api-pane-primary">
-          <div class="form-group">
-            <label for="api-provider">Provider</label>
-            <select id="api-provider">
-              <option value="gemini">Google Gemini</option>
-              <option value="openai">OpenAI</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="chutes">Chutes.ai</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="lmstudio">LM Studio (Local)</option>
-              <option value="kobold">Kobold AI (Local)</option>
-              <option value="custom">Custom Endpoint</option>
-            </select>
-          </div>
-          <div id="api-url-group" class="form-group" style="display:none;">
-            <label for="api-url">Base URL</label>
-            <input type="text" id="api-url" placeholder="e.g., http://localhost:1234/v1" autocomplete="off"
-              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          </div>
-          <div class="form-group">
-            <label for="api-model">Model Name</label>
-            <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o" autocomplete="off"
-              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          </div>
-          <div id="api-key-group" class="form-group">
-            <label for="api-key">API Key</label>
-            <input type="password" id="api-key" name="api-key" placeholder="Enter API Key" autocomplete="new-password"
-              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          </div>
+        <div class="form-group">
+          <label for="api-model-select">All configured models</label>
+          <select id="api-model-select"></select>
         </div>
-
-        <!-- SECONDARY MODEL PANE (DELPHI QA) -->
-        <div id="api-pane-secondary" style="display:none;">
-          <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:12px; line-height:1.45; background:rgba(168,85,247,0.06); border:1px solid rgba(168,85,247,0.2); padding:8px 12px; border-radius:var(--radius-sm);">
-            Configure an optional second LLM for <strong>Delphi Phase 2 Cross-Model Audits</strong>. When configured, Delphi compares trait interpretations and cited wording across both architectures to catch model-specific prompt brittleness.
-          </div>
-          <div class="form-group">
-            <label for="api-provider-2">Secondary Provider</label>
-            <select id="api-provider-2">
-              <option value="none">— Disabled (Single Model) —</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="openai">OpenAI</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="chutes">Chutes.ai</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="lmstudio">LM Studio (Local)</option>
-              <option value="kobold">Kobold AI (Local)</option>
-              <option value="custom">Custom Endpoint</option>
-            </select>
-          </div>
-          <div id="api-url-group-2" class="form-group" style="display:none;">
-            <label for="api-url-2">Base URL</label>
-            <input type="text" id="api-url-2" placeholder="e.g., http://localhost:1234/v1" autocomplete="off"
-              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          </div>
-          <div class="form-group">
-            <label for="api-model-2">Model Name</label>
-            <input type="text" id="api-model-2" placeholder="e.g., gpt-4o, claude-3-5-sonnet-20241022" autocomplete="off"
-              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          </div>
-          <div id="api-key-group-2" class="form-group">
-            <label for="api-key-2">API Key</label>
-            <input type="password" id="api-key-2" name="api-key-2" placeholder="Enter Secondary API Key" autocomplete="new-password"
-              data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          </div>
-          <div style="display:flex; justify-content:flex-end; margin-top:8px;">
-            <button id="btn-clear-api-2" class="btn btn-ghost btn-sm" type="button" style="color:#f87171;">Disable Secondary Model</button>
-          </div>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <button id="btn-add-api-model" class="btn btn-secondary btn-sm" type="button">+ Add Model</button>
+          <button id="btn-duplicate-api-model" class="btn btn-secondary btn-sm" type="button">Duplicate</button>
+          <button id="btn-delete-api-model" class="btn btn-secondary btn-sm" type="button" style="color:#f87171;">Delete Model</button>
+        </div>
+        <div class="form-group">
+          <label for="api-model-name">Model Display Name</label>
+          <input type="text" id="api-model-name" placeholder="e.g., Local Qwen3, Gemini Flash" autocomplete="off"
+            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+        </div>
+        <div class="form-group">
+          <label for="api-provider">Provider</label>
+          <select id="api-provider">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="chutes">Chutes.ai</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="lmstudio">LM Studio (Local)</option>
+            <option value="ollama">Ollama (Local)</option>
+            <option value="kobold">Kobold AI (Local)</option>
+            <option value="custom">Custom Endpoint</option>
+          </select>
+        </div>
+        <div id="api-url-group" class="form-group" style="display:none;">
+          <label for="api-url">Base URL</label>
+          <input type="text" id="api-url" placeholder="e.g., http://localhost:11434/v1" autocomplete="off"
+            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+        </div>
+        <div class="form-group">
+          <label for="api-model">Model Name</label>
+          <input type="text" id="api-model" placeholder="e.g., gemini-1.5-flash, gpt-4o, qwen3:30b" autocomplete="off"
+            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+        </div>
+        <div id="api-key-group" class="form-group">
+          <label for="api-key">API Key</label>
+          <input type="password" id="api-key" name="api-key" placeholder="Enter API Key (not needed for local models)" autocomplete="new-password"
+            data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+        </div>
+        <hr style="border:0; border-top:1px solid var(--border-color); margin: 15px 0;">
+        <div class="form-group">
+          <label for="api-active-model-select">Active model (main flow)</label>
+          <select id="api-active-model-select"></select>
+        </div>
+        <div class="form-group">
+          <label for="api-delphi-model-select">Delphi model (cross-model audits)</label>
+          <select id="api-delphi-model-select"></select>
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.45; background:rgba(168,85,247,0.06); border:1px solid rgba(168,85,247,0.2); padding:8px 12px; border-radius:var(--radius-sm);">
+          Delphi Phase 2 cross-model audits compare trait interpretations and cited wording across two models to catch model-specific prompt brittleness. Pick a second model here, or leave it disabled for single-model audits only.
         </div>
       </div>
       <div class="modal-footer" style="display:flex; gap:8px; justify-content:space-between; align-items:center;">
