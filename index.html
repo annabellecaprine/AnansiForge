@@ -1100,11 +1100,12 @@
   <input type="file" id="vault-restore-input" accept=".json" hidden>
 
   <!-- SCRIPTS -->
+  <!-- NOTE: bump the ?v= on a script whenever its file changes. A stale cached script + new HTML breaks the app (2026-11-04: old app.js threw on the removed secondary fields and the settings gear stopped opening). -->
   <script src="js/db.js?v=17.8"></script>
   <script src="js/modals/confirm_modal.js?v=17.0"></script>
   <script src="js/png-handler.js?v=17.0"></script>
   <script src="js/breakout.js?v=17.0"></script>
-  <script src="js/llm.js?v=18.0"></script>
+  <script src="js/llm.js?v=18.1"></script>
 
   <!-- CORE MODULES (must load before UI controllers) -->
   <script src="js/analytics/metrics_math.js?v=17.2"></script>
@@ -1133,7 +1134,7 @@
   <script src="js/modals/delphi_modal.js?v=18.0"></script>
   <script src="js/mission-control.js?v=17.7"></script>
   <script src="js/omni-search.js?v=17.2"></script>
-  <script src="js/app.js?v=17.9"></script>
+  <script src="js/app.js?v=18.0"></script>
   <!-- UNIVERSE MANAGER MODAL -->
   <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
     <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">
