@@ -116,6 +116,10 @@
     document.getElementById('assembler-health-status')?.addEventListener('click', async (e) => {
       if (e.target.closest('#btn-delphi-assembled-run')) {
         await handleRunAssembledDelphi();
+      } else if (e.target.closest('#btn-delphi-assembled-view')) {
+        if (assembledDelphiResult && window.DelphiModal?.openEnsemble) {
+          window.DelphiModal.openEnsemble(assembledDelphiResult, handleRunAssembledDelphi);
+        }
       }
     });
 
@@ -902,14 +906,21 @@
 
     // Header row
     const headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;';
+    headerRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:10px;';
+    const hasEnsembleReport = !!(assembledDelphiResult && !assembledDelphiResult.error && (assembledDelphiResult.report || assembledDelphiResult.flags));
     headerRow.innerHTML = `
       <div style="font-size:0.85rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
-        <span>🔮</span> Delphi — Assembled Coherence
+        <span>🔮</span> Delphi — Ensemble &amp; Assembled Coherence
       </div>
-      <button class="btn btn-secondary btn-sm" id="btn-delphi-assembled-run" ${stagedIds.length === 0 || isRunningAssembledDelphi ? 'disabled' : ''} style="font-size:0.75rem; padding:4px 10px;">
-        ${isRunningAssembledDelphi ? 'Running…' : '▶ Run on assembled card'}
-      </button>
+      <div style="display:flex; gap:6px; align-items:center;">
+        ${hasEnsembleReport ? `
+          <button class="btn btn-secondary btn-sm" id="btn-delphi-assembled-view" style="font-size:0.75rem; padding:4px 10px; border-color:rgba(168,85,247,0.45); color:#d8b4fe;">
+            🔮 View Full Report
+          </button>` : ''}
+        <button class="btn btn-secondary btn-sm" id="btn-delphi-assembled-run" ${stagedIds.length === 0 || isRunningAssembledDelphi ? 'disabled' : ''} style="font-size:0.75rem; padding:4px 10px;">
+          ${isRunningAssembledDelphi ? 'Running…' : '▶ Run on assembled card'}
+        </button>
+      </div>
     `;
     delphiSection.appendChild(headerRow);
 
@@ -941,7 +952,7 @@
     }
     delphiSection.appendChild(chipsRow);
 
-    // Render Assembled Delphi Flags (if available)
+    // Render Assembled Delphi Flags & Coverage Status (if available)
     if (assembledDelphiResult) {
       if (assembledDelphiResult.error) {
         const errDiv = document.createElement('div');
@@ -951,26 +962,55 @@
           <span class="health-item-text">Delphi run failed: ${assembledDelphiResult.error}</span>
         `;
         delphiSection.appendChild(errDiv);
-      } else if (Array.isArray(assembledDelphiResult.flags) && assembledDelphiResult.flags.length > 0) {
-        assembledDelphiResult.flags.forEach(flag => {
-          const div = document.createElement('div');
-          const isCrit = flag.severity === 'critical';
-          div.className = `health-item ${isCrit ? 'critical' : 'warning'}`;
-          const compsStr = flag.components && flag.components.length > 0 ? ` [${flag.components.join(', ')}]` : '';
-          div.innerHTML = `
-            <span class="health-item-icon">${isCrit ? '🛑' : '⚠️'}</span>
-            <span class="health-item-text"><strong>${flag.summary}</strong>${compsStr} — ${flag.suggestion}</span>
-          `;
-          delphiSection.appendChild(div);
-        });
       } else {
-        const passDiv = document.createElement('div');
-        passDiv.className = 'health-item success';
-        passDiv.innerHTML = `
-          <span class="health-item-icon">🔮</span>
-          <span class="health-item-text">Assembled coherence passed! No cross-component contradictions detected.</span>
-        `;
-        delphiSection.appendChild(passDiv);
+        // Coverage status pill if coverage manifest exists
+        if (assembledDelphiResult.coverage) {
+          const cov = assembledDelphiResult.coverage;
+          const covDiv = document.createElement('div');
+          covDiv.style.cssText = 'font-size:0.74rem; margin-bottom:8px; padding:4px 8px; border-radius:4px; ' +
+            (cov.status === 'partial'
+              ? 'background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:#fbbf24;'
+              : 'background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); color:#86efac;');
+          covDiv.innerHTML = cov.status === 'partial'
+            ? `⚠️ <strong>Partial Ensemble Coverage:</strong> ${(cov.included || []).length} full, ${(cov.truncated || []).length} truncated, ${(cov.omitted || []).length} omitted (context budget limit)`
+            : `✓ <strong>Full Ensemble Coverage:</strong> All ${(cov.included || []).length} active components examined`;
+          delphiSection.appendChild(covDiv);
+        }
+
+        const flags = Array.isArray(assembledDelphiResult.flags) ? assembledDelphiResult.flags : [];
+        const spotCount = Array.isArray(assembledDelphiResult.spotlightRisks) ? assembledDelphiResult.spotlightRisks.length : 0;
+        const voiceCount = Array.isArray(assembledDelphiResult.voiceOverlaps) ? assembledDelphiResult.voiceOverlaps.length : 0;
+
+        if (flags.length > 0 || spotCount > 0 || voiceCount > 0) {
+          flags.forEach(flag => {
+            const div = document.createElement('div');
+            const isCrit = flag.severity === 'critical';
+            div.className = `health-item ${isCrit ? 'critical' : 'warning'}`;
+            const compsStr = flag.components && flag.components.length > 0 ? ` [${flag.components.join(', ')}]` : '';
+            div.innerHTML = `
+              <span class="health-item-icon">${isCrit ? '🛑' : '⚠️'}</span>
+              <span class="health-item-text"><strong>${flag.summary}</strong>${compsStr} — ${flag.suggestion}</span>
+            `;
+            delphiSection.appendChild(div);
+          });
+          if (spotCount > 0 || voiceCount > 0) {
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'health-item info';
+            metaDiv.innerHTML = `
+              <span class="health-item-icon">🎭</span>
+              <span class="health-item-text">${spotCount} Spotlight Competition Risk${spotCount === 1 ? '' : 's'} · ${voiceCount} Voice Overlap${voiceCount === 1 ? '' : 's'} identified — click <strong>View Full Report</strong> for details.</span>
+            `;
+            delphiSection.appendChild(metaDiv);
+          }
+        } else {
+          const passDiv = document.createElement('div');
+          passDiv.className = 'health-item success';
+          passDiv.innerHTML = `
+            <span class="health-item-icon">🔮</span>
+            <span class="health-item-text">Assembled coherence passed! No cross-component contradictions detected.</span>
+          `;
+          delphiSection.appendChild(passDiv);
+        }
       }
     }
 
@@ -978,10 +1018,10 @@
   }
 
   async function handleRunAssembledDelphi() {
-    if (isRunningAssembledDelphi) return;
+    if (isRunningAssembledDelphi) return null;
     if (stagedIds.length === 0) {
       if (window.showToast) window.showToast('Please stage components before running Delphi.', 'info');
-      return;
+      return null;
     }
 
     isRunningAssembledDelphi = true;
@@ -995,7 +1035,10 @@
         stagedComponents,
         mappings,
         relationships,
-        contentOverrides
+        contentOverrides,
+        mode: 'assembled',
+        ensembleName: (projNameInput && projNameInput.value.trim()) || 'Assembled Card',
+        universeName: selectedUniverseId || ''
       };
 
       if (!window.Delphi || !window.Delphi.diagnoseAssembled) {
@@ -1004,9 +1047,20 @@
 
       const res = await window.Delphi.diagnoseAssembled(payload);
       assembledDelphiResult = {
+        schemaVersion: 2,
+        runId: res.runId,
+        mode: res.mode || 'assembled',
+        ensembleName: res.ensembleName,
+        universeName: res.universeName,
+        report: res.report,
         flags: res.flags,
+        spotlightRisks: res.spotlightRisks || [],
+        voiceOverlaps: res.voiceOverlaps || [],
+        coverage: res.coverage || null,
+        perComponent: res.perComponent || [],
         timestamp: res.timestamp,
-        model: res.model
+        model: res.model,
+        provider: res.provider
       };
 
       if (activeProjectId) {
@@ -1023,8 +1077,9 @@
 
       if (window.showToast) {
         const flagCount = res.flags ? res.flags.length : 0;
-        window.showToast(`Delphi assembled audit complete (${flagCount} flag${flagCount === 1 ? '' : 's'})`, flagCount > 0 ? 'warning' : 'success');
+        window.showToast(`Delphi ensemble audit complete (${flagCount} flag${flagCount === 1 ? '' : 's'})`, flagCount > 0 ? 'warning' : 'success');
       }
+      return assembledDelphiResult;
     } catch (err) {
       console.error('Delphi assembled diagnostic failed:', err);
       assembledDelphiResult = {
@@ -1032,6 +1087,7 @@
         flags: []
       };
       if (window.showToast) window.showToast(`Delphi run failed: ${err.message}`, 'error');
+      return null;
     } finally {
       isRunningAssembledDelphi = false;
       const all = await window.ForgeDB.getAllComponents();

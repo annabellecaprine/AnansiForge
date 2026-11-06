@@ -704,6 +704,56 @@
         return;
       }
 
+      // Bulk: Batch Delphi (independent component audits)
+      if (t.closest('#mc-bulk-batch-delphi')) {
+        const ids = [...state.selectedIds];
+        if (!ids.length) return;
+        if (window.DelphiModal?.openBatch) {
+          window.DelphiModal.openBatch(ids, { title: `Batch Delphi Audit (${ids.length} selected)` });
+        }
+        return;
+      }
+
+      // Bulk: Ensemble Audit (holistic multi-component cast/faction audit)
+      if (t.closest('#mc-bulk-ensemble-delphi')) {
+        const ids = [...state.selectedIds];
+        if (ids.length < 2) return;
+        const selectedComps = ids.map(id => state.compMap.get(id)).filter(Boolean);
+        if (!selectedComps.length || !window.Delphi?.diagnoseEnsemble) return;
+
+        const btn = t.closest('#mc-bulk-ensemble-delphi');
+        const origLabel = btn.textContent;
+        btn.textContent = '⏳ Auditing Ensemble…';
+        btn.disabled = true;
+
+        const uniSet = new Set(selectedComps.map(c => c.tracker?.universe || c.universe).filter(Boolean));
+        const uniName = uniSet.size === 1 ? Array.from(uniSet)[0] : (state.filters.universe !== 'all' ? state.filters.universe : '');
+        const ensName = uniName ? `${uniName} Ensemble (${selectedComps.length})` : `Selected Ensemble (${selectedComps.length} components)`;
+
+        const runEnsembleFn = () => window.Delphi.diagnoseEnsemble({
+          stagedComponents: selectedComps,
+          mappings: {},
+          relationships: [],
+          contentOverrides: {},
+          mode: 'faction',
+          ensembleName: ensName,
+          universeName: uniName
+        });
+
+        try {
+          const ensResult = await runEnsembleFn();
+          if (window.DelphiModal?.openEnsemble) {
+            window.DelphiModal.openEnsemble(ensResult, runEnsembleFn);
+          }
+        } catch (err) {
+          if (typeof showToast === 'function') showToast(`Ensemble audit failed: ${err.message}`, 'error');
+        } finally {
+          btn.textContent = origLabel;
+          btn.disabled = false;
+        }
+        return;
+      }
+
       // Bulk: new project from selection
       if (t.closest('#mc-bulk-new-project')) {
         const ids = [...state.selectedIds];
@@ -943,6 +993,71 @@
       if (t.id === 'mc-pag-next') {
         state.currentPage++;
         await renderCurrentTab();
+        return;
+      }
+
+      // Delphi Batch Presets dropdown toggle
+      if (t.id === 'mc-delphi-batch-caret') {
+        const dd = document.getElementById('mc-delphi-batch-dropdown');
+        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+        return;
+      }
+
+      // Delphi Batch Preset: Golden Templates
+      if (t.id === 'mc-delphi-preset-golden' || t.id === 'mc-delphi-opt-golden') {
+        const dd = document.getElementById('mc-delphi-batch-dropdown');
+        if (dd) dd.style.display = 'none';
+        const filtered = S.filterComponents(state.allComponents.filter(c => c.category === (state.activeCategory || 'character')));
+        const golden = filtered.filter(c => c.isTemplate || c.tracker?.pipeline?.goldenTemplate);
+        if (!golden.length) {
+          if (typeof showToast === 'function') showToast('No Golden Templates found in current view/filter.', 'info');
+          return;
+        }
+        window.DelphiModal?.openBatch(golden.map(c => c.id), {
+          title: `Batch Audit — ⭐ Golden Templates (${golden.length})`
+        });
+        return;
+      }
+
+      // Delphi Batch Preset: Modified Since Last Delphi Run
+      if (t.id === 'mc-delphi-opt-stale') {
+        const dd = document.getElementById('mc-delphi-batch-dropdown');
+        if (dd) dd.style.display = 'none';
+        const filtered = S.filterComponents(state.allComponents.filter(c => c.category === (state.activeCategory || 'character')));
+        const stale = filtered.filter(c => {
+          if (!c.delphi || !c.delphi.verdict) return false;
+          if (c.delphi.contentHash && window.Delphi?.buildComponentContentSnapshot && window.Delphi?.computeContentHash) {
+            const liveHash = window.Delphi.computeContentHash(window.Delphi.buildComponentContentSnapshot(c));
+            return liveHash !== c.delphi.contentHash;
+          }
+          if (c.modifiedAt && c.delphi.timestamp) {
+            return new Date(c.modifiedAt).getTime() > new Date(c.delphi.timestamp).getTime();
+          }
+          return false;
+        });
+        if (!stale.length) {
+          if (typeof showToast === 'function') showToast('No components modified since their last Delphi run.', 'info');
+          return;
+        }
+        window.DelphiModal?.openBatch(stale.map(c => c.id), {
+          title: `Batch Audit — 🔄 Modified Since Last Run (${stale.length})`
+        });
+        return;
+      }
+
+      // Delphi Batch Preset: Unrun Components
+      if (t.id === 'mc-delphi-opt-unrun') {
+        const dd = document.getElementById('mc-delphi-batch-dropdown');
+        if (dd) dd.style.display = 'none';
+        const filtered = S.filterComponents(state.allComponents.filter(c => c.category === (state.activeCategory || 'character')));
+        const unrun = filtered.filter(c => !c.delphi || !c.delphi.verdict);
+        if (!unrun.length) {
+          if (typeof showToast === 'function') showToast('All components in current view have already been audited.', 'info');
+          return;
+        }
+        window.DelphiModal?.openBatch(unrun.map(c => c.id), {
+          title: `Batch Audit — 🔮 Unrun Components (${unrun.length})`
+        });
         return;
       }
 
@@ -1561,6 +1676,8 @@
         }
         const dd = document.getElementById('mc-stub-dropdown');
         if (dd) dd.style.display = 'none';
+        const ddDelphi = document.getElementById('mc-delphi-batch-dropdown');
+        if (ddDelphi) ddDelphi.style.display = 'none';
       }
     });
 
@@ -1568,6 +1685,10 @@
       const dd = document.getElementById('mc-stub-dropdown');
       if (dd && !e.target.closest('#mc-add-stub-caret') && !e.target.closest('#mc-stub-dropdown')) {
         dd.style.display = 'none';
+      }
+      const ddDelphi = document.getElementById('mc-delphi-batch-dropdown');
+      if (ddDelphi && !e.target.closest('#mc-delphi-batch-caret') && !e.target.closest('#mc-delphi-batch-dropdown')) {
+        ddDelphi.style.display = 'none';
       }
     });
 

@@ -51,9 +51,14 @@
         ${isPinned ? '<span class="mc-pin-icon" title="Pinned">📌</span>' : ''}
         ${depCount > 0 ? `<span class="mc-dep-badge" title="Used in ${depCount} project${depCount > 1 ? 's' : ''}">📦 ${depCount}</span>` : ''}
         ${(() => {
-          const isAuditable = comp.category === 'character' || comp.category === 'scenario';
+          const isAuditable = comp.category === 'character' || comp.category === 'scenario' || comp.category === 'organization';
           if (!isAuditable && !comp.delphi?.verdict) return '';
           const v = comp.delphi?.verdict;
+          const fmCodes = Array.isArray(comp.delphi?.failureModes) ? comp.delphi.failureModes : [];
+          const fmMap = window.Delphi?.FAILURE_MODES || {};
+          const fmSuffix = fmCodes.length > 0
+            ? ` (${fmCodes.map(c => fmMap[c]?.shortLabel || c).join(', ')})`
+            : '';
           if (v === 'READY') {
             return `<span class="mc-delphi-badge mc-delphi-ready" data-id="${comp.id}" title="Delphi: READY — click to view report">🔮 READY</span>`;
           } else if (v === 'NEEDS WORK') {
@@ -62,9 +67,10 @@
             if (dims.coherence === 'flag' || dims.coherence === 'fail') flagCount++;
             if (dims.dominance === 'flag' || dims.dominance === 'fail') flagCount++;
             if (dims.triggers === 'flag' || dims.triggers === 'fail') flagCount++;
-            return `<span class="mc-delphi-badge mc-delphi-flag" data-id="${comp.id}" title="Delphi: NEEDS WORK — click to view report">🔮 NEEDS WORK · ${flagCount}⚑</span>`;
+            if (dims.crossModel === 'flag') flagCount++;
+            return `<span class="mc-delphi-badge mc-delphi-flag" data-id="${comp.id}" title="${esc(`Delphi: NEEDS WORK${fmSuffix} — click to view report`)}">🔮 NEEDS WORK · ${flagCount}⚑</span>`;
           } else if (v === 'FAIL') {
-            return `<span class="mc-delphi-badge mc-delphi-fail" data-id="${comp.id}" title="Delphi: FAIL — click to view report">🔮 FAIL</span>`;
+            return `<span class="mc-delphi-badge mc-delphi-fail" data-id="${comp.id}" title="${esc(`Delphi: FAIL${fmSuffix} — click to view report`)}">🔮 FAIL</span>`;
           } else if (isAuditable) {
             return `<span class="mc-delphi-badge mc-delphi-none" data-id="${comp.id}" title="Delphi: Not run — click to diagnose">🔮 —</span>`;
           }
@@ -89,7 +95,7 @@
         <button class="mc-action-btn mc-pin-toggle" data-id="${comp.id}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '📌' : '☆'}</button>
         <button class="mc-action-btn" data-vault-id="${comp.id}" title="Open in Vault">✏️</button>
         ${comp.category === 'character' ? `<button class="mc-action-btn mc-open-interview" data-char-id="${comp.id}" data-name="${esc(comp.name)}" title="Character Voice Rapid Interview Tester">🎙️</button>` : ''}
-        ${comp.category === 'character' || comp.category === 'scenario' ? `<button class="mc-action-btn mc-open-delphi" data-id="${comp.id}" title="Diagnose with Delphi">🔮</button>` : ''}
+        ${comp.category === 'character' || comp.category === 'scenario' || comp.category === 'organization' ? `<button class="mc-action-btn mc-open-delphi" data-id="${comp.id}" title="Diagnose with Delphi">🔮</button>` : ''}
       </td>
     </tr>`;
   }

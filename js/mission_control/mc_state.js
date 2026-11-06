@@ -548,6 +548,15 @@
         ${showAddRecord ? `<button id="mc-add-record" class="mc-btn mc-btn-primary" data-type="${recordType}">+ ${recordType === 'story' ? 'Story' : recordType === 'release' ? 'Release' : 'Record'}</button>` : ''}
         ${showAddStub ? `
         <div class="mc-split-btn-group" style="position:relative; display:inline-flex;">
+          <button id="mc-delphi-preset-golden" class="mc-btn mc-btn-secondary" title="Batch audit all Golden Templates matching current filters">🔮 Batch Delphi</button>
+          <button id="mc-delphi-batch-caret" class="mc-btn mc-btn-secondary" style="padding:0 6px; border-left:1px solid var(--border-color);" title="Delphi Batch Presets">▼</button>
+          <div id="mc-delphi-batch-dropdown" class="mc-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; margin-top:4px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); box-shadow:var(--shadow-md); z-index:100; min-width:230px;">
+            <button class="mc-dropdown-item" id="mc-delphi-opt-golden" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">⭐ Audit All Golden Templates</button>
+            <button class="mc-dropdown-item" id="mc-delphi-opt-stale" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">🔄 Audit Modified Since Last Run</button>
+            <button class="mc-dropdown-item" id="mc-delphi-opt-unrun" style="width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--text-primary); cursor:pointer; font-size:0.82rem;">🔮 Audit Unrun Components</button>
+          </div>
+        </div>
+        <div class="mc-split-btn-group" style="position:relative; display:inline-flex;">
           <button id="mc-add-stub" class="mc-btn mc-btn-primary" data-mode="cast">+ Concept</button>
           <button id="mc-add-stub-caret" class="mc-btn mc-btn-primary" style="padding:0 6px; border-left:1px solid rgba(255,255,255,0.2);" title="More Options">▼</button>
           <div id="mc-stub-dropdown" class="mc-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; margin-top:4px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); box-shadow:var(--shadow-md); z-index:100; min-width:160px;">
@@ -599,7 +608,11 @@
             ✅ ${count} selected
           </span>
           ${actions}
-          ${store === 'vault' ? `<button id="mc-bulk-new-project" class="mc-btn mc-btn-accent mc-btn-sm" style="margin-left:auto;" title="Create a new project from the selected components">🤖 New Project (${count})</button>` : ''}
+          ${store === 'vault' ? `
+            <button id="mc-bulk-batch-delphi" class="mc-btn mc-btn-secondary mc-btn-sm" style="margin-left:auto; border-color:rgba(168,85,247,0.45); color:#d8b4fe;" title="Run ${count} separate individual component diagnostics">🔮 Batch Delphi (${count})</button>
+            ${count >= 2 ? `<button id="mc-bulk-ensemble-delphi" class="mc-btn mc-btn-secondary mc-btn-sm" style="border-color:rgba(56,189,248,0.45); color:#7dd3fc;" title="Examine all ${count} selected components together as a shared cast / ensemble">🎭 Ensemble Audit (${count})</button>` : ''}
+            <button id="mc-bulk-new-project" class="mc-btn mc-btn-accent mc-btn-sm" title="Create a new project from the selected components">🤖 New Project (${count})</button>
+          ` : ''}
           <button id="mc-bulk-deselect" class="mc-btn mc-btn-ghost mc-btn-sm" style="${store === 'vault' ? '' : 'margin-left:auto;'}">✕ Deselect All</button>
         </div>`;
     }
