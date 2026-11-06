@@ -374,7 +374,7 @@
 
     const cfg = window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {};
     const secCfg = getSecondaryConfig();
-    const hasKey = !!cfg.apiKey || ['lmstudio', 'kobold', 'custom', 'chutes', 'local', 'ollama'].includes(cfg.provider);
+    const hasKey = !!cfg.apiKey || ['lmstudio', 'kobold', 'custom', 'chutes', 'ollama'].includes(cfg.provider);
     const hasSecondary = !!(secCfg && secCfg.provider && secCfg.provider !== 'none');
     const existing = comp.delphi ? window.Delphi.normalizeDelphiRecord(comp.delphi, comp) : null;
 
@@ -1885,7 +1885,7 @@
                     ${escapeHTML(r.name)} ${r.isTemplate ? '⭐' : ''}
                   </td>
                   <td style="padding:8px 10px;">
-                    <span class="mc-delphi-badge ${vCls}">🔮 ${escapeHTML(r.verdict)}</span>
+                    <span class="mc-delphi-badge ${vCls}">🔮 ${escapeHTML(r.verdict || 'UNKNOWN')}</span>
                   </td>
                   <td style="padding:8px 10px; font-size:0.75rem; color:var(--text-secondary);">
                     C: <code>${escapeHTML(d.coherence || '—')}</code> ·
@@ -1973,7 +1973,7 @@
     if (!body || !footer) return;
 
     const comps = cfg.components || [];
-    const cov = window.Delphi.computeEnsembleCoverage(comps, cfg.relationships || []);
+    const cov = window.Delphi.computeEnsembleCoverage({ stagedComponents: comps, mappings: {}, relationships: cfg.relationships || [], contentOverrides: {} });
     const isPartial = cov.status === 'partial';
 
     setModalHeader(
@@ -1998,8 +1998,8 @@
           Ensemble Components (${comps.length})
         </div>
         ${[...cov.included.map(x => ({ ...x, covTag: '✓ Full', covColor: '#4ade80' })),
-           ...cov.truncated.map(x => ({ ...x, covTag: `⚠ Truncated (${x.includedTokens}/${x.originalTokens}t)`, covColor: '#fbbf24' })),
-           ...cov.omitted.map(x => ({ ...x, covTag: `✕ Omitted (${x.originalTokens}t)`, covColor: '#f87171' }))
+           ...cov.truncated.map(x => ({ ...x, covTag: `⚠ Truncated (${x.includedTokens}/${x.totalTokens}t)`, covColor: '#fbbf24' })),
+           ...cov.omitted.map(x => ({ ...x, covTag: `✕ Omitted (${x.totalTokens}t)`, covColor: '#f87171' }))
           ].map((c, idx) => `
           <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px dashed rgba(255,255,255,0.06); font-size:0.82rem;">
             <div>
@@ -2034,7 +2034,7 @@
         footer.innerHTML = '';
         try {
           const res = await window.Delphi.diagnoseEnsemble({
-            components: comps,
+            stagedComponents: comps,
             relationships: cfg.relationships || [],
             ensembleName: cfg.title || 'Ensemble Audit',
             mode: 'faction'

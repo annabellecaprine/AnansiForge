@@ -54,9 +54,13 @@
     let res;
     try {
       res = await fetch(`${API_BASE}/characters/${encodeURIComponent(uuid)}`, {
-        headers: { Accept: 'application/json' }
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(15000)
       });
     } catch (e) {
+      if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+        throw new Error('JanitorAI request timed out after 15s. Try again in a bit.');
+      }
       throw new Error('Could not reach JanitorAI. Check your connection and try again.');
     }
     if (res.status === 404) {

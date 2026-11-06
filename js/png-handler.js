@@ -39,6 +39,30 @@
     return (crc ^ 0xFFFFFFFF) >>> 0;
   }
 
+  // Base64 -> UTF-8 string. Replaces the deprecated escape()/decodeURIComponent
+  // idiom: TextDecoder produces identical output for valid UTF-8; for invalid
+  // sequences it yields U+FFFD instead of throwing, so the caller's Latin-1
+  // fallback still runs (JSON.parse fails on the replacement chars first).
+  function base64ToUtf8(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  // UTF-8 string -> Base64. Replaces the deprecated unescape()/encodeURIComponent
+  // idiom; byte-identical for all Unicode (TextEncoder emits the same UTF-8
+  // bytes that encodeURIComponent percent-encodes).
+  function utf8ToBase64(str) {
+    const utf8Bytes = new TextEncoder().encode(str);
+    let binary = '';
+    const CHUNK = 0x8000;
+    for (let i = 0; i < utf8Bytes.length; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, utf8Bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  }
+
   function createTextChunk(keyword, text) {
     const keywordBytes = new TextEncoder().encode(keyword);
     const textBytes = new TextEncoder().encode(text);
@@ -69,6 +93,9 @@
     const bytes = new Uint8Array(buffer);
     const chunks = [];
 
+    if (bytes.length < 8) {
+      throw new Error('Invalid PNG: file too short for a PNG signature');
+    }
     const signature = [137, 80, 78, 71, 13, 10, 26, 10];
     for (let i = 0; i < 8; i++) {
       if (bytes[i] !== signature[i]) {
@@ -78,8 +105,17 @@
 
     let offset = 8;
     while (offset < bytes.length) {
+      // A chunk header needs 8 bytes (length + type); the body + CRC need
+      // a further `length + 4` bytes. Without these checks a truncated or
+      // corrupt length field made DataView throw a bare RangeError.
+      if (offset + 8 > bytes.length) {
+        throw new Error(`Invalid PNG: truncated chunk header at offset ${offset}`);
+      }
       const view = new DataView(buffer, offset);
       const length = view.getUint32(0, false);
+      if (length > bytes.length - offset - 12) {
+        throw new Error(`Invalid PNG: chunk at offset ${offset} declares length ${length}, exceeding file size`);
+      }
       const type = new TextDecoder().decode(bytes.slice(offset + 4, offset + 8));
       const data = bytes.slice(offset + 8, offset + 8 + length);
       const crc = view.getUint32(8 + length, false);
@@ -114,8 +150,8 @@
           const textData = new TextDecoder().decode(chunk.data.slice(nullIndex + 1));
           
           try {
-            // Decode base64 UTF-8 using escape sequence reverse mapping
-            const jsonStr = decodeURIComponent(escape(atob(textData)));
+            // Decode base64 UTF-8
+            const jsonStr = base64ToUtf8(textData);
             return JSON.parse(jsonStr);
           } catch (e) {
             try {
@@ -154,7 +190,13 @@
       buffer = png instanceof Blob ? await png.arrayBuffer() : png;
     }
 
-    const chunks = parsePngChunks(buffer);
+    let chunks;
+    try {
+      chunks = parsePngChunks(buffer);
+    } catch (err) {
+      // Surface a readable error instead of a bare RangeError from the parser.
+      throw new Error(`Could not read PNG image: ${err.message}`);
+    }
     const processedChunks = [];
 
     // Remove existing 'chara' chunks
@@ -174,8 +216,8 @@
 
     // Create new 'chara' metadata chunk
     const jsonStr = JSON.stringify(cardData);
-    // Base64 encode using unescape/encodeURIComponent to support multi-byte Unicode chars
-    const base64Data = btoa(unescape(encodeURIComponent(jsonStr)));
+    // Base64 encode as UTF-8 (supports multi-byte Unicode chars)
+    const base64Data = utf8ToBase64(jsonStr);
     const charaChunk = createTextChunk(CHARA_KEY, base64Data);
 
     const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);

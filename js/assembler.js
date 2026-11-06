@@ -539,12 +539,12 @@
       let html = '<option value="">— Link to Story / Release —</option>';
       if (stories.length > 0) {
         html += '<optgroup label="📖 Link to Story">';
-        stories.forEach(s => { html += `<option value="story:${s.id}">📖 ${s.name}</option>`; });
+        stories.forEach(s => { html += `<option value="story:${escapeHTML(s.id)}">📖 ${escapeHTML(s.name)}</option>`; });
         html += '</optgroup>';
       }
       if (releases.length > 0) {
         html += '<optgroup label="🚀 Link to Release">';
-        releases.forEach(r => { html += `<option value="release:${r.id}">🚀 ${r.name}</option>`; });
+        releases.forEach(r => { html += `<option value="release:${escapeHTML(r.id)}">🚀 ${escapeHTML(r.name)}</option>`; });
         html += '</optgroup>';
       }
       select.innerHTML = html;
@@ -602,11 +602,11 @@
       });
 
       Object.keys(grouped).sort().forEach(g => {
-        html += `<optgroup label="${g}">`;
+        html += `<optgroup label="${escapeHTML(g)}">`;
         grouped[g].forEach(u => {
           const sel = u.id === selectedUniverseId ? 'selected' : '';
           const hasRules = u.content && u.content.trim().length > 0 ? ' 📄' : '';
-          html += `<option value="${u.id}" ${sel}>${u.name}${hasRules}</option>`;
+          html += `<option value="${escapeHTML(u.id)}" ${sel}>${escapeHTML(u.name)}${hasRules}</option>`;
         });
         html += `</optgroup>`;
       });
@@ -886,7 +886,7 @@
       checks.push({
         type: 'warning',
         icon: '🌐',
-        text: `Crossover Conflict: Staged components span multiple universes (${uniListStr}). Prompt is compiling under rules of "${activeUniName}".`
+        text: `Crossover Conflict: Staged components span multiple universes (${escapeHTML(uniListStr)}). Prompt is compiling under rules of "${escapeHTML(activeUniName)}".`
       });
     }
 
@@ -964,7 +964,7 @@
         const chip = document.createElement('span');
         chip.className = 'delphi-staged-chip';
         chip.style.cssText = 'display:inline-flex; align-items:center; gap:5px; font-size:0.72rem; padding:2px 8px; border-radius:12px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary);';
-        chip.innerHTML = `<span style="width:6px; height:6px; border-radius:50%; background:${dotColor}; display:inline-block;"></span><span style="font-weight:500; color:var(--text-primary);">${comp.name}</span> <span style="font-size:0.68rem; opacity:0.8;">· ${vText}</span>`;
+        chip.innerHTML = `<span style="width:6px; height:6px; border-radius:50%; background:${dotColor}; display:inline-block;"></span><span style="font-weight:500; color:var(--text-primary);">${escapeHTML(comp.name)}</span> <span style="font-size:0.68rem; opacity:0.8;">· ${vText}</span>`;
         chipsRow.appendChild(chip);
       }
     });
@@ -981,7 +981,7 @@
         errDiv.className = 'health-item warning';
         errDiv.innerHTML = `
           <span class="health-item-icon">⚠️</span>
-          <span class="health-item-text">Delphi run failed: ${assembledDelphiResult.error}</span>
+          <span class="health-item-text">Delphi run failed: ${escapeHTML(assembledDelphiResult.error)}</span>
         `;
         delphiSection.appendChild(errDiv);
       } else {
@@ -1008,10 +1008,10 @@
             const div = document.createElement('div');
             const isCrit = flag.severity === 'critical';
             div.className = `health-item ${isCrit ? 'critical' : 'warning'}`;
-            const compsStr = flag.components && flag.components.length > 0 ? ` [${flag.components.join(', ')}]` : '';
+            const compsStr = flag.components && flag.components.length > 0 ? ` [${flag.components.map(c => escapeHTML(c)).join(', ')}]` : '';
             div.innerHTML = `
               <span class="health-item-icon">${isCrit ? '🛑' : '⚠️'}</span>
-              <span class="health-item-text"><strong>${flag.summary}</strong>${compsStr} — ${flag.suggestion}</span>
+              <span class="health-item-text"><strong>${escapeHTML(flag.summary)}</strong>${compsStr} — ${escapeHTML(flag.suggestion)}</span>
             `;
             delphiSection.appendChild(div);
           });
@@ -1274,128 +1274,6 @@
 
   // --- Actions / Exports ---
 
-  /**
-   * Builds a SillyTavern-compatible lorebook entries array from all staged
-   * character and organization components.
-   */
-  async function compileLoreBookData() {
-    const entries = [];
-    let priority = 1;
-    let insertionOrder = 100;
-
-    for (const id of stagedIds) {
-      const comp = await window.ForgeDB.getComponent(id);
-      if (!comp) continue;
-
-      // Only character and organization components go into the lorebook
-      if (comp.category !== 'character' && comp.category !== 'organization') continue;
-
-      // Skip components the user chose to ignore in the mapping
-      if (mappings[id] === 'ignore') continue;
-
-      // Final content respects any project-level tweak overrides
-      const finalContent = contentOverrides[id] !== undefined
-        ? contentOverrides[id]
-        : (comp.content || '');
-
-      // Keywords: split the component name into individual words as placeholder triggers
-      const keyWords = comp.name
-        .split(/[\s/\\,]+/)
-        .map(w => w.trim())
-        .filter(w => w.length > 0);
-
-      const keysRaw = keyWords.join(', ');
-
-      // Lorebook category: 'general' for characters, 'other' for organizations
-      const lorebookCategory = comp.category === 'character' ? 'general' : 'other';
-
-      entries.push({
-        activationMode: 'standard',
-        activationScript: '',
-        case_sensitive: true,
-        category: lorebookCategory,
-        comment: '',
-        constant: false,
-        content: finalContent,
-        enabled: true,
-        extensions: {},
-        groupWeight: 100,
-        id: id,
-        inclusionGroupRaw: '',
-        insertion_order: insertionOrder,
-        key: keyWords,
-        keyMatchPriority: false,
-        keysecondary: [],
-        keysecondaryRaw: '',
-        keysRaw: keysRaw,
-        matchWholeWords: true,
-        minMessages: 0,
-        name: comp.name,
-        prioritizeInclusion: false,
-        priority: priority,
-        probability: 100,
-        selectiveLogic: 0,
-        tags: [comp.category],
-        keywordsRaw: keysRaw
-      });
-
-      priority++;
-      insertionOrder += 100;
-    }
-
-    return entries;
-  }
-
-  async function exportAsLorebook() {
-    try {
-      const entries = await compileLoreBookData();
-
-      if (entries.length === 0) {
-        if (window.showToast) window.showToast('No character or organization components are staged — nothing to export.', 'info');
-        return;
-      }
-
-      // Save the project record so it persists alongside the other exports
-      const card = await compileCardData();
-      const projectRecord = {
-        id: activeProjectId || window.ForgeDB.generateId(),
-        name: card.data.name,
-        componentIds: stagedIds,
-        mappings: mappings,
-        relationships: relationships,
-        contentOverrides: contentOverrides,
-        compiledCard: card
-      };
-      const savedProj = await window.ForgeDB.saveProject(projectRecord);
-      activeProjectId = savedProj.id;
-
-      if (coverDataUrl) {
-        await window.ForgeDB.saveCover(projectRecord.id, coverDataUrl);
-      }
-
-      if (window.refreshProjectsList) window.refreshProjectsList();
-
-      const projName = projNameInput.value.trim() || 'lorebook';
-      const fileName = `${projName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_lorebook.json`;
-
-      const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      if (window.showToast) window.showToast(`Lorebook exported — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} downloaded.`, 'success');
-    } catch (err) {
-      console.error(err);
-      if (window.showToast) window.showToast('Lorebook export failed: ' + err.message, 'error');
-    }
-  }
-
   async function exportAsJSON() {
     try {
       const card = await compileCardData();
@@ -1532,18 +1410,25 @@
 
       drawCanvasContent(ctx, () => {
         canvas.toBlob(async (blob) => {
-          const embeddedPngBlob = await window.PNGHandler.embed(blob, card);
-          const url = URL.createObjectURL(embeddedPngBlob);
+          try {
+            const embeddedPngBlob = await window.PNGHandler.embed(blob, card);
+            const url = URL.createObjectURL(embeddedPngBlob);
 
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${card.data.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_card.png`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${card.data.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_card.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
 
-          if (window.showToast) window.showToast('PNG Character Card exported and project saved.', 'success');
+            if (window.showToast) window.showToast('PNG Character Card exported and project saved.', 'success');
+          } catch (embedErr) {
+            // The outer try/catch cannot catch rejections from this async
+            // toBlob callback, so surface the readable embed error here.
+            console.error(embedErr);
+            if (window.showToast) window.showToast('PNG export failed: ' + embedErr.message, 'error');
+          }
         }, 'image/png');
       });
 
@@ -1625,8 +1510,8 @@
   }
 
   function escapeHTML(str) {
-    if (!str) return '';
-    return str
+    if (str === null || str === undefined) return '';
+    return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
