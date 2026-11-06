@@ -1977,9 +1977,17 @@
       }
     });
 
-    // Vault Sidebar Batch Delphi & Ensemble Dropdown
+    // Vault Sidebar Batch Delphi & Ensemble Split Button + Dropdown
+    const btnVaultBatchHub = document.getElementById('btn-vault-batch-delphi-hub');
     const btnVaultBatch = document.getElementById('btn-vault-batch-delphi');
     const menuVaultBatch = document.getElementById('vault-batch-delphi-menu');
+
+    btnVaultBatchHub?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menuVaultBatch?.classList.add('hidden');
+      window.DelphiModal?.openBatchPicker?.();
+    });
+
     if (btnVaultBatch && menuVaultBatch) {
       btnVaultBatch.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1997,6 +2005,11 @@
           e.stopPropagation();
           menuVaultBatch.classList.add('hidden');
           const preset = btn.dataset.preset;
+          if (preset === 'hub') {
+            window.DelphiModal?.openBatchPicker?.();
+            return;
+          }
+
           const allComps = await window.ForgeDB.getAllComponents();
           const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
 
@@ -2020,7 +2033,7 @@
           let targetComps = [];
           let title = 'Batch Delphi Audit';
           if (preset === 'golden') {
-            targetComps = auditable.filter(c => c.isTemplate === true);
+            targetComps = auditable.filter(c => c.isTemplate === true || c.tracker?.pipeline?.goldenTemplate === true);
             title = '⭐ Golden Templates Audit';
           } else if (preset === 'modified') {
             targetComps = auditable.filter(c => {
@@ -2049,7 +2062,7 @@
             return;
           }
 
-          window.DelphiModal?.openBatch(targetComps.map(c => c.id), title);
+          window.DelphiModal?.openBatch(targetComps.map(c => c.id), { title });
         });
       });
     }

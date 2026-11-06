@@ -5227,4 +5227,65 @@ select.mc-universe-select:focus {
   color: var(--text-muted);
 }
 
+/* Vault Batch Delphi Dropdown & Floating Background Progress Pill */
+.vault-batch-delphi-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.75);
+  z-index: 80;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vault-batch-delphi-menu.hidden {
+  display: none !important;
+}
+
+.vault-batch-preset-item {
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.vault-batch-preset-item:hover {
+  background: rgba(168, 85, 247, 0.16);
+}
+
+.delphi-bg-pill {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9500;
+  min-width: 300px;
+  max-width: 400px;
+  background: rgba(18, 20, 28, 0.96);
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  backdrop-filter: blur(8px);
+}
+
+.delphi-bg-pill.hidden {
+  display: none !important;
+}
+
+
 

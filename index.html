@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=19.2">
+  <link rel="stylesheet" href="style.css?v=19.3">
 </head>
 
 <body>
@@ -145,17 +145,22 @@
           </svg>
           Restore
         </button>
-        <div style="grid-column: 1 / -1; position: relative;">
-          <button id="btn-vault-batch-delphi" class="btn btn-secondary" style="width: 100%; justify-content: center; border-color: rgba(168, 85, 247, 0.45); color: #d8b4fe; background: rgba(168, 85, 247, 0.08);" title="Run Batch Delphi Diagnostics or Ensemble Audit">
-            🔮 Batch Delphi &amp; Ensemble QA ▾
+        <div style="grid-column: 1 / -1; position: relative; display: flex; gap: 4px;">
+          <button type="button" id="btn-vault-batch-delphi-hub" class="btn btn-secondary" style="flex: 1; justify-content: center; border-color: rgba(168, 85, 247, 0.45); color: #d8b4fe; background: rgba(168, 85, 247, 0.08);" title="Open Batch Delphi & Ensemble QA Hub">
+            🔮 Batch Delphi &amp; Ensemble QA
           </button>
-          <div id="vault-batch-delphi-menu" class="hidden" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); box-shadow: 0 10px 28px rgba(0,0,0,0.65); z-index: 60; padding: 6px; display: flex; flex-direction: column; gap: 3px;">
-            <button type="button" class="vault-batch-preset-item" data-preset="golden" style="text-align: left; background: transparent; border: none; color: var(--text-primary); padding: 7px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer;">⭐ Audit All Golden Templates</button>
-            <button type="button" class="vault-batch-preset-item" data-preset="modified" style="text-align: left; background: transparent; border: none; color: var(--text-primary); padding: 7px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer;">🔄 Audit Modified Since Last Run</button>
-            <button type="button" class="vault-batch-preset-item" data-preset="unrun" style="text-align: left; background: transparent; border: none; color: var(--text-primary); padding: 7px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer;">🔮 Audit All Unrun Components</button>
-            <button type="button" class="vault-batch-preset-item" data-preset="filtered" style="text-align: left; background: transparent; border: none; color: var(--text-primary); padding: 7px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer;">📋 Batch Audit Filtered Vault List</button>
+          <button type="button" id="btn-vault-batch-delphi" class="btn btn-secondary" style="padding: 0 10px; border-color: rgba(168, 85, 247, 0.45); color: #d8b4fe; background: rgba(168, 85, 247, 0.08);" title="Quick Batch Presets">
+            ▾
+          </button>
+          <div id="vault-batch-delphi-menu" class="vault-batch-delphi-menu hidden">
+            <button type="button" class="vault-batch-preset-item" data-preset="hub" style="color: #d8b4fe; font-weight: 600;">📦 Open Batch &amp; Ensemble QA Hub…</button>
             <div style="border-top: 1px solid var(--border-color); margin: 3px 0;"></div>
-            <button type="button" class="vault-batch-preset-item" data-preset="ensemble-filtered" style="text-align: left; background: transparent; border: none; color: #38bdf8; padding: 7px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer;">🎭 Holistic Ensemble Audit (Filtered Vault List)</button>
+            <button type="button" class="vault-batch-preset-item" data-preset="golden">⭐ Audit All Golden Templates</button>
+            <button type="button" class="vault-batch-preset-item" data-preset="modified">🔄 Audit Modified Since Last Run</button>
+            <button type="button" class="vault-batch-preset-item" data-preset="unrun">🔮 Audit All Unrun Components</button>
+            <button type="button" class="vault-batch-preset-item" data-preset="filtered">📋 Batch Audit Filtered Vault List</button>
+            <div style="border-top: 1px solid var(--border-color); margin: 3px 0;"></div>
+            <button type="button" class="vault-batch-preset-item" data-preset="ensemble-filtered" style="color: #38bdf8;">🎭 Holistic Ensemble Audit (Filtered Vault List)</button>
           </div>
         </div>
       </div>
@@ -1132,18 +1137,18 @@
   <!-- CORE MODULES (must load before UI controllers) -->
   <script src="js/analytics/metrics_math.js?v=17.2"></script>
   <script src="js/janitor.js?v=17.2"></script>
-  <script src="js/delphi.js?v=19.2"></script>
+  <script src="js/delphi.js?v=19.3"></script>
 
   <!-- UI CONTROLLERS -->
   <script src="js/parlor.js?v=17.2"></script>
-  <script src="js/assembler.js?v=19.2"></script>
+  <script src="js/assembler.js?v=19.3"></script>
   <script src="js/sandbox.js?v=17.2"></script>
   <!-- MISSION CONTROL SUB-MODULES -->
-  <script src="js/mission_control/mc_state.js?v=19.2"></script>
+  <script src="js/mission_control/mc_state.js?v=19.3"></script>
   <script src="js/mission_control/mc_charts.js?v=17.5"></script>
   <script src="js/mission_control/mc_modals.js?v=17.5"></script>
-  <script src="js/mission_control/tabs/mc_overview_tab.js?v=19.2"></script>
-  <script src="js/mission_control/tabs/mc_assets_tab.js?v=19.2"></script>
+  <script src="js/mission_control/tabs/mc_overview_tab.js?v=19.3"></script>
+  <script src="js/mission_control/tabs/mc_assets_tab.js?v=19.3"></script>
   <script src="js/mission_control/tabs/mc_launchpad_tab.js?v=17.5"></script>
   <script src="js/mission_control/tabs/mc_stories_tab.js?v=17.5"></script>
   <script src="js/mission_control/tabs/mc_universes_tab.js?v=17.5"></script>
@@ -1153,10 +1158,10 @@
   <script src="js/modals/interview_modal.js?v=17.5"></script>
   <script src="js/modals/universe_genre_modal.js?v=17.5"></script>
   <script src="js/modals/new_project_modal.js?v=17.5"></script>
-  <script src="js/modals/delphi_modal.js?v=19.2"></script>
-  <script src="js/mission-control.js?v=19.2"></script>
+  <script src="js/modals/delphi_modal.js?v=19.3"></script>
+  <script src="js/mission-control.js?v=19.3"></script>
   <script src="js/omni-search.js?v=17.2"></script>
-  <script src="js/app.js?v=19.2"></script>
+  <script src="js/app.js?v=19.3"></script>
   <!-- UNIVERSE MANAGER MODAL -->
   <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
     <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">

@@ -30,6 +30,9 @@
   let returnToBatchDigest = false;
   let batchPaused = false;
   let batchCancelled = false;
+  let isBatchRunning = false;
+  let bgPillEl = null;
+  let latestBatchProgress = null;
 
   // Ensemble state
   let activeEnsembleResult = null;
@@ -226,18 +229,110 @@
     document.body.appendChild(modalEl);
 
     const closeBtn = document.getElementById('btn-close-delphi-modal');
-    closeBtn.addEventListener('click', closeModal);
+    closeBtn.addEventListener('click', () => {
+      if (isBatchRunning) {
+        minimizeBatchToBackground();
+      } else {
+        closeModal();
+      }
+    });
     document.getElementById('btn-delphi-header-batch')?.addEventListener('click', () => {
       if (!isRunning) openBatchPicker();
     });
     modalEl.addEventListener('click', (e) => {
-      if (e.target === modalEl && !isRunning) closeModal();
+      if (e.target === modalEl) {
+        if (isBatchRunning) minimizeBatchToBackground();
+        else if (!isRunning) closeModal();
+      }
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modalEl && !modalEl.classList.contains('hidden') && !isRunning) {
-        closeModal();
+      if (e.key === 'Escape' && modalEl && !modalEl.classList.contains('hidden')) {
+        if (isBatchRunning) minimizeBatchToBackground();
+        else if (!isRunning) closeModal();
       }
+    });
+  }
+
+  function ensureBgPillDOM() {
+    if (document.getElementById('delphi-bg-pill')) {
+      bgPillEl = document.getElementById('delphi-bg-pill');
+      return;
+    }
+    bgPillEl = document.createElement('div');
+    bgPillEl.id = 'delphi-bg-pill';
+    bgPillEl.className = 'delphi-bg-pill hidden';
+    document.body.appendChild(bgPillEl);
+  }
+
+  function minimizeBatchToBackground() {
+    if (modalEl) modalEl.classList.add('hidden');
+    ensureBgPillDOM();
+    if (bgPillEl) bgPillEl.classList.remove('hidden');
+    if (latestBatchProgress) renderBgPillProgress(latestBatchProgress);
+    if (typeof window.showToast === 'function') {
+      window.showToast('Batch Delphi is continuing in the background.', 'info');
+    }
+  }
+
+  function renderBgPillProgress(prog) {
+    ensureBgPillDOM();
+    if (!bgPillEl) return;
+    const pct = prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
+    bgPillEl.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div style="font-size:0.8rem; font-weight:700; color:#d8b4fe; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          ${batchPaused ? '⏸ Batch Paused' : `🔮 Auditing ${prog.completed + 1}/${prog.total}: ${escapeHTML(prog.currentName || '')}`}
+        </div>
+        <div style="display:flex; gap:4px; flex-shrink:0;">
+          <button type="button" id="btn-delphi-pill-pause" class="btn btn-secondary btn-sm" style="padding:2px 7px; font-size:0.72rem;">${batchPaused ? '▶' : '⏸'}</button>
+          <button type="button" id="btn-delphi-pill-expand" class="btn btn-primary btn-sm" style="padding:2px 8px; font-size:0.72rem;">↗ Open</button>
+        </div>
+      </div>
+      <div style="height:5px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden;">
+        <div style="width:${pct}%; height:100%; background:#a855f7; transition:width 0.25s ease;"></div>
+      </div>
+      <div style="font-size:0.72rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+        <span>Running in background</span>
+        <span>${prog.completed}/${prog.total} (${pct}%)</span>
+      </div>
+    `;
+    document.getElementById('btn-delphi-pill-pause')?.addEventListener('click', () => {
+      batchPaused = !batchPaused;
+      renderBgPillProgress(prog);
+    });
+    document.getElementById('btn-delphi-pill-expand')?.addEventListener('click', () => {
+      bgPillEl.classList.add('hidden');
+      if (modalEl) modalEl.classList.remove('hidden');
+    });
+  }
+
+  function renderBgPillFinished(digest) {
+    ensureBgPillDOM();
+    if (!bgPillEl) return;
+    bgPillEl.classList.remove('hidden');
+    bgPillEl.style.borderColor = 'rgba(34, 197, 94, 0.6)';
+    bgPillEl.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <div style="font-size:0.82rem; font-weight:700; color:#4ade80;">✅ Batch Delphi Complete (${digest.completed}/${digest.total})</div>
+          <div style="font-size:0.73rem; color:var(--text-secondary);">All component snapshots &amp; verdicts saved.</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+          <button type="button" id="btn-delphi-pill-view-digest" class="btn btn-primary btn-sm" style="padding:3px 10px; font-size:0.75rem;">View Digest</button>
+          <button type="button" id="btn-delphi-pill-dismiss" class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:0.85rem;">&times;</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-delphi-pill-view-digest')?.addEventListener('click', () => {
+      bgPillEl.classList.add('hidden');
+      bgPillEl.style.borderColor = 'rgba(168, 85, 247, 0.55)';
+      if (modalEl) modalEl.classList.remove('hidden');
+      renderBatchDigest(digest);
+    });
+    document.getElementById('btn-delphi-pill-dismiss')?.addEventListener('click', () => {
+      bgPillEl.classList.add('hidden');
+      bgPillEl.style.borderColor = 'rgba(168, 85, 247, 0.55)';
     });
   }
 
@@ -1529,8 +1624,9 @@
     modalEl.classList.remove('hidden');
     returnToBatchDigest = false;
 
+    const opts = typeof options === 'string' ? { title: options } : (options || {});
     const comps = (await Promise.all(compIds.map(id => window.ForgeDB.getComponent(id)))).filter(Boolean);
-    const presetTitle = options.title || `Batch Delphi Audit (${comps.length} component${comps.length === 1 ? '' : 's'})`;
+    const presetTitle = opts.title || `Batch Delphi Audit (${comps.length} component${comps.length === 1 ? '' : 's'})`;
 
     renderBatchPreRun(comps, presetTitle);
   }
@@ -1602,6 +1698,7 @@
   async function executeBatchRun(compIds, mode, title) {
     if (isRunning) return;
     isRunning = true;
+    isBatchRunning = true;
     batchPaused = false;
     batchCancelled = false;
 
@@ -1609,6 +1706,10 @@
     const footer = document.getElementById('delphi-modal-footer');
 
     const updateProgressUI = (prog) => {
+      latestBatchProgress = prog;
+      if (bgPillEl && !bgPillEl.classList.contains('hidden')) {
+        renderBgPillProgress(prog);
+      }
       if (!body || !footer) return;
       const pct = prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
       body.innerHTML = `
@@ -1621,16 +1722,18 @@
             <div style="width:${pct}%; height:100%; background:#a855f7; transition:width 0.25s ease;"></div>
           </div>
           <div style="font-size:0.8rem; color:var(--text-muted);">
-            ${prog.completed} / ${prog.total} completed (${pct}%)
+            ${prog.completed} / ${prog.total} completed (${pct}%) · You can minimize this window and keep working while the batch runs
           </div>
         </div>
       `;
 
       footer.innerHTML = `
+        <button id="btn-delphi-batch-minimize" class="btn btn-secondary" style="margin-right:auto; border-color:rgba(168,85,247,0.45); color:#d8b4fe;">🗕 Minimize (Run in Background)</button>
         <button id="btn-delphi-batch-pause" class="btn btn-secondary">${batchPaused ? '▶ Resume' : '⏸ Pause'}</button>
         <button id="btn-delphi-batch-abort" class="btn btn-danger">✕ Stop & View Completed</button>
       `;
 
+      document.getElementById('btn-delphi-batch-minimize')?.addEventListener('click', minimizeBatchToBackground);
       document.getElementById('btn-delphi-batch-pause')?.addEventListener('click', () => {
         batchPaused = !batchPaused;
         updateProgressUI(prog);
@@ -1651,9 +1754,22 @@
       digest.title = title;
       lastBatchDigest = digest;
       isRunning = false;
+      isBatchRunning = false;
+      const wasMinimized = modalEl && modalEl.classList.contains('hidden');
       renderBatchDigest(digest);
+      if (wasMinimized) {
+        renderBgPillFinished(digest);
+        if (typeof window.showToast === 'function') {
+          window.showToast(`Batch Delphi complete (${digest.completed}/${digest.total} audited)!`, 'success');
+        }
+      } else if (bgPillEl) {
+        bgPillEl.classList.add('hidden');
+      }
     } catch (err) {
       isRunning = false;
+      isBatchRunning = false;
+      if (bgPillEl) bgPillEl.classList.add('hidden');
+      if (modalEl) modalEl.classList.remove('hidden');
       if (body) {
         body.innerHTML = `<div class="delphi-warning-banner">🛑 Batch run encountered an unexpected error: ${escapeHTML(err.message || err)}</div>`;
       }
@@ -1796,16 +1912,119 @@
   // PHASE 4: ENSEMBLE & PROJECT REPORTING MODAL (With Coverage Manifest)
   // ============================================================================
 
-  function openEnsemble(ensembleResult, rerunCallback = null) {
-    if (!ensembleResult) return;
+  async function openEnsemble(ensembleOrConfig, rerunCallback = null) {
+    if (!ensembleOrConfig) return;
     ensureModalDOM();
     modalEl.classList.remove('hidden');
 
-    activeEnsembleResult = ensembleResult;
+    // If passed a launch configuration ({ componentIds, components, relationships, title, scopeLabel }) without an existing report, open Pre-Run & Coverage Preview
+    if (!ensembleOrConfig.report && (Array.isArray(ensembleOrConfig.componentIds) || Array.isArray(ensembleOrConfig.components))) {
+      let comps = ensembleOrConfig.components;
+      if (!Array.isArray(comps) && Array.isArray(ensembleOrConfig.componentIds)) {
+        comps = (await Promise.all(ensembleOrConfig.componentIds.map(id => window.ForgeDB.getComponent(id)))).filter(Boolean);
+      }
+      renderEnsemblePreRun({
+        components: comps || [],
+        relationships: ensembleOrConfig.relationships || [],
+        title: ensembleOrConfig.title || ensembleOrConfig.ensembleName || 'Ensemble Audit',
+        scopeLabel: ensembleOrConfig.scopeLabel || 'Ensemble'
+      });
+      return;
+    }
+
+    activeEnsembleResult = ensembleOrConfig;
     activeEnsembleRerunFn = typeof rerunCallback === 'function' ? rerunCallback : null;
     activeEnsembleLensFilter = 'ALL';
 
-    renderEnsembleReport(ensembleResult);
+    renderEnsembleReport(ensembleOrConfig);
+  }
+
+  function renderEnsemblePreRun(cfg) {
+    const body = document.getElementById('delphi-modal-body');
+    const footer = document.getElementById('delphi-modal-footer');
+    if (!body || !footer) return;
+
+    const comps = cfg.components || [];
+    const cov = window.Delphi.computeEnsembleCoverage(comps, cfg.relationships || []);
+    const isPartial = cov.status === 'partial';
+
+    setModalHeader(
+      `🎭 ${escapeHTML(cfg.title || 'Holistic Ensemble Audit')}`,
+      'Evaluates cross-character voice overlap, spotlight competition risk, relationship consistency, and shared Org/Scenario context'
+    );
+
+    body.innerHTML = `
+      <div class="delphi-explainer-box">
+        <p style="margin:0 0 6px 0; font-size:0.86rem; color:var(--text-primary);">
+          <strong>Ensemble Reporting</strong> examines all ${comps.length} selected definitions together in a single holistic pass (distinct from Batch Reporting, which audits each component separately).
+        </p>
+        <div style="font-size:0.78rem; color:var(--text-secondary);">
+          <strong>Coverage Preview:</strong> ${isPartial
+            ? `<span style="color:#fbbf24; font-weight:600;">⚠️ Partial Coverage (${cov.included.length} full, ${cov.truncated.length} truncated, ${cov.omitted.length} omitted — ${cov.estimatedInputTokens} / ${cov.effectiveInputBudgetTokens} tokens)</span>`
+            : `<span style="color:#4ade80; font-weight:600;">✓ Full Coverage (${cov.included.length} components fit in full — ~${cov.estimatedInputTokens} tokens)</span>`}
+        </div>
+      </div>
+
+      <div style="max-height:280px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; background:rgba(0,0,0,0.2);">
+        <div style="font-size:0.76rem; font-weight:700; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase;">
+          Ensemble Components (${comps.length})
+        </div>
+        ${[...cov.included.map(x => ({ ...x, covTag: '✓ Full', covColor: '#4ade80' })),
+           ...cov.truncated.map(x => ({ ...x, covTag: `⚠ Truncated (${x.includedTokens}/${x.originalTokens}t)`, covColor: '#fbbf24' })),
+           ...cov.omitted.map(x => ({ ...x, covTag: `✕ Omitted (${x.originalTokens}t)`, covColor: '#f87171' }))
+          ].map((c, idx) => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px dashed rgba(255,255,255,0.06); font-size:0.82rem;">
+            <div>
+              <span style="color:var(--text-muted); margin-right:6px;">${idx + 1}.</span>
+              <strong style="color:var(--text-primary);">${escapeHTML(c.name)}</strong>
+              <span style="font-size:0.72rem; color:var(--text-muted); margin-left:6px;">(${escapeHTML(c.category || 'character')})</span>
+            </div>
+            <span style="font-size:0.75rem; font-weight:600; color:${c.covColor};">${escapeHTML(c.covTag)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    footer.innerHTML = `
+      <button id="btn-delphi-ens-prerun-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-delphi-ens-prerun-start" class="btn btn-primary" ${comps.length === 0 ? 'disabled' : ''}>▶ Run Holistic Ensemble Audit (${comps.length})</button>
+    `;
+
+    document.getElementById('btn-delphi-ens-prerun-cancel')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-ens-prerun-start')?.addEventListener('click', async () => {
+      const executeEns = async () => {
+        isRunning = true;
+        body.innerHTML = `
+          <div style="text-align:center; padding:48px 20px;">
+            <div class="delphi-spinner"></div>
+            <h4 style="margin:16px 0 8px 0; color:var(--text-primary);">Running Holistic Ensemble Diagnostic (${comps.length} items)…</h4>
+            <p style="margin:0; font-size:0.84rem; color:var(--text-muted);">
+              Evaluating cross-character voice overlap, spotlight competition risks, relationship consistency, and shared Org/Scenario context.
+            </p>
+          </div>
+        `;
+        footer.innerHTML = '';
+        try {
+          const res = await window.Delphi.diagnoseEnsemble({
+            components: comps,
+            relationships: cfg.relationships || [],
+            ensembleName: cfg.title || 'Ensemble Audit',
+            mode: 'faction'
+          });
+          isRunning = false;
+          activeEnsembleResult = res;
+          activeEnsembleRerunFn = executeEns;
+          activeEnsembleLensFilter = 'ALL';
+          renderEnsembleReport(res);
+        } catch (err) {
+          isRunning = false;
+          body.innerHTML = `<div class="delphi-warning-banner">🛑 Ensemble Audit Failed: ${escapeHTML(err.message || err)}</div>`;
+          footer.innerHTML = `<button id="btn-delphi-ens-err-close" class="btn btn-secondary">Close</button>`;
+          document.getElementById('btn-delphi-ens-err-close')?.addEventListener('click', closeModal);
+        }
+      };
+      await executeEns();
+    });
   }
 
   function renderEnsembleReport(ens) {
@@ -2079,7 +2298,7 @@
 
     const allComps = await window.ForgeDB.getAllComponents();
     const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
-    const goldenComps = auditable.filter(c => c.isTemplate === true);
+    const goldenComps = auditable.filter(c => c.isTemplate === true || c.tracker?.pipeline?.goldenTemplate === true);
     const modifiedComps = auditable.filter(c => {
       if (!c.delphi || !c.delphi.verdict) return false;
       if (c.delphi.contentHash && window.Delphi?.computeContentHash) {
