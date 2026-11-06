@@ -236,7 +236,7 @@
         <div class="form-group" style="margin-bottom:14px;">
           <label style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; display:block;">Select Bot / Release</label>
           <select id="mc-snap-bot-select" class="mc-modal-input" style="width:100%;">
-            ${releases.map(r => `<option value="${r.id}" ${r.id === bot.id ? 'selected' : ''}>${S.esc(r.name)}${r.status === 'Archived' ? ' [Archived]' : ''}${r.universe ? ` (${S.esc(r.universe)})` : ''}</option>`).join('')}
+            ${releases.map(r => `<option value="${S.esc(r.id)}" ${r.id === bot.id ? 'selected' : ''}>${S.esc(r.name)}${r.status === 'Archived' ? ' [Archived]' : ''}${r.universe ? ` (${S.esc(r.universe)})` : ''}</option>`).join('')}
           </select>
         </div>
         <div style="margin-bottom:12px; font-size:0.85rem; color:var(--text-secondary);">
@@ -270,7 +270,7 @@
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
           <button class="mc-btn mc-btn-secondary" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Cancel</button>
-          <button class="mc-btn mc-btn-primary" id="mc-btn-submit-snapshot" data-bot-id="${bot.id}">📈 Record Snapshot</button>
+          <button class="mc-btn mc-btn-primary" id="mc-btn-submit-snapshot" data-bot-id="${S.esc(bot.id)}">📈 Record Snapshot</button>
         </div>
       `;
 
@@ -540,10 +540,10 @@
           ${story.project ? `<span class="mc-linked-proj-tag">📁 ${S.esc(story.project)}</span>` : ''}
         </div>
         <div class="mc-hub-header-actions" style="margin-top:10px; display:flex; gap:8px;">
-          <button class="mc-btn mc-btn-primary mc-spawn-release" data-story-id="${story.id}">🚀 Spawn New Release</button>
-          <button class="mc-btn mc-btn-accent mc-create-project-from-story" data-story-id="${story.id}">🤖 Create Project</button>
+          <button class="mc-btn mc-btn-primary mc-spawn-release" data-story-id="${S.esc(story.id)}">🚀 Spawn New Release</button>
+          <button class="mc-btn mc-btn-accent mc-create-project-from-story" data-story-id="${S.esc(story.id)}">🤖 Create Project</button>
           <button class="mc-btn mc-btn-ghost mc-edit-record" data-record-id="${story.id}">✏️ Edit Metadata</button>
-          <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${story.id}">📄 Export Brief</button>
+          <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${S.esc(story.id)}">📄 Export Brief</button>
         </div>
       </div>
 
@@ -554,13 +554,13 @@
       <div class="mc-hub-section">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
           <h4 class="mc-modal-section-label" style="margin:0;">🔗 Related Vault Assets (${linkedIds.length})</h4>
-          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${story.id}">🔗 Manage Linked Vault Assets</button>
+          <button type="button" class="mc-btn mc-btn-secondary mc-btn-sm mc-open-link-vault-modal" data-story-id="${S.esc(story.id)}">🔗 Manage Linked Vault Assets</button>
         </div>
 
         ${missingIds.length > 0 ? `
         <div class="mc-hub-missing-banner" style="margin-bottom:10px; padding:8px 12px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; color:#fca5a5; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
           <span>⚠️ Warning: ${missingIds.length} linked Vault asset(s) no longer exist in the vault.</span>
-          <button class="mc-hub-clean-missing mc-btn mc-btn-ghost mc-btn-sm" data-story-id="${story.id}" style="color:#fca5a5; border-color:rgba(239,68,68,0.4);">Clean References</button>
+          <button class="mc-hub-clean-missing mc-btn mc-btn-ghost mc-btn-sm" data-story-id="${S.esc(story.id)}" style="color:#fca5a5; border-color:rgba(239,68,68,0.4);">Clean References</button>
         </div>` : ''}
         <div class="mc-hub-assets-grid">
           <div class="mc-hub-asset-group">
@@ -568,7 +568,7 @@
             ${chars.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : chars.map(c => `
               <div class="mc-hub-asset-chip">
                 <span>✓ ${S.esc(c.name)} ${linkedIds.filter(id => id === c.id).length > 1 ? `<span class="mc-badge" style="background:rgba(16,185,129,0.2); color:#10b981;">x${linkedIds.filter(id => id === c.id).length}</span>` : ''}</span>
-                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink one instance">&times;</button>
+                <button class="mc-hub-unlink-asset" data-story-id="${S.esc(story.id)}" data-comp-id="${S.esc(c.id)}" title="Unlink one instance">&times;</button>
               </div>`).join('')}
           </div>
 
@@ -577,7 +577,7 @@
             ${scenarios.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : scenarios.map(c => `
               <div class="mc-hub-asset-chip">
                 <span>✓ ${S.esc(c.name)}</span>
-                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+                <button class="mc-hub-unlink-asset" data-story-id="${S.esc(story.id)}" data-comp-id="${S.esc(c.id)}" title="Unlink">&times;</button>
               </div>`).join('')}
           </div>
 
@@ -586,7 +586,7 @@
             ${bios.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : bios.map(c => `
               <div class="mc-hub-asset-chip">
                 <span>✓ ${S.esc(c.name)}</span>
-                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+                <button class="mc-hub-unlink-asset" data-story-id="${S.esc(story.id)}" data-comp-id="${S.esc(c.id)}" title="Unlink">&times;</button>
               </div>`).join('')}
           </div>
 
@@ -595,7 +595,7 @@
             ${initMsgs.length === 0 ? '<span class="mc-empty-stub">None linked</span>' : initMsgs.map(c => `
               <div class="mc-hub-asset-chip">
                 <span>✓ ${S.esc(c.name)}</span>
-                <button class="mc-hub-unlink-asset" data-story-id="${story.id}" data-comp-id="${c.id}" title="Unlink">&times;</button>
+                <button class="mc-hub-unlink-asset" data-story-id="${S.esc(story.id)}" data-comp-id="${S.esc(c.id)}" title="Unlink">&times;</button>
               </div>`).join('')}
           </div>
         </div>
@@ -616,8 +616,8 @@
                   <span style="font-size:0.75rem; color:var(--text-muted); margin-left:8px;">${S.readinessPct(readiness)} ready</span>
                 </div>
                 ${r.projectId ? `
-                  <button class="mc-action-btn mc-open-assembler" data-project-id="${r.projectId}">✏️ Assembler</button>
-                  <button class="mc-action-btn mc-open-sandbox" data-project-id="${r.projectId}">🧪 Playtest</button>
+                  <button class="mc-action-btn mc-open-assembler" data-project-id="${S.esc(r.projectId)}">✏️ Assembler</button>
+                  <button class="mc-action-btn mc-open-sandbox" data-project-id="${S.esc(r.projectId)}">🧪 Playtest</button>
                 ` : ''}
               </div>`;
     }).join('')}
@@ -688,7 +688,7 @@
         return `
                     <div class="mc-vault-link-card" data-name="${S.esc(c.name).toLowerCase()}" style="padding:8px 12px; background:var(--bg-secondary); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
                       <span style="font-size:0.85rem; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:140px;" title="${S.esc(c.name)}">${S.esc(c.name)}</span>
-                      <button class="mc-btn mc-btn-sm ${isLinked ? 'mc-btn-danger mc-unlink-vault-item' : 'mc-btn-primary mc-link-vault-item'}" data-story-id="${story.id}" data-comp-id="${c.id}">
+                      <button class="mc-btn mc-btn-sm ${isLinked ? 'mc-btn-danger mc-unlink-vault-item' : 'mc-btn-primary mc-link-vault-item'}" data-story-id="${S.esc(story.id)}" data-comp-id="${S.esc(c.id)}">
                         ${isLinked ? '✓ Unlink' : '+ Link'}
                       </button>
                     </div>
@@ -700,11 +700,15 @@
     }).join('')}
       </div>
       <div style="margin-top:16px; display:flex; justify-content:flex-end;">
-        <button class="mc-btn mc-btn-secondary" onclick="if(window.MissionControlModals) window.MissionControlModals.openStoryHubModal('${story.id}')">← Return to Story Hub</button>
+        <button class="mc-btn mc-btn-secondary" id="mc-btn-return-hub-link">← Return to Story Hub</button>
       </div>
     `;
 
     modal.classList.remove('hidden');
+
+    // "Return to Story Hub" — wired by id so the story id never goes through
+    // an inline onclick JS string (entity-escaping can't protect that context).
+    document.getElementById('mc-btn-return-hub-link')?.addEventListener('click', () => openStoryHubModal(story.id));
 
     const searchInput = document.getElementById('mc-link-vault-search');
     if (searchInput) {
@@ -1155,7 +1159,7 @@
       </div>
       <textarea id="mc-brief-textarea" class="mc-modal-input" rows="16" readonly style="font-family:var(--font-mono); font-size:0.78rem; line-height:1.5; white-space:pre-wrap;">${S.esc(md)}</textarea>
       <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center;">
-        <button type="button" class="mc-btn mc-btn-secondary" onclick="if(window.MissionControlModals) window.MissionControlModals.openStoryHubModal('${story.id}')">← Return to Story Hub</button>
+        <button type="button" class="mc-btn mc-btn-secondary" id="mc-btn-return-hub-brief">← Return to Story Hub</button>
         <button type="button" class="mc-btn mc-btn-ghost" onclick="document.getElementById('mc-modal-overlay').classList.add('hidden')">Close</button>
       </div>
     `;
@@ -1180,6 +1184,10 @@
       URL.revokeObjectURL(url);
       if (typeof showToast === 'function') showToast(`💾 Downloaded ${fileName}`, 'success');
     });
+
+    // "Return to Story Hub" — wired by id so the story id never goes through
+    // an inline onclick JS string (entity-escaping can't protect that context).
+    body.querySelector('#mc-btn-return-hub-brief')?.addEventListener('click', () => openStoryHubModal(story.id));
 
     modal.classList.remove('hidden');
   }

@@ -762,9 +762,9 @@ PART 2 — a concise markdown analysis:
 
       return {
         dimensions: {
-          coherence: c || 'flag',
-          dominance: d || 'flag',
-          triggers: t || 'flag'
+          coherence: c || null,
+          dominance: d || null,
+          triggers: t || null
         },
         notes: {
           coherence: noteC.trim() || (c ? 'Recovered from structured ratings' : 'Inferred from findings'),
@@ -843,9 +843,9 @@ PART 2 — a concise markdown analysis:
     const tMatch = text.match(/(?:triggers|behavioral triggers)[\s*:\-—]+(pass|flag|fail|passed|failed|flagged)/i);
 
     if (cMatch || dMatch || tMatch) {
-      const c = normalizeDimension(cMatch ? cMatch[1] : null) || 'flag';
-      const d = normalizeDimension(dMatch ? dMatch[1] : null) || 'flag';
-      const t = normalizeDimension(tMatch ? tMatch[1] : null) || 'flag';
+      const c = normalizeDimension(cMatch ? cMatch[1] : null) || null;
+      const d = normalizeDimension(dMatch ? dMatch[1] : null) || null;
+      const t = normalizeDimension(tMatch ? tMatch[1] : null) || null;
       return {
         coherence: c,
         dominance: d,
@@ -962,7 +962,7 @@ PART 2 — a concise markdown analysis:
   /**
    * Parse assembled / ensemble coherence flags and verify component quotes against component snapshots.
    */
-  function parseAssembledVerdict(raw, componentSnapshotsMap = null) {
+  function parseAssembledVerdict(raw, componentSnapshotsMap = null, stagedComponents = null) {
     if (typeof raw !== 'string') {
       return { report: '', flags: [], spotlightRisks: [], voiceOverlaps: [], thinking: '' };
     }
@@ -996,15 +996,17 @@ PART 2 — a concise markdown analysis:
           };
 
           if (componentSnapshotsMap && componentSnapshotsMap instanceof Map) {
-            // Match component by exact or case-insensitive prefix name
+            // Snapshots are keyed by component id, but LLM evidence cites
+            // components by name — resolve the cited name to an id first.
+            // Direct lookup is kept for backward compatibility with any
+            // name-keyed map passed by an external caller.
             let targetSnap = componentSnapshotsMap.get(compName);
-            if (!targetSnap) {
-              for (const [k, v] of componentSnapshotsMap.entries()) {
-                if (k.toLowerCase() === compName.toLowerCase() || k.toLowerCase().startsWith(compName.toLowerCase())) {
-                  targetSnap = v;
-                  break;
-                }
-              }
+            if (!targetSnap && Array.isArray(stagedComponents)) {
+              const nameLower = compName.toLowerCase();
+              const match = stagedComponents.find(c => c && c.name === compName)
+                || stagedComponents.find(c => c && c.name && c.name.toLowerCase() === nameLower)
+                || stagedComponents.find(c => c && c.name && (c.name.toLowerCase().startsWith(nameLower) || nameLower.startsWith(c.name.toLowerCase())));
+              if (match && match.id) targetSnap = componentSnapshotsMap.get(match.id);
             }
             if (targetSnap) {
               verification = verifyEvidenceQuote(quoteStr, targetSnap);
@@ -1084,7 +1086,7 @@ PART 2 — a concise markdown analysis:
     const contentHash = computeContentHash(contentSnapshot);
 
     const baseConfig = overrideConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
-    const delphiMaxTokens = Math.max(Number(baseConfig.maxTokens) || 4096, 4096);
+    const delphiMaxTokens = Math.max(Number(baseConfig.maxTokens) || 8192, 8192);
     const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: delphiMaxTokens };
 
     if (!window.ForgeLLM || typeof window.ForgeLLM.generate !== 'function') {
@@ -1306,10 +1308,13 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
    * - FAIL if a primary diagnostic dimension is fail.
    * - Otherwise NEEDS WORK if a primary dimension or crossModel is flag.
    * - Otherwise READY.
+   * - null (unknown) if there are no dimensions at all, or every dimension is
+   *   unknown (null) — an unrecovered dimension must never read as READY.
    */
   function computeOverallVerdict(primaryDimensions, crossModel = 'unrun') {
-    if (!primaryDimensions) return 'NEEDS WORK';
+    if (!primaryDimensions) return null;
     const { coherence, dominance, triggers } = primaryDimensions;
+    if (coherence == null && dominance == null && triggers == null) return null;
     if (coherence === 'fail' || dominance === 'fail' || triggers === 'fail') {
       return 'FAIL';
     }
@@ -1372,7 +1377,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
     let comparisonParsed = null;
 
     try {
-      const cmpMaxTokens = Math.max(Number(primaryConfig.maxTokens) || 4096, 4096);
+      const cmpMaxTokens = Math.max(Number(primaryConfig.maxTokens) || 8192, 8192);
       comparisonRaw = await window.ForgeLLM.generate(
         SYSTEM_PROMPT_CROSS_MODEL_COMPARISON,
         [{ role: 'user', content: comparisonPromptUser }],
@@ -1684,7 +1689,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
     }
 
     const baseConfig = overrideConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
-    const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: Math.max(Number(baseConfig.maxTokens) || 4096, 4096) };
+    const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: Math.max(Number(baseConfig.maxTokens) || 8192, 8192) };
 
     const promptUser = [
       `=== SNAPSHOT A (Baseline / Older Run: ${runA.timestamp || 'Run A'}, Verdict: ${runA.verdict}) ===`,
@@ -2081,7 +2086,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
     coverageInfo.preparedBlocks.forEach((blk, idx) => {
       const comp = blk.comp;
       const catUpper = String(comp.category || 'character').toUpperCase();
-      componentSnapshotsMap.set(comp.name || `Component ${idx + 1}`, blk.textToInclude);
+      componentSnapshotsMap.set(comp.id || comp.name || `Component ${idx + 1}`, blk.textToInclude);
 
       userMsg += `--- [${catUpper} ${idx + 1}: ${comp.name} (Category: ${comp.category || 'character'}, Coverage: ${blk.coverage.toUpperCase()})] ---\n`;
       userMsg += `Mapped Card Field: ${blk.mappedField}\n`;
@@ -2099,7 +2104,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
     }
 
     const baseConfig = overrideConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
-    const assembledMaxTokens = Math.max(Number(baseConfig.maxTokens) || 4096, 4096);
+    const assembledMaxTokens = Math.max(Number(baseConfig.maxTokens) || 8192, 8192);
     const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: assembledMaxTokens };
 
     if (!window.ForgeLLM || typeof window.ForgeLLM.generate !== 'function') {
@@ -2113,7 +2118,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
     );
 
     const { clean: cleanRaw, thinking } = extractThinking(raw);
-    const parsed = parseAssembledVerdict(cleanRaw, componentSnapshotsMap);
+    const parsed = parseAssembledVerdict(cleanRaw, componentSnapshotsMap, stagedComponents);
     const perComponent = stagedComponents.map(c => ({
       id: c.id,
       name: c.name,

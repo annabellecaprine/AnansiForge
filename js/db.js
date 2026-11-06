@@ -233,9 +233,19 @@
           uniStore.createIndex('genre', 'genre', { unique: false });
           DEFAULT_UNIVERSES.forEach(u => uniStore.put(u));
         } else {
+          // Seed any missing default universes WITHOUT overwriting
+          // user-edited defaults: only put() when no record with that id
+          // exists yet. The versionchange transaction stays alive while
+          // these get requests are pending, so the follow-up put()s land
+          // in the same upgrade.
           try {
             const uniTx = event.target.transaction.objectStore('universes');
-            DEFAULT_UNIVERSES.forEach(u => uniTx.put(u));
+            DEFAULT_UNIVERSES.forEach(u => {
+              const getReq = uniTx.get(u.id);
+              getReq.onsuccess = () => {
+                if (getReq.result === undefined) uniTx.put(u);
+              };
+            });
           } catch (e) { }
         }
       };
@@ -1330,32 +1340,71 @@
     return out;
   }
 
+  // Max import payload: 50 MB of serialized JSON. Enforced here (covers all
+  // callers) and again up front in app.js via File.size, so an oversized file
+  // is rejected before JSON.parse.
+  const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
   async function importVault(bundle) {
     if (!bundle || (bundle._version !== 1 && bundle._version !== 2 && bundle._version !== 3)) throw new Error('Unrecognised backup format.');
+    // Size cap on the parsed payload (serialized-size approximation: UTF-16
+    // length, close to byte size for typical ASCII-heavy backups).
+    let payloadSize = 0;
+    try {
+      payloadSize = JSON.stringify(bundle).length;
+    } catch (e) {
+      throw new Error('Import payload could not be measured — refusing import.');
+    }
+    if (payloadSize > MAX_IMPORT_BYTES) {
+      throw new Error(`Import payload exceeds the 50 MB limit (${(payloadSize / (1024 * 1024)).toFixed(1)} MB).`);
+    }
     const db = dbInstance || await initDB();
 
     const stores = ['vault_components', 'projects', 'personas', 'tracker_records', 'component_versions', 'activity_log', 'covers', 'universes'];
     const keys = ['components', 'projects', 'personas', 'trackerRecords', 'component_versions', 'activity_log', 'covers', 'universes'];
 
+    let imported = 0;
+    let skipped = 0;
+    const skippedSections = [];
+
     for (let i = 0; i < stores.length; i++) {
       const storeName = stores[i];
-      const records = bundle[keys[i]] || [];
+      const section = bundle[keys[i]];
+      // Non-array sections are skipped, not trusted: a string/object here
+      // used to reach .filter() and throw a bare TypeError.
+      if (section !== undefined && section !== null && !Array.isArray(section)) {
+        console.warn('[importVault] Skipping non-array section:', keys[i]);
+        skippedSections.push(keys[i]);
+        continue;
+      }
+      const records = section || [];
       if (!records.length) continue;
 
       if (!db.objectStoreNames.contains(storeName)) continue;
 
-      // Shape-check: reject records with non-string ids or HTML-like name fields
+      // Shape-check: id must be a non-empty string of reasonable shape
+      // (all target stores use keyPath 'id', so a missing/bad id would
+      // throw a DataError on put()); name/title, when present, must be
+      // strings and must not contain angle brackets (basic HTML injection
+      // guard — strengthened from the old /<[^>]+>/ tag test to any '<'
+      // or '>', and extended to id).
       const safeRecords = records.filter(rec => {
         if (!rec || typeof rec !== 'object') return false;
-        if (rec.id !== undefined && typeof rec.id !== 'string') return false;
-        // Reject names/titles that contain angle brackets (basic HTML injection guard)
-        const nameLike = rec.name || rec.title || '';
-        if (typeof nameLike === 'string' && /<[^>]+>/.test(nameLike)) {
-          console.warn('[importVault] Skipping record with HTML-like name:', nameLike);
-          return false;
+        if (typeof rec.id !== 'string' || rec.id.trim().length === 0 || rec.id.length > 200) return false;
+        if (/[<>"']/.test(rec.id) || /[\u0000-\u001F]/.test(rec.id)) return false;
+        for (const field of ['name', 'title']) {
+          const val = rec[field];
+          if (val !== undefined && val !== null) {
+            if (typeof val !== 'string') return false;
+            if (/[<>]/.test(val)) {
+              console.warn('[importVault] Skipping record with angle brackets in ' + field + ':', val);
+              return false;
+            }
+          }
         }
         return true;
       });
+      skipped += records.length - safeRecords.length;
 
       await new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
@@ -1364,8 +1413,12 @@
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
+      imported += safeRecords.length;
     }
     markVaultDirty();
+    // NOTE: no atomic rollback across stores — a failure part-way leaves
+    // earlier stores imported. Deliberately out of scope for this fix.
+    return { imported, skipped, skippedSections };
   }
 
 

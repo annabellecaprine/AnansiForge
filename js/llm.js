@@ -9,6 +9,33 @@
  */
 
 (() => {
+  // Mixed-content guard: an https:// page cannot fetch http:// localhost
+  // providers (LM Studio / Ollama / Kobold / custom). Fail fast with a
+  // specific message instead of the browser's bare "Failed to fetch".
+  // Exported as ForgeLLM.assertNoMixedContent so other callers (e.g. the
+  // Test Connection path in app.js) can call it directly; generate() below
+  // already covers that path, since Test Connection goes through generate().
+  function assertNoMixedContent(baseUrl) {
+    if (typeof location !== 'undefined' && location.protocol === 'https:'
+      && typeof baseUrl === 'string' && /^http:\/\//i.test(baseUrl.trim())) {
+      throw new Error('Mixed content blocked: this page is served over https:// but the provider URL is http://. Browsers block http:// localhost requests from an https:// page. Run Forge locally instead — open index.html from a local copy — and try again.');
+    }
+  }
+
+  // fetch() with a timeout. AbortSignal.timeout() aborts with a
+  // TimeoutError; map it to a readable message instead of leaking a bare
+  // AbortError / TimeoutError to the caller.
+  async function timedFetch(url, options, ms) {
+    try {
+      return await fetch(url, { ...options, signal: AbortSignal.timeout(ms) });
+    } catch (e) {
+      if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+        throw new Error(`Request timed out after ${ms / 1000}s. The provider may be slow or unreachable — check the base URL and try again.`);
+      }
+      throw e;
+    }
+  }
+
   /**
    * Generates text using the configured provider.
    * @param {string} systemPrompt - System context/instructions.
@@ -24,13 +51,13 @@
     const key = config.apiKey || '';
     const maxTokens = config.maxTokens || 4096;
 
-    if (!key && !['lmstudio', 'ollama', 'kobold', 'custom', 'chutes', 'local'].includes(provider)) {
+    if (!key && !['lmstudio', 'ollama', 'kobold', 'custom', 'chutes'].includes(provider)) {
       throw new Error(`API key is missing for provider: ${provider}. Please configure it in API settings.`);
     }
 
     // 1. Google Gemini
     if (provider === 'gemini') {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
       
       const contents = history && history.length > 0
         ? history.map(m => ({
@@ -53,11 +80,11 @@
         };
       }
 
-      const resp = await fetch(url, {
+      const resp = await timedFetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify(body)
-      });
+      }, 30000);
 
       if (!resp.ok) {
         let errMsg = resp.statusText;
@@ -165,11 +192,15 @@
         max_tokens: maxTokens
       };
 
-      const resp = await fetch(url, {
+      // Local/custom base URLs are http:// by default; on an https:// page
+      // the browser blocks them outright — fail with a specific message.
+      assertNoMixedContent(url);
+
+      const resp = await timedFetch(url, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(body)
-      });
+      }, 30000);
 
       if (!resp.ok) {
         let errMsg = resp.statusText;
@@ -199,7 +230,7 @@
         content: m.content
       }));
 
-      const resp = await fetch(url, {
+      const resp = await timedFetch(url, {
         method: 'POST',
         headers: {
           'x-api-key': key,
@@ -214,7 +245,7 @@
           messages: messages,
           temperature: config.temperature ?? 0.8
         })
-      });
+      }, 30000);
 
       if (!resp.ok) {
         let errMsg = resp.statusText;
@@ -243,7 +274,9 @@
       });
       rawPrompt += `Character:`;
 
-      const resp = await fetch(url, {
+      assertNoMixedContent(url);
+
+      const resp = await timedFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -252,7 +285,7 @@
           max_length: 512,
           temperature: config.temperature ?? 0.8
         })
-      });
+      }, 30000);
 
       if (!resp.ok) {
         const errText = await resp.text();
@@ -299,9 +332,49 @@
     };
   }
 
+  function fallbackProfile() {
+    return cleanProfile({ provider: 'gemini', model: 'gemini-1.5-flash' });
+  }
+
+  // First profile wins per id; profiles without an id were already given a
+  // fresh one by cleanProfile, so they never collide here.
+  function dedupProfiles(models) {
+    const seen = new Set();
+    return models.filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+  }
+
+  // Overwrite a corrupt/empty registry with the Gemini fallback and persist
+  // its id as active, so the next load sees a real registry instead of
+  // minting a fresh ephemeral fallback on every call. Returns [fallback].
+  function repairRegistry() {
+    const prof = fallbackProfile();
+    try {
+      localStorage.setItem(MODELS_KEY, JSON.stringify([prof]));
+      localStorage.setItem(ACTIVE_KEY, prof.id);
+      localStorage.removeItem(DELPHI_KEY);
+    } catch (e) {
+      console.warn('[ForgeLLM] Failed to repair model registry:', e);
+    }
+    return [prof];
+  }
+
   function migrateIfNeeded() {
     try {
-      if (localStorage.getItem(MODELS_KEY)) return;
+      const raw = localStorage.getItem(MODELS_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          // Valid non-empty registry: nothing to migrate.
+          if (Array.isArray(parsed) && parsed.length) return;
+        } catch (_) { /* Corrupt JSON — fall through and rebuild below. */ }
+        // Anything else truthy but unusable ("not json" parses to a string,
+        // a bare object, "[]") also falls through: rebuild from legacy or
+        // fall back, instead of returning early and leaving it broken.
+      }
       const models = [];
       let activeId = null;
       let delphiId = null;
@@ -322,13 +395,18 @@
         }
       } catch (_) {}
       if (!models.length) {
-        const prof = cleanProfile({ provider: 'gemini', model: 'gemini-1.5-flash' });
+        const prof = fallbackProfile();
         models.push(prof);
       }
       if (!activeId && models.length) activeId = models[0].id;
       localStorage.setItem(MODELS_KEY, JSON.stringify(models));
       if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
       if (delphiId) localStorage.setItem(DELPHI_KEY, delphiId);
+      // Migration actually ran and the registry is valid: the legacy slots
+      // are now redundant — drop them so a stale legacy config can never
+      // be re-migrated over the registry later.
+      localStorage.removeItem(LEGACY_KEY);
+      localStorage.removeItem(LEGACY_SECONDARY_KEY);
     } catch (e) {
       console.warn('[ForgeLLM] Model migration failed:', e);
     }
@@ -339,16 +417,32 @@
     try {
       const raw = localStorage.getItem(MODELS_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed) && parsed.length) return parsed.map(cleanProfile);
+      if (Array.isArray(parsed) && parsed.length) {
+        const cleaned = dedupProfiles(parsed.map(cleanProfile));
+        if (cleaned.length && cleaned.length !== parsed.length) saveModels(cleaned);
+        return cleaned.length ? cleaned : repairRegistry();
+      }
     } catch (e) {
       console.warn('[ForgeLLM] Failed to parse model registry:', e);
     }
-    return [cleanProfile({ provider: 'gemini', model: 'gemini-1.5-flash' })];
+    // Parse failure, non-array, or empty array: repair storage in place
+    // instead of returning an ephemeral fallback with a fresh id per call.
+    return repairRegistry();
   }
 
   function saveModels(models) {
-    const cleaned = (Array.isArray(models) ? models : []).map(cleanProfile);
+    const cleaned = dedupProfiles((Array.isArray(models) ? models : []).map(cleanProfile));
     localStorage.setItem(MODELS_KEY, JSON.stringify(cleaned));
+    // Prune stale pointers: an active/Delphi id that no longer exists in
+    // the list falls back to the first profile / null instead of dangling.
+    const ids = new Set(cleaned.map(m => m.id));
+    const activeId = localStorage.getItem(ACTIVE_KEY);
+    if (activeId && !ids.has(activeId)) {
+      if (cleaned.length) localStorage.setItem(ACTIVE_KEY, cleaned[0].id);
+      else localStorage.removeItem(ACTIVE_KEY);
+    }
+    const delphiId = localStorage.getItem(DELPHI_KEY);
+    if (delphiId && !ids.has(delphiId)) localStorage.removeItem(DELPHI_KEY);
     return cleaned;
   }
 
@@ -372,13 +466,20 @@
   function getActiveModel() {
     const models = getModels();
     const id = getActiveModelId();
-    return models.find(m => m.id === id) || models[0] || null;
+    const found = models.find(m => m.id === id);
+    if (found) return found;
+    // Stale or missing active pointer: pin the first profile so the
+    // stored id matches the list instead of falling back ephemerally.
+    if (models[0]) setActiveModelId(models[0].id);
+    return models[0] || null;
   }
 
   function getDelphiModel() {
     const id = getDelphiModelId();
     if (!id) return null;
-    return getModels().find(m => m.id === id) || null;
+    const found = getModels().find(m => m.id === id);
+    if (!found) setDelphiModelId(null); // stale pointer — clear it
+    return found || null;
   }
 
   function profileToConfig(p) {
@@ -450,6 +551,7 @@
   // Export
   window.ForgeLLM = {
     generate,
+    assertNoMixedContent,
     getConfig: getStoredConfig,
     saveConfig,
     getSecondaryConfig,

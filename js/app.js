@@ -1276,14 +1276,21 @@
     fillModelForm(prof);
   }
 
-  function deleteApiModel() {
+  async function deleteApiModel() {
     if (apiEditingModels.length <= 1) {
       showToast('Cannot delete the last model.', 'info');
       return;
     }
     const prof = apiEditingProfile();
     if (!prof) return;
-    if (!window.confirm(`Delete model "${prof.name || prof.model}"?`)) return;
+    const confirmed = await showConfirmModal({
+      title: 'Delete Model',
+      message: `Delete model <strong>"${escapeHTML(prof.name || prof.model)}"</strong>?`,
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!confirmed) return;
     apiEditingModels = apiEditingModels.filter(m => m.id !== prof.id);
     if (apiEditingId === prof.id) apiEditingId = apiEditingModels[0].id;
     renderModelSelects();
@@ -1418,6 +1425,11 @@
 
   async function handleRestoreVault(file) {
     try {
+      // Reject oversized files before parsing (db.js importVault enforces
+      // the same 50 MB cap on the parsed payload).
+      if (file.size > 50 * 1024 * 1024) {
+        throw new Error(`Backup file exceeds the 50 MB import limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`);
+      }
       const text = await file.text();
       const bundle = JSON.parse(text);
       const total = (bundle.components?.length || 0) + (bundle.projects?.length || 0) + (bundle.personas?.length || 0);
@@ -1435,15 +1447,19 @@
 
       const confirmProceed = await showConfirmModal({
         title: '📥 Confirm Vault Import',
-        message: `Proceed with importing <strong>${total} records</strong> from <em>"${file.name}"</em> into your Vault?`,
+        message: `Proceed with importing <strong>${total} records</strong> from <em>"${escapeHTML(file.name)}"</em> into your Vault?`,
         okText: 'Proceed Import',
         cancelText: 'Cancel'
       });
 
       if (!confirmProceed) return;
 
-      await window.ForgeDB.importVault(bundle);
-      showToast(`Vault restored — ${total} records imported.`, 'success');
+      // importVault returns the validated count — the toast reports only
+      // records that actually passed validation and were imported.
+      const result = await window.ForgeDB.importVault(bundle);
+      const imported = result?.imported ?? total;
+      const skipped = result?.skipped ?? 0;
+      showToast(`Vault restored — ${imported} records imported.${skipped > 0 ? ` ${skipped} skipped (invalid).` : ''}`, 'success');
       refreshVaultList();
       refreshProjectsList();
     } catch (err) {
@@ -2060,19 +2076,10 @@
       }
     });
 
-    // Vault Sidebar Batch Delphi & Ensemble Button (opens the Batch & Ensemble QA Hub modal directly)
+    // Vault Sidebar Batch Delphi & Ensemble Button (opens the Batch & Ensemble QA Hub modal directly).
+    // NOTE: the click handler lives in js/modals/delphi_modal.js (single handler);
+    // an earlier duplicate here called openBatchPicker() a second time per click.
     document.getElementById('vault-batch-delphi-menu')?.remove();
-    const btnVaultBatchHub = document.getElementById('btn-vault-batch-delphi-hub');
-    const btnVaultBatch = document.getElementById('btn-vault-batch-delphi');
-
-    const openVaultBatchHub = (e) => {
-      e.stopPropagation();
-      document.getElementById('vault-batch-delphi-menu')?.remove();
-      window.DelphiModal?.openBatchPicker?.();
-    };
-
-    btnVaultBatchHub?.addEventListener('click', openVaultBatchHub);
-    btnVaultBatch?.addEventListener('click', openVaultBatchHub);
 
     window.addEventListener('delphi:verdict-saved', async (e) => {
       if (editingComponentId && e.detail && e.detail.id === editingComponentId) {

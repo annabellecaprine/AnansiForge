@@ -4,6 +4,10 @@
  */
 
 (() => {
+    // Fallback copy — kept in sync with window.MissionControlMath.PIPELINE_STEPS
+    // (js/analytics/metrics_math.js, loaded first), which is the single source
+    // of truth when available. Release list matches db.js
+    // defaultTrackerPipeline('release'): 14 steps.
     const PIPELINE_STEPS = (typeof window !== 'undefined' && window.MissionControlMath && window.MissionControlMath.PIPELINE_STEPS) || {
         character: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         scenario: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
@@ -12,7 +16,7 @@
         organization: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         concept_stub: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         story: ['concept', 'notesReady', 'initialMessage', 'bio', 'otherMessages', 'testing', 'complete', 'published'],
-        release: ['staged', 'bio', 'scenario', 'initialMessage', 'personalityLocked', 'thumbnail', 'banner', 'tagsDone', 'initialTest', 'regressionTest', 'finalPolish', 'ready']
+        release: ['staged', 'bio', 'scenario', 'initialMessage', 'personalityLocked', 'thumbnail', 'banner', 'tagsDone', 'initialTest', 'regressionTest', 'finalPolish', 'ready', 'released', 'hotfixNeeded']
     };
 
     const STEP_LABELS = {
@@ -21,7 +25,8 @@
         concept: 'Concept', notesReady: 'Notes', initialMessage: 'Init Msg', bio: 'Bio',
         otherMessages: 'Other Msgs', testing: 'Testing',
         staged: 'Staged', scenario: 'Scenario', personalityLocked: 'Personality', thumbnail: 'Thumbnail',
-        banner: 'Banner', tagsDone: 'Tags', initialTest: 'Test 1', regressionTest: 'Regression', finalPolish: 'Polish', ready: 'Ready'
+        banner: 'Banner', tagsDone: 'Tags', initialTest: 'Test 1', regressionTest: 'Regression', finalPolish: 'Polish', ready: 'Ready',
+        released: 'Released', hotfixNeeded: 'Hotfix Needed'
     };
 
     const SHORT_STEP_LABELS = {
@@ -30,7 +35,8 @@
         concept: 'CNCPT', notesReady: 'NOTES', initialMessage: 'INIT', bio: 'BIO',
         otherMessages: 'MSGS', testing: 'TEST',
         staged: 'STAGED', scenario: 'SCEN', personalityLocked: 'PERS', thumbnail: 'THUMB',
-        banner: 'BANR', tagsDone: 'TAGS', initialTest: 'TST 1', regressionTest: 'REGR', finalPolish: 'PLSH', ready: 'READY'
+        banner: 'BANR', tagsDone: 'TAGS', initialTest: 'TST 1', regressionTest: 'REGR', finalPolish: 'PLSH', ready: 'READY',
+        released: 'RLSD', hotfixNeeded: 'HOTFX'
     };
 
     const UNIVERSE_COLORS = { DC: '#2563eb', Marvel: '#dc2626', OC: '#7c3aed', Mixed: '#d97706', Other: '#6b7280' };
@@ -246,7 +252,7 @@
 
     // Formatting & Badge Helpers
     function esc(str) {
-        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function readinessBar(score, small = false) {

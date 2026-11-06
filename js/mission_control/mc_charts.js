@@ -184,7 +184,9 @@
   }
 
   function wrapChartClickable(svgHtml, title) {
-    const safeTitle = (title || '').replace(/'/g, '&#39;');
+    // data-chart-title sits in a double-quoted attribute: escape ", &, <, >
+    // (and ' for good measure — the value is read back via dataset).
+    const safeTitle = String(title || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return `<div class="mc-chart-clickable" title="Click to enlarge" style="position:relative; cursor:zoom-in;" onclick="window.MissionControlCharts.showLightbox(this);" data-chart-title="${safeTitle}">
             ${svgHtml}
             <span style="position:absolute; bottom:10px; right:10px; font-size:0.72rem; color:var(--text-muted); background:rgba(0,0,0,0.45); border-radius:6px; padding:2px 7px; pointer-events:none; letter-spacing:0.02em;">🔍 click to enlarge</span>
