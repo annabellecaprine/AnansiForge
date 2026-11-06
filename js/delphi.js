@@ -1913,12 +1913,17 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
    * Ensures definitions are NEVER silently truncated while claiming a complete audit.
    */
   function computeEnsembleCoverage(payload = {}, effectiveInputBudgetTokens = 16000) {
+    // Defensive: accept the legacy `components` key (and a bare array) so a
+    // caller can never silently audit zero components again.
+    const rawPayload = Array.isArray(payload) ? { stagedComponents: payload } : payload;
     const {
-      stagedComponents = [],
+      stagedComponents: stagedRaw = [],
+      components: legacyComponents = [],
       mappings = {},
       relationships = [],
       contentOverrides = {}
-    } = payload;
+    } = rawPayload;
+    const stagedComponents = stagedRaw.length ? stagedRaw : legacyComponents;
 
     const categoryPriority = {
       organization: 1,
@@ -2045,8 +2050,12 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
    * Evaluates characters, organizations, scenarios, bios, initial messages, and relationships together.
    */
   async function diagnoseEnsemble(payload = {}, overrideConfig = null) {
+    // Defensive: accept the legacy `components` key (and a bare array) so a
+    // caller can never silently hit the empty-components guard again.
+    const rawPayload = Array.isArray(payload) ? { stagedComponents: payload } : payload;
     const {
-      stagedComponents = [],
+      stagedComponents: stagedRaw = [],
+      components: legacyComponents = [],
       mappings = {},
       relationships = [],
       contentOverrides = {},
@@ -2054,7 +2063,8 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
       ensembleName = '',
       universeName = '',
       contextBudgetTokens = 16000
-    } = payload;
+    } = rawPayload;
+    const stagedComponents = stagedRaw.length ? stagedRaw : legacyComponents;
 
     if (stagedComponents.length === 0) {
       throw new Error('Please provide at least one component before running an ensemble diagnostic.');

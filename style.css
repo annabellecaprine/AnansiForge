@@ -4,6 +4,7 @@
   /* Colors */
   --bg-primary: #0a0b0e;
   --bg-secondary: #12141c;
+  --bg-tertiary: #1a1d27;
   --bg-surface: rgba(22, 26, 38, 0.6);
   --bg-surface-hover: rgba(33, 39, 56, 0.8);
   --bg-surface-selected: rgba(99, 102, 241, 0.15);
@@ -4105,6 +4106,21 @@ textarea.mc-modal-input {
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-weight: normal;
+}
+
+/* Delphi modal: native <select> popups are light-themed by default.
+   Without color-scheme:dark + an option background, options inherit
+   --text-primary (#f3f4f6) onto a white UA popup = 1.10:1 (white-on-white,
+   readable only when highlighted). Scoped to the Delphi modal so no other
+   surface is affected. */
+#delphi-modal-overlay,
+#delphi-modal-overlay select.form-control {
+  color-scheme: dark;
+}
+#delphi-modal-overlay select.form-control option,
+#delphi-modal-overlay select.form-control optgroup {
+  background-color: var(--bg-secondary); /* #12141c */
+  color: var(--text-primary);             /* #f3f4f6 -> 16.70:1 */
 }
 
 /* Inline select & date inputs for table cells */
