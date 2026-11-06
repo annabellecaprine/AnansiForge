@@ -311,6 +311,25 @@ PART 2 — a concise markdown analysis:
   }
 
   /**
+   * Extract the raw component content body from a canonical Delphi contentSnapshot.
+   */
+  function extractRawContentFromSnapshot(contentSnapshot) {
+    if (!contentSnapshot || typeof contentSnapshot !== 'string') return '';
+    const s = contentSnapshot.trim();
+    const headerMatch = s.match(/^\[COMPONENT\]\r?\nname:\s*(.*?)\r?\ncategory:\s*(.*?)\r?\n\r?\n\[(PERSONALITY|SCENARIO|BIO|INITIAL MESSAGE|ORGANIZATION|CONTENT)\]\r?\n([\s\S]*)$/);
+    if (!headerMatch) return s;
+    const cat = (headerMatch[2] || '').trim();
+    let body = headerMatch[4] || '';
+    if (cat === 'character') {
+      const scenIdx = body.lastIndexOf('\n\n[SCENARIO]\n');
+      if (scenIdx !== -1) {
+        body = body.slice(0, scenIdx);
+      }
+    }
+    return body.trim();
+  }
+
+  /**
    * Build a normalized string with an exact character-offset mapping array back to the original text.
    * Only normalizes consecutive whitespace (\s+ -> ' ') and curly/straight quotes.
    */
@@ -2285,6 +2304,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
   window.Delphi = {
     FAILURE_MODES,
     buildComponentContentSnapshot,
+    extractRawContentFromSnapshot,
     computeContentHash,
     verifyEvidenceQuote,
     verifyEvidenceQuotes,

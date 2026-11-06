@@ -879,7 +879,11 @@
               ${allRuns.map((r, i) => `<option value="${escapeHTML(r.runId)}" ${r.runId === delphiData.runId ? 'selected' : ''}>${escapeHTML(formatRunOption(r, i))}</option>`).join('')}
             </select>
           </div>
-          <div style="display:flex; align-items:center; gap:6px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            ${delphiData.hasContentSnapshot && delphiData.contentSnapshot ? `
+              <button id="btn-delphi-restore-snapshot" class="btn btn-secondary btn-sm" style="padding:3px 10px; font-size:0.76rem; ${delphiData.isStaleDefinition ? 'border-color:rgba(34,197,94,0.55); color:#86efac; background:rgba(34,197,94,0.12);' : ''}" title="Restore this snapshot's character/component definition to the active component">
+                ⏪ Restore Definition
+              </button>` : ''}
             <button id="btn-delphi-pin-run" class="btn btn-secondary btn-sm" style="padding:3px 10px; font-size:0.76rem; ${delphiData.pinned ? 'border-color:rgba(245,158,11,0.6); color:#fbbf24; background:rgba(245,158,11,0.12);' : ''}" title="Pinned baselines are protected from the 10-run history rotation limit">
               ${delphiData.pinned ? `📌 ${escapeHTML(delphiData.pinLabel || 'Pinned Baseline')}` : '☆ Pin as Baseline'}
             </button>
@@ -896,7 +900,7 @@
     let staleNoticeHTML = '';
     if (delphiData.isStaleDefinition && !unreadableNotice) {
       staleNoticeHTML = `
-        <div class="delphi-warning-banner" style="padding:8px 12px; font-size:0.79rem;">
+        <div class="delphi-warning-banner" style="padding:8px 12px; font-size:0.79rem; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
           <span>⚠️ <strong>Definition modified since this snapshot was generated.</strong> Evidence highlights below are bound to the immutable definition snapshot evaluated during this run.</span>
         </div>`;
     }
@@ -1371,6 +1375,30 @@
       const selectedRun = allRuns.find(r => r.runId === viewedRunId) || comp.delphi;
       if (activeReportTab === 'compare') activeReportTab = 'primary';
       renderReport(selectedRun, comp, false);
+    });
+
+    // Restore snapshot definition
+    document.getElementById('btn-delphi-restore-snapshot')?.addEventListener('click', async () => {
+      if (!delphiData.contentSnapshot) return;
+      const rawContent = window.Delphi?.extractRawContentFromSnapshot
+        ? window.Delphi.extractRawContentFromSnapshot(delphiData.contentSnapshot)
+        : delphiData.contentSnapshot;
+      const dStr = delphiData.timestamp ? new Date(delphiData.timestamp).toLocaleString() : 'this snapshot';
+      const freshComp = await window.ForgeDB.getComponent(comp.id);
+      if (!freshComp) return;
+      freshComp.content = rawContent;
+      await window.ForgeDB.saveComponent(freshComp);
+      activeComp = await window.ForgeDB.getComponent(comp.id) || freshComp;
+      if (window.ForgeAppBridge?.reloadOpenComponent) {
+        await window.ForgeAppBridge.reloadOpenComponent(comp.id);
+      }
+      if (window.MissionControl?.refresh) {
+        window.MissionControl.refresh();
+      }
+      if (window.showToast) {
+        window.showToast(`Restored definition from ${dStr} and saved.`, 'success');
+      }
+      renderReport(delphiData, activeComp, false);
     });
 
     // Pin / Unpin baseline

@@ -507,6 +507,32 @@
     }
   }
 
+  function populateStructuredFormFromRaw(category, content) {
+    if (category === 'character') {
+      const parsed = parseCharacterMarkdown(content);
+      charOverview.value = parsed.overview || '';
+      charPersonality.value = parsed.personality || '';
+      charBackground.value = parsed.background || '';
+      charAppearance.value = parsed.appearance || '';
+      charAbilities.value = parsed.abilities || '';
+      charStrengths.value = parsed.strengths || '';
+      charWeaknesses.value = parsed.weaknesses || '';
+      charLikes.value = parsed.likes || '';
+      charDislikes.value = parsed.dislikes || '';
+      charNotes.value = parsed.notes || '';
+    } else if (category === 'scenario') {
+      const parsed = parseScenarioMarkdown(content);
+      scenarioSetting.value = parsed.setting || '';
+      scenarioUserRole.value = parsed.userRole || '';
+      scenarioSituation.value = parsed.situation || '';
+      scenarioDynamics.value = parsed.dynamics || '';
+      scenarioExpectations.value = parsed.expectations || '';
+      scenarioRelationships.value = parsed.relationships || '';
+      scenarioRules.value = parsed.rules || '';
+      scenarioTone.value = parsed.tone || '';
+    }
+  }
+
   // Helper to switch editor panes
   function switchEditorTab(tabName) {
     const category = compCategorySelect.value;
@@ -514,30 +540,7 @@
 
     if (tabName === 'form') {
       // Sync raw -> structured fields
-      const content = compContentInput.value;
-      if (category === 'character') {
-        const parsed = parseCharacterMarkdown(content);
-        charOverview.value = parsed.overview || '';
-        charPersonality.value = parsed.personality || '';
-        charBackground.value = parsed.background || '';
-        charAppearance.value = parsed.appearance || '';
-        charAbilities.value = parsed.abilities || '';
-        charStrengths.value = parsed.strengths || '';
-        charWeaknesses.value = parsed.weaknesses || '';
-        charLikes.value = parsed.likes || '';
-        charDislikes.value = parsed.dislikes || '';
-        charNotes.value = parsed.notes || '';
-      } else if (category === 'scenario') {
-        const parsed = parseScenarioMarkdown(content);
-        scenarioSetting.value = parsed.setting || '';
-        scenarioUserRole.value = parsed.userRole || '';
-        scenarioSituation.value = parsed.situation || '';
-        scenarioDynamics.value = parsed.dynamics || '';
-        scenarioExpectations.value = parsed.expectations || '';
-        scenarioRelationships.value = parsed.relationships || '';
-        scenarioRules.value = parsed.rules || '';
-        scenarioTone.value = parsed.tone || '';
-      }
+      populateStructuredFormFromRaw(category, compContentInput.value);
 
       tabEditorRaw.classList.remove('active');
       tabEditorForm.classList.add('active');
@@ -1906,6 +1909,55 @@
     }
 
     // Version History Drawer Handler
+    const applyRestoreToEditorAndSave = async (ver) => {
+      if (!ver || !editingComponentId) return;
+      const targetCategory = ver.category || compCategorySelect.value || 'character';
+      const targetName = (ver.name || compNameInput.value || '').trim();
+      const targetContent = ver.content !== undefined ? ver.content : compContentInput.value;
+
+      compNameInput.value = targetName;
+      compContentInput.value = targetContent;
+      compCategorySelect.value = targetCategory;
+
+      // Sync both the Structured Form inputs AND Raw Markdown textarea so whichever tab is active updates immediately
+      toggleFormFields(targetCategory);
+      populateStructuredFormFromRaw(targetCategory, targetContent);
+      if (targetCategory === 'character' || targetCategory === 'scenario') {
+        editorTabsContainer.style.display = 'flex';
+      } else {
+        editorTabsContainer.style.display = 'none';
+        tabEditorForm.classList.remove('active');
+        tabEditorRaw.classList.add('active');
+        editorFormPane.style.display = 'none';
+        editorRawPane.style.display = 'block';
+        activeEditorTab = 'raw';
+      }
+      updateTokenCount();
+
+      // Persist the restored version immediately to IndexedDB
+      const existingComp = await window.ForgeDB.getComponent(editingComponentId);
+      if (existingComp) {
+        const saved = await window.ForgeDB.saveComponent({
+          ...existingComp,
+          id: editingComponentId,
+          name: targetName,
+          content: targetContent,
+          category: targetCategory
+        });
+        editorIsDirty = false;
+        const modifiedEl = document.getElementById('comp-modified-at');
+        if (modifiedEl && saved.modifiedAt) {
+          const d = new Date(saved.modifiedAt);
+          modifiedEl.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+            d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        }
+        updateEditorDelphiUI(saved);
+        await refreshVaultList();
+      } else {
+        editorIsDirty = true;
+      }
+    };
+
     const btnVersionHistory = document.getElementById('btn-version-history');
     if (btnVersionHistory) {
       btnVersionHistory.addEventListener('click', async () => {
@@ -1918,7 +1970,36 @@
         modal.classList.remove('hidden');
 
         try {
-          const versions = await window.ForgeDB.getComponentVersions(editingComponentId);
+          const [dbVersions, comp] = await Promise.all([
+            window.ForgeDB.getComponentVersions(editingComponentId),
+            window.ForgeDB.getComponent(editingComponentId)
+          ]);
+
+          const versions = Array.isArray(dbVersions) ? [...dbVersions] : [];
+
+          // Also surface any Delphi immutable snapshots whose content isn't already in versions
+          if (comp && comp.delphi && window.Delphi?.normalizeDelphiRecord) {
+            const norm = window.Delphi.normalizeDelphiRecord(comp.delphi, comp);
+            const allRuns = [norm, ...(norm.history || [])];
+            allRuns.forEach(run => {
+              if (run && run.contentSnapshot && window.Delphi.extractRawContentFromSnapshot) {
+                const rawBody = window.Delphi.extractRawContentFromSnapshot(run.contentSnapshot);
+                if (rawBody && !versions.some(v => (v.content || '').trim() === rawBody.trim())) {
+                  versions.push({
+                    id: `delphi_${run.runId}`,
+                    componentId: comp.id,
+                    name: comp.name,
+                    category: comp.category,
+                    content: rawBody,
+                    timestamp: run.timestamp || new Date().toISOString(),
+                    sourceLabel: run.pinned ? `📌 Delphi Baseline (${run.verdict || 'Snapshot'})` : `🔮 Delphi Snapshot (${run.verdict || 'Snapshot'})`
+                  });
+                }
+              }
+            });
+            versions.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+          }
+
           if (versions.length === 0) {
             list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No prior versions recorded for this component yet.</div>';
             return;
@@ -1927,23 +2008,25 @@
           list.innerHTML = versions.map((v, idx) => `
             <div class="version-card">
               <div class="version-card-header">
-                <strong>Version #${versions.length - idx}</strong> — ${new Date(v.timestamp).toLocaleString()}
-                <button class="btn btn-accent btn-sm btn-restore-version" data-version-id="${v.id}">Restore</button>
+                <div>
+                  <strong>Version #${versions.length - idx}</strong> — ${new Date(v.timestamp).toLocaleString()}
+                  ${v.sourceLabel ? `<span style="margin-left:6px; font-size:0.72rem; padding:1px 6px; border-radius:4px; background:rgba(168,85,247,0.18); color:#d8b4fe;">${esc(v.sourceLabel)}</span>` : ''}
+                </div>
+                <button type="button" class="btn btn-accent btn-sm btn-restore-version" data-version-id="${esc(String(v.id))}">Restore</button>
               </div>
-              <div class="version-card-meta">Category: ${v.category} | Name: ${esc(v.name)}</div>
-              <pre class="version-card-content">${esc((v.content || '').substring(0, 200))}${v.content?.length > 200 ? '…' : ''}</pre>
+              <div class="version-card-meta">Category: ${esc(v.category || '')} | Name: ${esc(v.name || '')} | ${(v.content || '').length.toLocaleString()} chars</div>
+              <pre class="version-card-content">${esc((v.content || '').substring(0, 240))}${v.content?.length > 240 ? '…' : ''}</pre>
             </div>
           `).join('');
 
           list.querySelectorAll('.btn-restore-version').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const ver = versions.find(v => v.id === btn.dataset.versionId);
+            btn.addEventListener('click', async () => {
+              const ver = versions.find(v => String(v.id) === String(btn.dataset.versionId));
               if (ver) {
-                compNameInput.value = ver.name;
-                compContentInput.value = ver.content;
-                compCategorySelect.value = ver.category;
-                editorIsDirty = true;
-                showToast(`Restored version from ${new Date(ver.timestamp).toLocaleTimeString()}`, 'success');
+                btn.disabled = true;
+                btn.textContent = 'Restoring…';
+                await applyRestoreToEditorAndSave(ver);
+                showToast(`Restored & saved version from ${new Date(ver.timestamp).toLocaleTimeString()}`, 'success');
                 modal.classList.add('hidden');
               }
             });
@@ -2050,13 +2133,33 @@
       }
     });
 
-    // Expose bridge so MissionControl can open the Vault editor
+    // Expose bridge so MissionControl and DelphiModal can open/reload the Vault editor
     window.ForgeAppBridge = {
       openEditor: (id) => {
         window.lastViewMC = true;
         btnMC?.classList.remove('active');
         document.getElementById('mission-control-view').style.display = 'none';
         openComponentEditor(id);
+      },
+      reloadOpenComponent: async (id) => {
+        await refreshVaultList();
+        const currentId = compIdInput?.value;
+        if (currentId && (!id || currentId === id) && editorComponent.style.display === 'block') {
+          const fresh = await window.ForgeDB.getComponent(currentId);
+          if (fresh) {
+            compNameInput.value = fresh.name || '';
+            compContentInput.value = fresh.content || '';
+            populateStructuredFormFromRaw(fresh.category, fresh.content || '');
+            updateTokenCount();
+            renderEditorDelphiSection(fresh);
+            const tsEl = document.getElementById('editor-timestamps');
+            if (tsEl) {
+              const created = fresh.createdAt ? new Date(fresh.createdAt).toLocaleString() : 'Unknown';
+              const updated = fresh.updatedAt ? new Date(fresh.updatedAt).toLocaleString() : 'Unknown';
+              tsEl.textContent = `Created: ${created}  ·  Modified: ${updated}`;
+            }
+          }
+        }
       },
       openEditorNew: (prefill) => {
         window.lastViewMC = true;

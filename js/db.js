@@ -325,15 +325,38 @@
       details: record.category
     });
 
-    // Version History
-    if (existing) {
-      saveComponentVersion(record.id, {
-        name: record.name,
-        content: record.content,
-        category: record.category,
-        tags: record.tags,
-        tracker: record.tracker
-      });
+    // Version History — preserve prior state before edit AND record new state when content/name changes
+    try {
+      const priorVersions = await getComponentVersions(record.id);
+      const latestVer = priorVersions[0] || null;
+      if (existing) {
+        const existingDiffersFromLatestVer = !latestVer || latestVer.content !== existing.content || latestVer.name !== existing.name;
+        if (existingDiffersFromLatestVer && (existing.content || existing.name)) {
+          await saveComponentVersion(record.id, {
+            name: existing.name,
+            content: existing.content,
+            category: existing.category,
+            tags: existing.tags,
+            tracker: existing.tracker,
+            timestamp: existing.modifiedAt || existing.createdAt || new Date(Date.now() - 1000).toISOString()
+          });
+        }
+      }
+      const recordDiffers = !existing
+        ? Boolean(record.content || record.name)
+        : (existing.content !== record.content || existing.name !== record.name);
+      if (recordDiffers) {
+        await saveComponentVersion(record.id, {
+          name: record.name,
+          content: record.content,
+          category: record.category,
+          tags: record.tags,
+          tracker: record.tracker,
+          timestamp: now
+        });
+      }
+    } catch (verErr) {
+      console.warn('[ForgeDB] Version history save warning:', verErr);
     }
 
     return record;
@@ -846,7 +869,7 @@
     const db = dbInstance || await initDB();
     const tx = db.transaction('component_versions', 'readwrite');
     const store = tx.objectStore('component_versions');
-    const record = { id: generateId(), componentId, ...snapshot, timestamp: new Date().toISOString() };
+    const record = { id: generateId(), componentId, ...snapshot, timestamp: snapshot.timestamp || new Date().toISOString() };
     await promisify(store.put(record));
     deleteOldVersions(componentId, 10);
   }
