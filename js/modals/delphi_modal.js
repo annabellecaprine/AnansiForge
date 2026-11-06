@@ -2454,6 +2454,14 @@
     });
   }
 
+  // Ensure any legacy sidebar dropdown menu is removed immediately and main button opens Batch Hub
+  document.getElementById('vault-batch-delphi-menu')?.remove();
+  document.getElementById('btn-vault-batch-delphi')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('vault-batch-delphi-menu')?.remove();
+    openBatchPicker();
+  });
+
   window.DelphiModal = {
     open,
     openBatch,

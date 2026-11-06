@@ -1977,95 +1977,19 @@
       }
     });
 
-    // Vault Sidebar Batch Delphi & Ensemble Split Button + Dropdown
+    // Vault Sidebar Batch Delphi & Ensemble Button (opens the Batch & Ensemble QA Hub modal directly)
+    document.getElementById('vault-batch-delphi-menu')?.remove();
     const btnVaultBatchHub = document.getElementById('btn-vault-batch-delphi-hub');
     const btnVaultBatch = document.getElementById('btn-vault-batch-delphi');
-    const menuVaultBatch = document.getElementById('vault-batch-delphi-menu');
 
-    btnVaultBatchHub?.addEventListener('click', (e) => {
+    const openVaultBatchHub = (e) => {
       e.stopPropagation();
-      menuVaultBatch?.classList.add('hidden');
+      document.getElementById('vault-batch-delphi-menu')?.remove();
       window.DelphiModal?.openBatchPicker?.();
-    });
+    };
 
-    if (btnVaultBatch && menuVaultBatch) {
-      btnVaultBatch.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menuVaultBatch.classList.toggle('hidden');
-      });
-
-      document.addEventListener('click', (e) => {
-        if (!menuVaultBatch.classList.contains('hidden') && !menuVaultBatch.contains(e.target) && e.target !== btnVaultBatch) {
-          menuVaultBatch.classList.add('hidden');
-        }
-      });
-
-      menuVaultBatch.querySelectorAll('.vault-batch-preset-item').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          menuVaultBatch.classList.add('hidden');
-          const preset = btn.dataset.preset;
-          if (preset === 'hub') {
-            window.DelphiModal?.openBatchPicker?.();
-            return;
-          }
-
-          const allComps = await window.ForgeDB.getAllComponents();
-          const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
-
-          if (preset === 'ensemble-filtered') {
-            const filteredIds = (window._currentVaultFilteredIds || []).filter(id => {
-              const c = allComps.find(x => x.id === id);
-              return c && ['character', 'scenario', 'organization', 'bio', 'initial_message'].includes(c.category);
-            });
-            if (filteredIds.length === 0) {
-              showToast('No components in current Vault filter to run Ensemble Audit.', 'info');
-              return;
-            }
-            window.DelphiModal?.openEnsemble({
-              componentIds: filteredIds,
-              title: `Filtered Vault Ensemble (${filteredIds.length} items)`,
-              scopeLabel: 'Filtered Vault Ensemble'
-            });
-            return;
-          }
-
-          let targetComps = [];
-          let title = 'Batch Delphi Audit';
-          if (preset === 'golden') {
-            targetComps = auditable.filter(c => c.isTemplate === true || c.tracker?.pipeline?.goldenTemplate === true);
-            title = '⭐ Golden Templates Audit';
-          } else if (preset === 'modified') {
-            targetComps = auditable.filter(c => {
-              if (!c.delphi || !c.delphi.verdict) return false;
-              if (c.delphi.contentHash && window.Delphi?.computeContentHash) {
-                const liveHash = window.Delphi.computeContentHash(window.Delphi.buildComponentContentSnapshot(c));
-                return liveHash !== c.delphi.contentHash;
-              }
-              const modTime = c.modifiedAt ? new Date(c.modifiedAt).getTime() : 0;
-              const delphiTime = c.delphi.timestamp ? new Date(c.delphi.timestamp).getTime() : 0;
-              return modTime > delphiTime;
-            });
-            title = '🔄 Modified Since Last Delphi Run';
-          } else if (preset === 'unrun') {
-            targetComps = auditable.filter(c => !c.delphi || !c.delphi.verdict);
-            title = '🔮 Unrun Components Audit';
-          } else if (preset === 'filtered') {
-            const fSet = new Set(window._currentVaultFilteredIds || []);
-            targetComps = auditable.filter(c => fSet.has(c.id));
-            title = `📋 Filtered Vault List (${targetComps.length})`;
-          }
-
-          if (targetComps.length === 0) {
-            showToast(`No matching components found for "${title}". Opening Batch & Ensemble Hub...`, 'info');
-            window.DelphiModal?.openBatchPicker?.();
-            return;
-          }
-
-          window.DelphiModal?.openBatch(targetComps.map(c => c.id), { title });
-        });
-      });
-    }
+    btnVaultBatchHub?.addEventListener('click', openVaultBatchHub);
+    btnVaultBatch?.addEventListener('click', openVaultBatchHub);
 
     window.addEventListener('delphi:verdict-saved', async (e) => {
       if (editingComponentId && e.detail && e.detail.id === editingComponentId) {
