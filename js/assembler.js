@@ -91,6 +91,21 @@
     document.getElementById('project-drawer-header').addEventListener('click', toggleDrawer);
     document.getElementById('btn-clear-drawer').addEventListener('click', clearDrawer);
     btnStageAssemble.addEventListener('click', () => openAssemblerScreen(null));
+    document.getElementById('btn-drawer-batch-delphi')?.addEventListener('click', () => {
+      if (stagedIds.length > 0 && window.DelphiModal?.openBatch) {
+        window.DelphiModal.openBatch([...stagedIds], `Staged Components Batch (${stagedIds.length})`);
+      }
+    });
+    document.getElementById('btn-drawer-ensemble-delphi')?.addEventListener('click', () => {
+      if (stagedIds.length > 0 && window.DelphiModal?.openEnsemble) {
+        window.DelphiModal.openEnsemble({
+          componentIds: [...stagedIds],
+          relationships: relationships || [],
+          title: `Staged Ensemble (${stagedIds.length} items)`,
+          scopeLabel: 'Staged Ensemble'
+        });
+      }
+    });
 
     // Cover Image selector events
     document.getElementById('btn-assembler-change-cover').addEventListener('click', () => coverFileInput.click());
@@ -318,12 +333,19 @@
     drawerCount.textContent = stagedIds.length;
     drawerItemsContainer.innerHTML = '';
 
+    const btnDrawerBatch = document.getElementById('btn-drawer-batch-delphi');
+    const btnDrawerEnsemble = document.getElementById('btn-drawer-ensemble-delphi');
+
     if (stagedIds.length === 0) {
       btnStageAssemble.disabled = true;
+      if (btnDrawerBatch) btnDrawerBatch.disabled = true;
+      if (btnDrawerEnsemble) btnDrawerEnsemble.disabled = true;
       return;
     }
 
     btnStageAssemble.disabled = false;
+    if (btnDrawerBatch) btnDrawerBatch.disabled = false;
+    if (btnDrawerEnsemble) btnDrawerEnsemble.disabled = false;
 
     // Batch all component reads in parallel instead of serial awaits
     const components = await Promise.all(stagedIds.map(id => window.ForgeDB.getComponent(id)));

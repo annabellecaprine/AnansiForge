@@ -207,7 +207,12 @@
               Surfaces interpretive risk hypotheses, verified evidence passages, and cross-model agreement
             </span>
           </div>
-          <button id="btn-close-delphi-modal" class="btn btn-ghost btn-icon" style="font-size: 1.2rem; cursor: pointer;" title="Close">&times;</button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="btn-delphi-header-batch" class="btn btn-secondary btn-sm" style="padding:4px 10px; font-size:0.76rem; border-color:rgba(168,85,247,0.45); color:#d8b4fe;" title="Open Batch Reporting & Ensemble QA Hub">
+              📦 Batch &amp; Ensemble QA
+            </button>
+            <button id="btn-close-delphi-modal" class="btn btn-ghost btn-icon" style="font-size: 1.2rem; cursor: pointer;" title="Close">&times;</button>
+          </div>
         </div>
 
         <div id="delphi-modal-body" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
@@ -222,6 +227,9 @@
 
     const closeBtn = document.getElementById('btn-close-delphi-modal');
     closeBtn.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-header-batch')?.addEventListener('click', () => {
+      if (!isRunning) openBatchPicker();
+    });
     modalEl.addEventListener('click', (e) => {
       if (e.target === modalEl && !isRunning) closeModal();
     });
@@ -379,27 +387,56 @@
    * Render Phase 2 Version Comparison Tab (Zero-Token Visual Diff + Optional Symmetric LLM Delta)
    */
   function renderCompareTabContent(comp, allRuns) {
-    if (!allRuns || allRuns.length < 2) {
+    if (!allRuns || allRuns.length === 0) {
       return `
         <div class="delphi-explainer-box" style="text-align:center; padding:24px;">
           <p style="margin:0; color:var(--text-secondary);">
-            At least two diagnostic runs are needed to compare versions. Re-run Delphi after editing the component to compare snapshots.
+            Run a Delphi diagnostic first to capture an immutable baseline snapshot.
           </p>
         </div>`;
     }
 
-    // Default Run B = Latest Run (allRuns[0]), Run A = Pinned Baseline or second-most-recent (allRuns[1])
-    if (!compareRunBId || !allRuns.some(r => r.runId === compareRunBId)) {
-      compareRunBId = allRuns[0].runId;
+    // If only 1 historical run exists, compare Snapshot A (Saved Run #1) against Live Component Draft so the tab is immediately useful
+    let effectiveRuns = [...allRuns];
+    let singleRunLiveNoticeHTML = '';
+    if (allRuns.length === 1) {
+      const liveSnap = window.Delphi.buildComponentContentSnapshot(comp);
+      const liveRun = {
+        runId: '__live_draft__',
+        verdict: 'LIVE WORKING DRAFT',
+        model: 'Unaudited Live Text',
+        timestamp: comp.modifiedAt || new Date().toISOString(),
+        contentSnapshot: liveSnap,
+        contentHash: window.Delphi.computeContentHash(liveSnap),
+        hasContentSnapshot: true,
+        dimensions: {},
+        findings: [],
+        traitDominance: []
+      };
+      effectiveRuns = [liveRun, allRuns[0]];
+      singleRunLiveNoticeHTML = `
+        <div class="delphi-explainer-box" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+          <div style="font-size:0.8rem; color:var(--text-secondary);">
+            <strong>1 diagnostic snapshot recorded so far.</strong> Below is a zero-token diff between your saved snapshot and your current live component text. Run a second diagnostic after editing to compare Failure Mode classifications, Trait Dominance, and Symmetric LLM Deltas across two complete reports.
+          </div>
+          <button id="btn-delphi-cmp-rerun-now" class="btn btn-primary btn-sm" style="white-space:nowrap;">
+            🔄 Run New Snapshot Now
+          </button>
+        </div>`;
     }
-    if (!compareRunAId || !allRuns.some(r => r.runId === compareRunAId) || compareRunAId === compareRunBId) {
-      const pinnedCandidate = allRuns.find(r => r.pinned && r.runId !== compareRunBId);
-      const fallbackCandidate = allRuns.find(r => r.runId !== compareRunBId) || allRuns[0];
+
+    // Default Run B = Latest Run (effectiveRuns[0]), Run A = Pinned Baseline or second-most-recent (effectiveRuns[1])
+    if (!compareRunBId || !effectiveRuns.some(r => r.runId === compareRunBId)) {
+      compareRunBId = effectiveRuns[0].runId;
+    }
+    if (!compareRunAId || !effectiveRuns.some(r => r.runId === compareRunAId) || compareRunAId === compareRunBId) {
+      const pinnedCandidate = effectiveRuns.find(r => r.pinned && r.runId !== compareRunBId);
+      const fallbackCandidate = effectiveRuns.find(r => r.runId !== compareRunBId) || effectiveRuns[0];
       compareRunAId = (pinnedCandidate || fallbackCandidate).runId;
     }
 
-    const runA = allRuns.find(r => r.runId === compareRunAId) || allRuns[1] || allRuns[0];
-    const runB = allRuns.find(r => r.runId === compareRunBId) || allRuns[0];
+    const runA = effectiveRuns.find(r => r.runId === compareRunAId) || effectiveRuns[1] || effectiveRuns[0];
+    const runB = effectiveRuns.find(r => r.runId === compareRunBId) || effectiveRuns[0];
     const cmp = window.Delphi.compareDelphiRuns(runA, runB);
 
     const runLabel = (r, idx) => {
@@ -624,18 +661,19 @@
     `;
 
     return `
+      ${singleRunLiveNoticeHTML}
       <div class="delphi-compare-selectors" style="display:grid; grid-template-columns: 1fr auto 1fr; gap:10px; align-items:end; background:rgba(255,255,255,0.03); padding:10px 14px; border-radius:6px; border:1px solid var(--border-color);">
         <div>
           <label style="display:block; font-size:0.74rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Snapshot A (Baseline / Older)</label>
           <select id="delphi-cmp-select-a" class="form-control" style="width:100%; font-size:0.8rem; padding:5px 8px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px;">
-            ${allRuns.map((r, i) => `<option value="${escapeHTML(r.runId)}" ${r.runId === runA.runId ? 'selected' : ''}>${escapeHTML(runLabel(r, i))}</option>`).join('')}
+            ${effectiveRuns.map((r, i) => `<option value="${escapeHTML(r.runId)}" ${r.runId === runA.runId ? 'selected' : ''}>${escapeHTML(runLabel(r, i))}</option>`).join('')}
           </select>
         </div>
         <div style="font-size:1.1rem; color:var(--text-muted); padding-bottom:4px;">↔</div>
         <div>
           <label style="display:block; font-size:0.74rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Snapshot B (Target / Newer)</label>
           <select id="delphi-cmp-select-b" class="form-control" style="width:100%; font-size:0.8rem; padding:5px 8px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px;">
-            ${allRuns.map((r, i) => `<option value="${escapeHTML(r.runId)}" ${r.runId === runB.runId ? 'selected' : ''}>${escapeHTML(runLabel(r, i))}</option>`).join('')}
+            ${effectiveRuns.map((r, i) => `<option value="${escapeHTML(r.runId)}" ${r.runId === runB.runId ? 'selected' : ''}>${escapeHTML(runLabel(r, i))}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -682,7 +720,7 @@
     const secCfg = getSecondaryConfig();
     const hasSecondary = !!(secCfg && secCfg.provider && secCfg.provider !== 'none');
     const hasComparison = !!(delphiData.secondaryReport || delphiData.comparisonReport);
-    const canCompareRuns = allRuns.length >= 2;
+    const canCompareRuns = allRuns.length >= 1;
 
     if (activeReportTab === 'compare' && !canCompareRuns) {
       activeReportTab = hasComparison ? 'synthesis' : 'primary';
@@ -1034,8 +1072,13 @@
         `;
       } else if (!unreadableNotice) {
         sourceEvidenceDrawerHTML = `
-          <div style="padding:8px 12px; border-radius:6px; border:1px dashed var(--border-color); background:rgba(255,255,255,0.02); font-size:0.76rem; color:var(--text-muted); margin-bottom:10px;">
-            ℹ️ <strong>Legacy v1 Report:</strong> An immutable definition snapshot was not recorded when this report was originally run. Source highlights are omitted so Delphi never maps old quotes onto edited live text.
+          <div style="padding:10px 14px; border-radius:6px; border:1px solid rgba(168,85,247,0.4); background:rgba(168,85,247,0.08); font-size:0.8rem; color:var(--text-primary); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div>
+              ✨ <strong>Delphi v2 Upgrade Available for this Component:</strong> This report was recorded with Delphi v1 (which did not store Failure Mode Hypothesis tags, Verified Evidence Quotes, or an Immutable Snapshot). Re-run to generate full v2 diagnostics.
+            </div>
+            <button id="btn-delphi-upgrade-v2-rerun" class="btn btn-primary btn-sm" style="white-space:nowrap;">
+              🔄 Re-Run with Delphi v2
+            </button>
           </div>
         `;
       }
@@ -1288,6 +1331,12 @@
     document.getElementById('delphi-cmp-select-b')?.addEventListener('change', (e) => {
       compareRunBId = e.target.value;
       renderReport(delphiData, comp, false);
+    });
+    document.getElementById('btn-delphi-cmp-rerun-now')?.addEventListener('click', () => {
+      runDiagnostic(comp.id);
+    });
+    document.getElementById('btn-delphi-upgrade-v2-rerun')?.addEventListener('click', () => {
+      runDiagnostic(comp.id);
     });
 
     // Run Symmetric LLM Semantic Delta
@@ -2012,9 +2061,184 @@
     }
   }
 
+  /**
+   * Interactive Batch & Ensemble QA Hub — accessible from anywhere in the app
+   */
+  async function openBatchPicker() {
+    ensureModalDOM();
+    modalEl.classList.remove('hidden');
+
+    const body = document.getElementById('delphi-modal-body');
+    const footer = document.getElementById('delphi-modal-footer');
+    if (!body || !footer) return;
+
+    setModalHeader(
+      '📦 Delphi v2 — Batch Reporting & Ensemble QA Hub',
+      'Audit Golden Templates in batch or evaluate cross-character coherence & spotlight competition'
+    );
+
+    const allComps = await window.ForgeDB.getAllComponents();
+    const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
+    const goldenComps = auditable.filter(c => c.isTemplate === true);
+    const modifiedComps = auditable.filter(c => {
+      if (!c.delphi || !c.delphi.verdict) return false;
+      if (c.delphi.contentHash && window.Delphi?.computeContentHash) {
+        const liveHash = window.Delphi.computeContentHash(window.Delphi.buildComponentContentSnapshot(c));
+        return liveHash !== c.delphi.contentHash;
+      }
+      const modTime = c.modifiedAt ? new Date(c.modifiedAt).getTime() : 0;
+      const delphiTime = c.delphi.timestamp ? new Date(c.delphi.timestamp).getTime() : 0;
+      return modTime > delphiTime;
+    });
+    const unrunComps = auditable.filter(c => !c.delphi || !c.delphi.verdict);
+    const filteredSet = new Set(window._currentVaultFilteredIds || []);
+    const filteredAuditable = auditable.filter(c => filteredSet.has(c.id));
+
+    // Extract distinct Universes and Factions for Ensemble Audit
+    const universes = [...new Set(allComps.map(c => (c.tracker?.universe || c.universe || '').trim()).filter(Boolean))].sort();
+    const factions = [...new Set(allComps.map(c => (c.tracker?.faction || c.faction || '').trim()).filter(Boolean))].sort();
+    const lineages = [...new Set(allComps.map(c => (c.lineage || '').trim()).filter(Boolean))].sort();
+
+    body.innerHTML = `
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:16px;">
+        <!-- Phase 3: Batch Reporting Card -->
+        <div style="padding:16px; border:1px solid rgba(168,85,247,0.4); border-radius:8px; background:rgba(168,85,247,0.05); display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <h4 style="margin:0 0 4px 0; font-size:0.98rem; color:#d8b4fe;">📦 Batch Delphi Reporting (Independent Component Audits)</h4>
+            <p style="margin:0; font-size:0.78rem; color:var(--text-secondary); line-height:1.45;">
+              Runs sequential, rate-safe Delphi diagnostics on each component independently, saving immutable v2 snapshots and failure mode classifications to each item and generating a Batch Summary Digest.
+            </p>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button type="button" class="btn btn-secondary delphi-hub-batch-btn" data-preset="golden" style="justify-content:space-between; width:100%; padding:10px 14px;" ${goldenComps.length === 0 ? 'disabled' : ''}>
+              <span>⭐ Audit All Golden Templates</span>
+              <span class="mc-delphi-badge mc-delphi-ready">${goldenComps.length} item${goldenComps.length === 1 ? '' : 's'}</span>
+            </button>
+            <button type="button" class="btn btn-secondary delphi-hub-batch-btn" data-preset="modified" style="justify-content:space-between; width:100%; padding:10px 14px;" ${modifiedComps.length === 0 ? 'disabled' : ''}>
+              <span>🔄 Audit Modified Since Last Delphi Run</span>
+              <span class="mc-delphi-badge mc-delphi-warn">${modifiedComps.length} item${modifiedComps.length === 1 ? '' : 's'}</span>
+            </button>
+            <button type="button" class="btn btn-secondary delphi-hub-batch-btn" data-preset="unrun" style="justify-content:space-between; width:100%; padding:10px 14px;" ${unrunComps.length === 0 ? 'disabled' : ''}>
+              <span>🔮 Audit All Unrun Components</span>
+              <span class="mc-delphi-badge mc-delphi-none">${unrunComps.length} item${unrunComps.length === 1 ? '' : 's'}</span>
+            </button>
+            <button type="button" class="btn btn-secondary delphi-hub-batch-btn" data-preset="filtered" style="justify-content:space-between; width:100%; padding:10px 14px;" ${filteredAuditable.length === 0 ? 'disabled' : ''}>
+              <span>📋 Audit Current Filtered Vault View</span>
+              <span class="mc-delphi-badge mc-delphi-none">${filteredAuditable.length} item${filteredAuditable.length === 1 ? '' : 's'}</span>
+            </button>
+            <button type="button" class="btn btn-secondary delphi-hub-batch-btn" data-preset="all" style="justify-content:space-between; width:100%; padding:10px 14px;" ${auditable.length === 0 ? 'disabled' : ''}>
+              <span>🗄️ Audit Entire Vault (Characters, Scenarios &amp; Orgs)</span>
+              <span class="mc-delphi-badge mc-delphi-none">${auditable.length} item${auditable.length === 1 ? '' : 's'}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Phase 4: Holistic Ensemble & Project Reporting Card -->
+        <div style="padding:16px; border:1px solid rgba(56,189,248,0.4); border-radius:8px; background:rgba(56,189,248,0.05); display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <h4 style="margin:0 0 4px 0; font-size:0.98rem; color:#38bdf8;">🎭 Holistic Ensemble &amp; Universe Audit</h4>
+            <p style="margin:0; font-size:0.78rem; color:var(--text-secondary); line-height:1.45;">
+              Evaluates multiple characters, organizations, and scenarios <strong>together</strong> in a single holistic pass for Voice Overlap, Spotlight Competition Risk, Relationship Distortion, and Canon Coherence—with an explicit Coverage Manifest.
+            </p>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
+            <div>
+              <label style="display:block; font-size:0.76rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Select Ensemble Scope:</label>
+              <select id="delphi-hub-ensemble-scope" class="form-control" style="width:100%; font-size:0.82rem; padding:7px 10px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px;">
+                <option value="filtered">📋 Current Filtered Vault View (${filteredAuditable.length} items)</option>
+                <option value="golden">⭐ All Golden Templates (${goldenComps.length} items)</option>
+                ${factions.map(f => {
+                  const cnt = allComps.filter(c => (c.tracker?.faction || c.faction || '').trim() === f).length;
+                  return `<option value="faction:${escapeHTML(f)}">🛡️ Faction: ${escapeHTML(f)} (${cnt} items)</option>`;
+                }).join('')}
+                ${universes.map(u => {
+                  const cnt = allComps.filter(c => (c.tracker?.universe || c.universe || '').trim() === u).length;
+                  return `<option value="universe:${escapeHTML(u)}">🌌 Universe: ${escapeHTML(u)} (${cnt} items)</option>`;
+                }).join('')}
+                ${lineages.map(l => {
+                  const cnt = allComps.filter(c => (c.lineage || '').trim() === l).length;
+                  return `<option value="lineage:${escapeHTML(l)}">🔗 Lineage: ${escapeHTML(l)} (${cnt} items)</option>`;
+                }).join('')}
+              </select>
+            </div>
+            <button type="button" id="btn-delphi-hub-run-ensemble" class="btn btn-primary" style="justify-content:center; width:100%; padding:10px 14px; background:linear-gradient(135deg, #0284c7, #7c3aed); border:none;">
+              🎭 Run Holistic Ensemble Audit
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    footer.innerHTML = `
+      ${activeComp ? `<button id="btn-delphi-hub-back-comp" class="btn btn-secondary">← Back to ${escapeHTML(activeComp.name)}</button>` : ''}
+      <button id="btn-delphi-hub-close" class="btn btn-ghost">Close</button>
+    `;
+
+    document.getElementById('btn-delphi-hub-close')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-hub-back-comp')?.addEventListener('click', () => {
+      if (activeComp) open(activeComp.id);
+    });
+
+    body.querySelectorAll('.delphi-hub-batch-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const preset = btn.dataset.preset;
+        if (preset === 'golden') openBatch(goldenComps.map(c => c.id), '⭐ Golden Templates Audit');
+        else if (preset === 'modified') openBatch(modifiedComps.map(c => c.id), '🔄 Modified Since Last Delphi Run');
+        else if (preset === 'unrun') openBatch(unrunComps.map(c => c.id), '🔮 Unrun Components Audit');
+        else if (preset === 'filtered') openBatch(filteredAuditable.map(c => c.id), `📋 Filtered Vault List (${filteredAuditable.length})`);
+        else if (preset === 'all') openBatch(auditable.map(c => c.id), `🗄️ Full Vault Batch Audit (${auditable.length})`);
+      });
+    });
+
+    document.getElementById('btn-delphi-hub-run-ensemble')?.addEventListener('click', () => {
+      const val = document.getElementById('delphi-hub-ensemble-scope')?.value || 'filtered';
+      let targetComps = [];
+      let title = 'Ensemble Audit';
+      let scopeLabel = 'Ensemble';
+
+      if (val === 'filtered') {
+        targetComps = allComps.filter(c => filteredSet.has(c.id));
+        title = `Filtered Vault Ensemble (${targetComps.length})`;
+        scopeLabel = 'Filtered Vault Ensemble';
+      } else if (val === 'golden') {
+        targetComps = goldenComps;
+        title = `Golden Templates Ensemble (${targetComps.length})`;
+        scopeLabel = 'Golden Templates Ensemble';
+      } else if (val.startsWith('faction:')) {
+        const f = val.slice('faction:'.length);
+        targetComps = allComps.filter(c => (c.tracker?.faction || c.faction || '').trim() === f);
+        title = `Faction Ensemble: ${f}`;
+        scopeLabel = `Faction: ${f}`;
+      } else if (val.startsWith('universe:')) {
+        const u = val.slice('universe:'.length);
+        targetComps = allComps.filter(c => (c.tracker?.universe || c.universe || '').trim() === u);
+        title = `Universe Ensemble: ${u}`;
+        scopeLabel = `Universe: ${u}`;
+      } else if (val.startsWith('lineage:')) {
+        const l = val.slice('lineage:'.length);
+        targetComps = allComps.filter(c => (c.lineage || '').trim() === l);
+        title = `Lineage Ensemble: ${l}`;
+        scopeLabel = `Lineage: ${l}`;
+      }
+
+      if (targetComps.length === 0) {
+        alert('No components found in the selected scope.');
+        return;
+      }
+
+      openEnsemble({
+        componentIds: targetComps.map(c => c.id),
+        title,
+        scopeLabel
+      });
+    });
+  }
+
   window.DelphiModal = {
     open,
     openBatch,
+    openBatchPicker,
     openEnsemble,
     runDiagnostic,
     runComparison

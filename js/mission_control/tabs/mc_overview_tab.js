@@ -146,6 +146,11 @@
             published: 'published', released: 'published', deleted: 'deleted', record_saved: 'saved', project_compiled: 'compiled'
         };
 
+        const auditableComps = comps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
+        const goldenCount = auditableComps.filter(c => c.isTemplate === true).length;
+        const unrunCount = auditableComps.filter(c => !c.delphi || !c.delphi.verdict).length;
+        const readyCount = auditableComps.filter(c => c.delphi?.verdict === 'READY').length;
+
         return `<div class="mc-overview">
       <div class="mc-kpi-grid">
         ${kpiCard('🗄', 'Total Vault Items', totalVault, `${chars.length} chars · ${scenarios.length} scenarios`)}
@@ -154,6 +159,20 @@
         ${kpiCard('💡', 'Concept Stubs', stubs.length, 'items queued to build', 'var(--text-muted)')}
         ${kpiCard('🚀', 'Ready to Launch', readyToLaunch.length, `${publishedReleases.length} launched · ${readyToLaunch.length} pending`, '#f59e0b')}
         ${kpiCard('📖', 'Stories', stories.length, `${stories.filter(s => s.pipeline?.published).length} published`)}
+      </div>
+
+      <div class="mc-overview-panel" style="margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-color:rgba(168,85,247,0.35); background:rgba(168,85,247,0.05);">
+        <div>
+          <h3 class="mc-panel-title" style="margin-bottom:4px; color:#d8b4fe;">🔮 Delphi v2 — Batch Reporting, Evidence Linking &amp; Ensemble QA</h3>
+          <p class="card-desc" style="margin:0; font-size:0.78rem; color:var(--text-secondary);">
+            ${readyCount} of ${auditableComps.length} auditable components READY · ${goldenCount} Golden Templates · ${unrunCount} Unrun
+          </p>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" id="mc-overview-delphi-golden" class="mc-btn mc-btn-secondary" style="border-color:rgba(250,204,21,0.45); color:#fde047;">⭐ Audit Golden Templates (${goldenCount})</button>
+          <button type="button" id="mc-overview-delphi-unrun" class="mc-btn mc-btn-secondary">🔮 Audit Unrun (${unrunCount})</button>
+          <button type="button" id="mc-overview-delphi-hub" class="mc-btn mc-btn-primary" style="background:linear-gradient(135deg, #7c3aed, #0284c7); border:none;">📦 Batch &amp; Ensemble QA Hub</button>
+        </div>
       </div>
 
       <div class="mc-overview-panel mc-burndown-panel" style="margin-bottom:1.25rem;">

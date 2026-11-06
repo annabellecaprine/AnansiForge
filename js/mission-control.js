@@ -532,6 +532,32 @@
         return;
       }
 
+      // Overview Delphi quick-action buttons
+      if (t.id === 'mc-overview-delphi-hub' || t.closest('#mc-overview-delphi-hub') || t.id === 'mc-delphi-opt-hub' || t.closest('#mc-delphi-opt-hub')) {
+        const dd = document.getElementById('mc-delphi-batch-dropdown');
+        if (dd) dd.style.display = 'none';
+        window.DelphiModal?.openBatchPicker?.();
+        return;
+      }
+      if (t.id === 'mc-overview-delphi-golden' || t.closest('#mc-overview-delphi-golden')) {
+        const targets = state.allComponents.filter(c => ['character', 'scenario', 'organization'].includes(c.category) && c.isTemplate === true);
+        if (targets.length === 0) {
+          window.DelphiModal?.openBatchPicker?.();
+        } else {
+          window.DelphiModal?.openBatch(targets.map(c => c.id), '⭐ Golden Templates Audit');
+        }
+        return;
+      }
+      if (t.id === 'mc-overview-delphi-unrun' || t.closest('#mc-overview-delphi-unrun')) {
+        const targets = state.allComponents.filter(c => ['character', 'scenario', 'organization'].includes(c.category) && (!c.delphi || !c.delphi.verdict));
+        if (targets.length === 0) {
+          window.DelphiModal?.openBatchPicker?.();
+        } else {
+          window.DelphiModal?.openBatch(targets.map(c => c.id), '🔮 Unrun Components Audit');
+        }
+        return;
+      }
+
       // Overview Universe Category filter pill
       const uniPill = t.closest('.mc-overview-uni-pill');
       if (uniPill) {
@@ -1003,14 +1029,23 @@
         return;
       }
 
+      // Delphi Batch main button opens the Batch & Ensemble QA Hub
+      if (t.id === 'mc-delphi-preset-golden') {
+        const dd = document.getElementById('mc-delphi-batch-dropdown');
+        if (dd) dd.style.display = 'none';
+        window.DelphiModal?.openBatchPicker?.();
+        return;
+      }
+
       // Delphi Batch Preset: Golden Templates
-      if (t.id === 'mc-delphi-preset-golden' || t.id === 'mc-delphi-opt-golden') {
+      if (t.id === 'mc-delphi-opt-golden') {
         const dd = document.getElementById('mc-delphi-batch-dropdown');
         if (dd) dd.style.display = 'none';
         const filtered = S.filterComponents(state.allComponents.filter(c => c.category === (state.activeCategory || 'character')));
         const golden = filtered.filter(c => c.isTemplate || c.tracker?.pipeline?.goldenTemplate);
         if (!golden.length) {
-          if (typeof showToast === 'function') showToast('No Golden Templates found in current view/filter.', 'info');
+          if (typeof showToast === 'function') showToast('No Golden Templates in current filter — opening Batch Hub.', 'info');
+          window.DelphiModal?.openBatchPicker?.();
           return;
         }
         window.DelphiModal?.openBatch(golden.map(c => c.id), {

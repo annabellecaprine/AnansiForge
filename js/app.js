@@ -252,6 +252,9 @@
         }
       });
 
+      // Expose current filtered list IDs for Vault Batch / Ensemble Delphi actions
+      window._currentVaultFilteredIds = filtered.map(c => c.id);
+
       // Update Stats Banner
       const statsBanner = document.getElementById('sidebar-stats-banner');
       if (statsBanner) {
@@ -296,6 +299,19 @@
           ? `<div class="vault-item-scenarios">${comp.scenarios.map(s => `<span class="scenario-pill">${escapeHTML(s)}</span>`).join('')}</div>`
           : '';
 
+        const isDelphiAuditable = ['character', 'scenario', 'organization'].includes(comp.category);
+        let delphiBtnHTML = '';
+        if (isDelphiAuditable) {
+          const dVerdict = comp.delphi?.verdict ? String(comp.delphi.verdict).toUpperCase() : '';
+          let dColor = 'var(--text-muted)';
+          let dLabel = '🔮';
+          let dTitle = 'Run Delphi QA Diagnostic';
+          if (dVerdict === 'READY') { dColor = '#4ade80'; dLabel = '🔮✓'; dTitle = 'Delphi: READY — Click to view report'; }
+          else if (dVerdict === 'NEEDS WORK') { dColor = '#fbbf24'; dLabel = '🔮⚠'; dTitle = 'Delphi: NEEDS WORK — Click to view report'; }
+          else if (dVerdict === 'FAIL') { dColor = '#f87171'; dLabel = '🔮✕'; dTitle = 'Delphi: FAIL — Click to view report'; }
+          delphiBtnHTML = `<button class="btn btn-ghost btn-icon btn-sm btn-vault-delphi" title="${dTitle}" style="padding:2px 6px; color:${dColor}; font-size:0.75rem; font-weight:700;">${dLabel}</button>`;
+        }
+
         item.innerHTML = `
           <div class="vault-item-header">
             <span class="vault-item-name" title="${escapeHTML(comp.name)}">${pinIcon}${escapeHTML(comp.name)}</span>
@@ -308,6 +324,7 @@
           <div class="vault-item-footer">
             ${lineageLabel}
             <div style="display:flex; gap:6px;">
+              ${delphiBtnHTML}
               ${comp.category === 'character' ? `<button class="btn btn-ghost btn-icon btn-sm btn-interview" title="Character Voice Rapid Tester" style="padding:2px 6px;">🎙️</button>` : ''}
               <button class="btn btn-ghost btn-icon btn-sm btn-pin-toggle" title="${isPinned ? 'Unpin' : 'Pin'}" style="padding:2px 6px;">${isPinned ? '📌' : '☆'}</button>
               <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
@@ -315,6 +332,16 @@
             </div>
           </div>
         `;
+
+        const delphiBtn = item.querySelector('.btn-vault-delphi');
+        if (delphiBtn) {
+          delphiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.DelphiModal && window.DelphiModal.open) {
+              window.DelphiModal.open(comp.id);
+            }
+          });
+        }
 
         const interviewBtn = item.querySelector('.btn-interview');
         if (interviewBtn) {
@@ -701,7 +728,7 @@
     }
 
     const cat = comp.category || compCategorySelect.value || 'character';
-    const isApplicable = cat === 'character' || cat === 'scenario';
+    const isApplicable = cat === 'character' || cat === 'scenario' || cat === 'organization';
 
     if (btnDelphi) btnDelphi.style.display = isApplicable ? 'inline-flex' : 'none';
     if (delphiCard) delphiCard.style.display = isApplicable ? 'block' : 'none';
@@ -728,7 +755,7 @@
 
       if (btnDelphi) {
         btnDelphi.innerHTML = `🔮 Delphi: <span style="color:${color}; font-weight:600; margin-left:3px;">${escapeHTML(v)}${flagSuffix}</span>`;
-        btnDelphi.title = `Delphi QA: ${v} — Click to view diagnostic report`;
+        btnDelphi.title = `Delphi QA: ${v} — Click to view diagnostic report, evidence highlights & version history`;
       }
 
       if (delphiBadge) {
@@ -739,11 +766,17 @@
 
       if (delphiMeta) {
         const dateStr = delphi.timestamp ? new Date(delphi.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Previous run';
-        delphiMeta.innerHTML = `Audited ${dateStr} via <strong>${escapeHTML(delphi.model || 'model')}</strong>`;
+        const findingsCount = Array.isArray(delphi.findings) ? delphi.findings.length : 0;
+        const historyCount = 1 + (Array.isArray(delphi.history) ? delphi.history.length : 0);
+        const hasPinned = Boolean(delphi.pinned || (Array.isArray(delphi.history) && delphi.history.some(h => h && h.pinned)));
+        const v2Sub = delphi.contentSnapshot
+          ? `<div style="margin-top:3px; color:#c084fc;">${findingsCount} risk hypothesis${findingsCount === 1 ? '' : 'es'} · ${historyCount} snapshot${historyCount === 1 ? '' : 's'}${hasPinned ? ' · 📌 Baseline' : ''}</div>`
+          : `<div style="margin-top:3px; color:#fbbf24;">Legacy v1 report · Re-run for v2 evidence &amp; failure modes</div>`;
+        delphiMeta.innerHTML = `Audited ${dateStr} via <strong>${escapeHTML(delphi.model || 'model')}</strong>${v2Sub}`;
       }
 
       if (delphiOpenBtn) {
-        delphiOpenBtn.textContent = 'View Full Report';
+        delphiOpenBtn.textContent = '🔮 View Report / Compare';
         delphiOpenBtn.className = 'btn btn-secondary btn-sm';
       }
     } else {
@@ -759,7 +792,7 @@
       }
 
       if (delphiMeta) {
-        delphiMeta.textContent = 'Audit traits, contradictions, and triggers';
+        delphiMeta.textContent = '9 Failure Modes · Verified Evidence · Version Diffs';
       }
 
       if (delphiOpenBtn) {
@@ -1922,9 +1955,10 @@
       });
     }
 
-    // Delphi QA In-Editor Actions
+    // Delphi QA In-Editor & Vault Sidebar Actions
     const btnDelphiEditor = document.getElementById('btn-delphi-editor-qa');
     const btnEditorOpenDelphi = document.getElementById('btn-editor-open-delphi');
+    const btnEditorBatchDelphi = document.getElementById('btn-editor-batch-delphi');
     const badgeEditorDelphi = document.getElementById('editor-delphi-badge');
 
     const openDelphiForCurrent = () => {
@@ -1937,11 +1971,96 @@
     btnDelphiEditor?.addEventListener('click', openDelphiForCurrent);
     btnEditorOpenDelphi?.addEventListener('click', openDelphiForCurrent);
     badgeEditorDelphi?.addEventListener('click', openDelphiForCurrent);
+    btnEditorBatchDelphi?.addEventListener('click', () => {
+      if (window.DelphiModal && window.DelphiModal.openBatchPicker) {
+        window.DelphiModal.openBatchPicker();
+      }
+    });
+
+    // Vault Sidebar Batch Delphi & Ensemble Dropdown
+    const btnVaultBatch = document.getElementById('btn-vault-batch-delphi');
+    const menuVaultBatch = document.getElementById('vault-batch-delphi-menu');
+    if (btnVaultBatch && menuVaultBatch) {
+      btnVaultBatch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuVaultBatch.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!menuVaultBatch.classList.contains('hidden') && !menuVaultBatch.contains(e.target) && e.target !== btnVaultBatch) {
+          menuVaultBatch.classList.add('hidden');
+        }
+      });
+
+      menuVaultBatch.querySelectorAll('.vault-batch-preset-item').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          menuVaultBatch.classList.add('hidden');
+          const preset = btn.dataset.preset;
+          const allComps = await window.ForgeDB.getAllComponents();
+          const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
+
+          if (preset === 'ensemble-filtered') {
+            const filteredIds = (window._currentVaultFilteredIds || []).filter(id => {
+              const c = allComps.find(x => x.id === id);
+              return c && ['character', 'scenario', 'organization', 'bio', 'initial_message'].includes(c.category);
+            });
+            if (filteredIds.length === 0) {
+              showToast('No components in current Vault filter to run Ensemble Audit.', 'info');
+              return;
+            }
+            window.DelphiModal?.openEnsemble({
+              componentIds: filteredIds,
+              title: `Filtered Vault Ensemble (${filteredIds.length} items)`,
+              scopeLabel: 'Filtered Vault Ensemble'
+            });
+            return;
+          }
+
+          let targetComps = [];
+          let title = 'Batch Delphi Audit';
+          if (preset === 'golden') {
+            targetComps = auditable.filter(c => c.isTemplate === true);
+            title = '⭐ Golden Templates Audit';
+          } else if (preset === 'modified') {
+            targetComps = auditable.filter(c => {
+              if (!c.delphi || !c.delphi.verdict) return false;
+              if (c.delphi.contentHash && window.Delphi?.computeContentHash) {
+                const liveHash = window.Delphi.computeContentHash(window.Delphi.buildComponentContentSnapshot(c));
+                return liveHash !== c.delphi.contentHash;
+              }
+              const modTime = c.modifiedAt ? new Date(c.modifiedAt).getTime() : 0;
+              const delphiTime = c.delphi.timestamp ? new Date(c.delphi.timestamp).getTime() : 0;
+              return modTime > delphiTime;
+            });
+            title = '🔄 Modified Since Last Delphi Run';
+          } else if (preset === 'unrun') {
+            targetComps = auditable.filter(c => !c.delphi || !c.delphi.verdict);
+            title = '🔮 Unrun Components Audit';
+          } else if (preset === 'filtered') {
+            const fSet = new Set(window._currentVaultFilteredIds || []);
+            targetComps = auditable.filter(c => fSet.has(c.id));
+            title = `📋 Filtered Vault List (${targetComps.length})`;
+          }
+
+          if (targetComps.length === 0) {
+            showToast(`No matching components found for "${title}". Opening Batch & Ensemble Hub...`, 'info');
+            window.DelphiModal?.openBatchPicker?.();
+            return;
+          }
+
+          window.DelphiModal?.openBatch(targetComps.map(c => c.id), title);
+        });
+      });
+    }
 
     window.addEventListener('delphi:verdict-saved', async (e) => {
       if (editingComponentId && e.detail && e.detail.id === editingComponentId) {
         const comp = await window.ForgeDB.getComponent(editingComponentId);
         if (comp) updateEditorDelphiUI(comp);
+      }
+      if (activeSidebarTab === 'vault') {
+        refreshVaultList();
       }
     });
 
