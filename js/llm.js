@@ -22,42 +22,16 @@
     }
   }
 
-  // fetch() with a timeout. AbortSignal.timeout() aborts with a
-  // TimeoutError; map it to a readable message instead of leaking a bare
-  // AbortError / TimeoutError to the caller.
-  // Pass ms === null for no timeout (plain fetch, no AbortSignal).
-  async function timedFetch(url, options, ms) {
-    try {
-      if (ms == null) return await fetch(url, options);
-      return await fetch(url, { ...options, signal: AbortSignal.timeout(ms) });
-    } catch (e) {
-      if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
-        throw new Error(`Request timed out after ${ms / 1000}s. The provider may be slow or unreachable — check the base URL and try again.`);
-      }
-      throw e;
-    }
-  }
-
-  // Whole-response timeout for a generation call. PR #3 gave every provider
-  // a flat 30s cap, which broke local generation outright: a Delphi report
-  // asks for up to 8,192 tokens, and a local model (Qwen3-30B, GLM) can
-  // legitimately take minutes for that — before PR #3 there was no timeout
-  // and slow local runs completed. So:
-  // - Local endpoints (Ollama / LM Studio / Kobold, or any provider whose
-  //   resolved URL is localhost) get NO timeout — the model runs on the
-  //   user's own machine, a hang costs nothing but time, and any fixed cap
-  //   risks re-breaking slow local runs the same way.
-  // - Cloud providers get 120s (up from 30s): an 8,192-token Delphi report
-  //   can take over 30s even on a fast API, but a genuinely hung cloud
-  //   request should still fail instead of hanging forever.
-  function generationTimeoutMs(provider, url) {
-    if (['ollama', 'lmstudio', 'kobold'].includes(provider)) return null;
-    try {
-      const host = new URL(url).hostname.toLowerCase();
-      if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return null;
-    } catch (_) { /* unparseable URL: fall through to the cloud timeout */ }
-    return 120000;
-  }
+  // NOTE: generation calls deliberately have NO whole-response timeout.
+  // PR #3 added a flat 30s cap, which broke every slow provider outright;
+  // PR #4 exempted local providers and raised cloud to 120s, and GLM on
+  // Chutes still timed out on a full 8,192-token Delphi report. A Delphi
+  // report's generation time is legitimately unbounded — it depends on the
+  // provider's speed, queueing, and reasoning length — so any fixed cap
+  // will eventually kill a legitimate slow run. The response is bounded
+  // by maxTokens instead, and a genuinely hung request can be reloaded
+  // past. Do not re-add a whole-response timeout here without a per-call
+  // way to distinguish "slow" from "hung".
 
   /**
    * Generates text using the configured provider.
@@ -103,11 +77,11 @@
         };
       }
 
-      const resp = await timedFetch(url, {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify(body)
-      }, generationTimeoutMs(provider, url));
+      });
 
       if (!resp.ok) {
         let errMsg = resp.statusText;
@@ -219,11 +193,11 @@
       // the browser blocks them outright — fail with a specific message.
       assertNoMixedContent(url);
 
-      const resp = await timedFetch(url, {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(body)
-      }, generationTimeoutMs(provider, url));
+      });
 
       if (!resp.ok) {
         let errMsg = resp.statusText;
@@ -253,7 +227,7 @@
         content: m.content
       }));
 
-      const resp = await timedFetch(url, {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: {
           'x-api-key': key,
@@ -268,7 +242,7 @@
           messages: messages,
           temperature: config.temperature ?? 0.8
         })
-      }, generationTimeoutMs(provider, url));
+      });
 
       if (!resp.ok) {
         let errMsg = resp.statusText;
@@ -299,7 +273,7 @@
 
       assertNoMixedContent(url);
 
-      const resp = await timedFetch(url, {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -308,7 +282,7 @@
           max_length: 512,
           temperature: config.temperature ?? 0.8
         })
-      }, generationTimeoutMs(provider, url));
+      });
 
       if (!resp.ok) {
         const errText = await resp.text();
