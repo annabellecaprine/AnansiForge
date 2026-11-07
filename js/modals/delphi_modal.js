@@ -39,6 +39,15 @@
   let activeEnsembleRerunFn = null;
   let activeEnsembleLensFilter = 'ALL';
 
+  // Ensemble Hub rebuild state (piecemeal picker + Project + extras).
+  // Kept in module scope so returning from the pre-run "trim the set" gate
+  // restores the user's selection instead of wiping it.
+  let hubEnsembleState = null;   // { projectId, project, pickedIds:Set, extraIds:Set }
+  let hubEnsembleAllComps = [];
+  let hubEnsembleProjects = [];
+  let hubEnsemblePickerFilter = { search: '', universe: '', faction: '' };
+  let pendingEnsembleSplits = []; // queued remaining halves of D2 split runs
+
   function getSecondaryConfig() {
     return window.ForgeLLM && window.ForgeLLM.getSecondaryConfig ? window.ForgeLLM.getSecondaryConfig() : null;
   }
@@ -1940,6 +1949,114 @@
   // PHASE 4: ENSEMBLE & PROJECT REPORTING MODAL (With Coverage Manifest)
   // ============================================================================
 
+  // --- Ensemble Hub rebuild helpers ---
+
+  // Fallback field mapping for piecemeal sets (mirrors
+  // ProjectAssembler.mappingForCategory; used when the Assembler is not
+  // loaded or the set has no Project supplying its own mappings).
+  function ensembleMappingForCategory(category) {
+    switch (String(category || 'character').toLowerCase()) {
+      case 'character':
+      case 'organization':
+        return 'personality';
+      case 'scenario':
+        return 'scenario';
+      case 'bio':
+        return 'description';
+      case 'initial_message':
+        return 'first_mes';
+      default:
+        return 'personality';
+    }
+  }
+
+  // Build the mappings object for a set. A base Project's own mappings win
+  // for its members; everything else gets its category default.
+  function ensembleMappingsForComponents(comps, project) {
+    const mappings = {};
+    const fromAssembler = window.ProjectAssembler && typeof window.ProjectAssembler.mappingForCategory === 'function'
+      ? (cat) => window.ProjectAssembler.mappingForCategory(cat)
+      : ensembleMappingForCategory;
+    comps.forEach(c => {
+      if (!c || !c.id) return;
+      if (project && project.mappings && project.mappings[c.id]) {
+        mappings[c.id] = project.mappings[c.id];
+      } else {
+        mappings[c.id] = fromAssembler(c.category);
+      }
+    });
+    return mappings;
+  }
+
+  function hubEnsembleEnsureState() {
+    if (!hubEnsembleState) {
+      hubEnsembleState = { projectId: null, project: null, pickedIds: new Set(), extraIds: new Set() };
+    }
+    return hubEnsembleState;
+  }
+
+  function hubEnsembleReset() {
+    hubEnsembleState = null;
+    hubEnsemblePickerFilter = { search: '', universe: '', faction: '' };
+  }
+
+  // Live token estimate for the picker (chars / 4, same heuristic as the engine).
+  function hubEnsembleTokenEstimate(comps) {
+    return comps.reduce((sum, c) => sum + Math.max(1, Math.ceil(String(c.content || '').length / 4)), 0);
+  }
+
+  // D3: save an Ensemble run to the lightweight separate store. Never writes
+  // onto comp.delphi. Failures are logged, never surfaced to the user as a
+  // run failure — the report itself is already in hand.
+  async function saveEnsembleRunRecord(res, meta = {}) {
+    try {
+      if (!window.ForgeDB || typeof window.ForgeDB.saveEnsembleRun !== 'function') return null;
+      return await window.ForgeDB.saveEnsembleRun({
+        runId: res.runId || null,
+        ensembleName: res.ensembleName || meta.title || 'Ensemble',
+        mode: res.mode || meta.mode || 'assembled',
+        setSource: meta.setSource || 'piecemeal',
+        baseProjectId: meta.projectId || null,
+        storyId: meta.storyId || null,
+        componentIds: (meta.componentIds || []).slice(),
+        extraIds: (meta.extraIds || []).slice(),
+        timestamp: res.timestamp || new Date().toISOString(),
+        model: res.model || 'unknown',
+        provider: res.provider || 'unknown',
+        coverage: res.coverage || null,
+        gateChoice: meta.gateChoice || null,
+        flags: res.flags || [],
+        convergenceRisks: res.convergenceRisks || [],
+        resolvedByContext: res.resolvedByContext || [],
+        report: res.report || ''
+      });
+    } catch (err) {
+      console.warn('[DelphiModal] Could not save Ensemble run record:', err);
+      return null;
+    }
+  }
+
+  // D2 split: divide a set into two halves by token count so each half has a
+  // chance of fitting the budget. Returns [firstHalfCfg, secondHalfCfg].
+  function splitEnsembleConfig(cfg) {
+    const comps = cfg.components || [];
+    const tokens = comps.map(c => Math.max(1, Math.ceil(String(c.content || '').length / 4)));
+    const total = tokens.reduce((a, b) => a + b, 0);
+    let acc = 0;
+    let cut = 1;
+    for (let i = 0; i < comps.length; i++) {
+      acc += tokens[i];
+      if (i < comps.length - 1 && acc >= total / 2) { cut = i + 1; break; }
+    }
+    const half = (list) => ({
+      ...cfg,
+      components: list,
+      title: `${cfg.title || 'Ensemble Audit'}`,
+      gateChoice: null
+    });
+    return [half(comps.slice(0, cut)), half(comps.slice(cut))];
+  }
+
   async function openEnsemble(ensembleOrConfig, rerunCallback = null) {
     if (!ensembleOrConfig) return;
     ensureModalDOM();
@@ -1951,11 +2068,27 @@
       if (!Array.isArray(comps) && Array.isArray(ensembleOrConfig.componentIds)) {
         comps = (await Promise.all(ensembleOrConfig.componentIds.map(id => window.ForgeDB.getComponent(id)))).filter(Boolean);
       }
+      // Step 1: thread the caller's real mappings / contentOverrides / mode
+      // through to the pre-run — never drop them here (the old code passed
+      // none of these, so the pre-run and the run both fell back to
+      // mappings {} and a hardcoded 'faction' mode).
+      const mappings = ensembleOrConfig.mappings
+        || ensembleMappingsForComponents(comps || [], ensembleOrConfig.project || null);
       renderEnsemblePreRun({
         components: comps || [],
+        mappings,
         relationships: ensembleOrConfig.relationships || [],
+        contentOverrides: ensembleOrConfig.contentOverrides || {},
+        mode: ensembleOrConfig.mode || 'assembled',
         title: ensembleOrConfig.title || ensembleOrConfig.ensembleName || 'Ensemble Audit',
-        scopeLabel: ensembleOrConfig.scopeLabel || 'Ensemble'
+        scopeLabel: ensembleOrConfig.scopeLabel || 'Ensemble',
+        ensembleName: ensembleOrConfig.ensembleName || ensembleOrConfig.title || 'Ensemble Audit',
+        universeName: ensembleOrConfig.universeName || '',
+        project: ensembleOrConfig.project || null,
+        projectId: ensembleOrConfig.projectId || (ensembleOrConfig.project && ensembleOrConfig.project.id) || null,
+        extraIds: ensembleOrConfig.extraIds || [],
+        setSource: ensembleOrConfig.setSource || 'piecemeal',
+        storyId: ensembleOrConfig.storyId || null
       });
       return;
     }
@@ -1973,8 +2106,23 @@
     if (!body || !footer) return;
 
     const comps = cfg.components || [];
-    const cov = window.Delphi.computeEnsembleCoverage({ stagedComponents: comps, mappings: {}, relationships: cfg.relationships || [], contentOverrides: {} });
+    // Step 1 (fixed): the pre-run now uses the caller's real mappings,
+    // relationships and contentOverrides — the old code passed mappings {}
+    // and contentOverrides {} here, so Scenario/Bio/Initial Message items
+    // were mislabeled and any Assembler overrides were silently dropped.
+    const cov = window.Delphi.computeEnsembleCoverage({ stagedComponents: comps, mappings: cfg.mappings || {}, relationships: cfg.relationships || [], contentOverrides: cfg.contentOverrides || {} });
     const isPartial = cov.status === 'partial';
+    const extraIdSet = new Set(cfg.extraIds || []);
+    const setSourceLabel = cfg.setSource === 'project'
+      ? `Project${cfg.project ? `: ${cfg.project.name}` : ''}`
+      : cfg.setSource === 'project+extras'
+        ? `Project + extras${cfg.project ? `: ${cfg.project.name}` : ''}`
+        : cfg.setSource === 'story'
+          ? 'Story Hub'
+          : cfg.setSource === 'assembler'
+            ? 'Project Assembler'
+            : 'Piecemeal picker';
+    const modeLabel = cfg.mode === 'faction' ? 'Universe / Faction' : 'Assembled Bot Card';
 
     setModalHeader(
       `🎭 ${escapeHTML(cfg.title || 'Holistic Ensemble Audit')}`,
@@ -1991,7 +2139,21 @@
             ? `<span style="color:#fbbf24; font-weight:600;">⚠️ Partial Coverage (${cov.included.length} full, ${cov.truncated.length} truncated, ${cov.omitted.length} omitted — ${cov.estimatedInputTokens} / ${cov.effectiveInputBudgetTokens} tokens)</span>`
             : `<span style="color:#4ade80; font-weight:600;">✓ Full Coverage (${cov.included.length} components fit in full — ~${cov.estimatedInputTokens} tokens)</span>`}
         </div>
+        <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:4px;">
+          <strong>Mode:</strong> ${escapeHTML(modeLabel)} · <strong>Set:</strong> ${escapeHTML(setSourceLabel)}
+        </div>
+        ${cfg.splitLabel ? `<div style="font-size:0.78rem; color:#38bdf8; margin-top:4px;"><strong>Split run:</strong> ${escapeHTML(cfg.splitLabel)}</div>` : ''}
       </div>
+
+      ${isPartial && !cfg.gateChoice ? `
+      <div style="padding:12px 16px; border-radius:8px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; margin-bottom:12px;">
+        <div style="font-size:0.88rem; font-weight:700; margin-bottom:4px;">⚠️ This set exceeds the context budget — choose how to proceed (D2 gate)</div>
+        <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.5;">
+          Nothing is truncated silently. <strong>Run anyway</strong> runs with the truncated/omitted items named in the report.
+          <strong>Back to picker</strong> returns to the Hub so you can trim the set (your selection is kept).
+          <strong>Split into two runs</strong> divides the set in half by token count and queues the second half after this one.
+        </div>
+      </div>` : ''}
 
       <div style="max-height:280px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; background:rgba(0,0,0,0.2);">
         <div style="font-size:0.76rem; font-weight:700; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase;">
@@ -2006,6 +2168,8 @@
               <span style="color:var(--text-muted); margin-right:6px;">${idx + 1}.</span>
               <strong style="color:var(--text-primary);">${escapeHTML(c.name)}</strong>
               <span style="font-size:0.72rem; color:var(--text-muted); margin-left:6px;">(${escapeHTML(c.category || 'character')})</span>
+              <span style="font-size:0.72rem; color:var(--text-muted); margin-left:6px;">→ ${escapeHTML(c.mappedField || '—')}</span>
+              ${extraIdSet.has(c.id) ? `<span style="font-size:0.68rem; padding:1px 6px; border-radius:4px; background:rgba(56,189,248,0.15); color:#38bdf8; margin-left:6px;">EXTRA</span>` : ''}
             </div>
             <span style="font-size:0.75rem; font-weight:600; color:${c.covColor};">${escapeHTML(c.covTag)}</span>
           </div>
@@ -2013,45 +2177,95 @@
       </div>
     `;
 
+    // D2 coverage gate: when partial and no choice has been made yet, the
+    // Run button is replaced by the three explicit choices. Never silently
+    // truncate, never silently raise the budget.
+    const gateNeeded = isPartial && !cfg.gateChoice;
+    const affectedCount = (cov.truncated || []).length + (cov.omitted || []).length;
     footer.innerHTML = `
-      <button id="btn-delphi-ens-prerun-cancel" class="btn btn-ghost">Cancel</button>
-      <button id="btn-delphi-ens-prerun-start" class="btn btn-primary" ${comps.length === 0 ? 'disabled' : ''}>▶ Run Holistic Ensemble Audit (${comps.length})</button>
+      <button id="btn-delphi-ens-prerun-cancel" class="btn btn-ghost">${cfg.returnToHub ? '← Back to picker (trim the set)' : 'Cancel'}</button>
+      ${gateNeeded ? `
+        <button id="btn-delphi-ens-gate-truncated" class="btn btn-secondary">Run anyway — truncated (${affectedCount} affected)</button>
+        <button id="btn-delphi-ens-gate-split" class="btn btn-secondary">Split into two runs</button>
+      ` : `
+        <button id="btn-delphi-ens-prerun-start" class="btn btn-primary" ${comps.length === 0 ? 'disabled' : ''}>▶ Run Holistic Ensemble Audit (${comps.length})</button>
+      `}
     `;
 
-    document.getElementById('btn-delphi-ens-prerun-cancel')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-ens-prerun-cancel')?.addEventListener('click', () => {
+      if (cfg.returnToHub) openBatchPicker();
+      else closeModal();
+    });
+
+    const executeEns = async (gateChoice) => {
+      isRunning = true;
+      body.innerHTML = `
+        <div style="text-align:center; padding:48px 20px;">
+          <div class="delphi-spinner"></div>
+          <h4 style="margin:16px 0 8px 0; color:var(--text-primary);">Running Holistic Ensemble Diagnostic (${comps.length} items)…</h4>
+          <p style="margin:0; font-size:0.84rem; color:var(--text-muted);">
+            Evaluating cross-character voice overlap, spotlight competition risks, relationship consistency, and shared Org/Scenario context.
+          </p>
+        </div>
+      `;
+      footer.innerHTML = '';
+      try {
+        // Step 1 (fixed): the run now receives the caller's real mappings,
+        // relationships, contentOverrides and mode — the old code passed
+        // none of these and hardcoded mode 'faction'.
+        const res = await window.Delphi.diagnoseEnsemble({
+          stagedComponents: comps,
+          mappings: cfg.mappings || {},
+          relationships: cfg.relationships || [],
+          contentOverrides: cfg.contentOverrides || {},
+          ensembleName: cfg.ensembleName || cfg.title || 'Ensemble Audit',
+          universeName: cfg.universeName || '',
+          mode: cfg.mode || 'assembled'
+        });
+        isRunning = false;
+        // Modal-level run metadata (not engine fields), for the D3 record.
+        res.setSource = cfg.setSource || 'piecemeal';
+        res.baseProjectId = cfg.projectId || null;
+        res.extraIds = (cfg.extraIds || []).slice();
+        res.componentIds = comps.map(c => c.id);
+        res.gateChoice = gateChoice || null;
+        await saveEnsembleRunRecord(res, {
+          setSource: res.setSource,
+          projectId: res.baseProjectId,
+          extraIds: res.extraIds,
+          componentIds: res.componentIds,
+          gateChoice: res.gateChoice,
+          mode: res.mode,
+          storyId: cfg.storyId || null,
+          title: cfg.title
+        });
+        activeEnsembleResult = res;
+        activeEnsembleRerunFn = () => executeEns(gateChoice);
+        activeEnsembleLensFilter = 'ALL';
+        renderEnsembleReport(res);
+      } catch (err) {
+        isRunning = false;
+        body.innerHTML = `<div class="delphi-warning-banner">🛑 Ensemble Audit Failed: ${escapeHTML(err.message || err)}</div>`;
+        footer.innerHTML = `<button id="btn-delphi-ens-err-close" class="btn btn-secondary">Close</button>`;
+        document.getElementById('btn-delphi-ens-err-close')?.addEventListener('click', closeModal);
+      }
+    };
+
     document.getElementById('btn-delphi-ens-prerun-start')?.addEventListener('click', async () => {
-      const executeEns = async () => {
-        isRunning = true;
-        body.innerHTML = `
-          <div style="text-align:center; padding:48px 20px;">
-            <div class="delphi-spinner"></div>
-            <h4 style="margin:16px 0 8px 0; color:var(--text-primary);">Running Holistic Ensemble Diagnostic (${comps.length} items)…</h4>
-            <p style="margin:0; font-size:0.84rem; color:var(--text-muted);">
-              Evaluating cross-character voice overlap, spotlight competition risks, relationship consistency, and shared Org/Scenario context.
-            </p>
-          </div>
-        `;
-        footer.innerHTML = '';
-        try {
-          const res = await window.Delphi.diagnoseEnsemble({
-            stagedComponents: comps,
-            relationships: cfg.relationships || [],
-            ensembleName: cfg.title || 'Ensemble Audit',
-            mode: 'faction'
-          });
-          isRunning = false;
-          activeEnsembleResult = res;
-          activeEnsembleRerunFn = executeEns;
-          activeEnsembleLensFilter = 'ALL';
-          renderEnsembleReport(res);
-        } catch (err) {
-          isRunning = false;
-          body.innerHTML = `<div class="delphi-warning-banner">🛑 Ensemble Audit Failed: ${escapeHTML(err.message || err)}</div>`;
-          footer.innerHTML = `<button id="btn-delphi-ens-err-close" class="btn btn-secondary">Close</button>`;
-          document.getElementById('btn-delphi-ens-err-close')?.addEventListener('click', closeModal);
-        }
-      };
-      await executeEns();
+      await executeEns(cfg.gateChoice || (isPartial ? 'truncated' : 'full'));
+    });
+    document.getElementById('btn-delphi-ens-gate-truncated')?.addEventListener('click', async () => {
+      await executeEns('truncated');
+    });
+    document.getElementById('btn-delphi-ens-gate-split')?.addEventListener('click', () => {
+      const [first, second] = splitEnsembleConfig(cfg);
+      // Queue (not a single slot): splitting a half again must not drop a
+      // half that is already queued.
+      pendingEnsembleSplits.push({ ...second, splitLabel: 'Split run — remaining half of the set.' });
+      renderEnsemblePreRun({
+        ...first,
+        splitLabel: 'Split run — a remaining half is queued and will be offered after this run completes.'
+      });
     });
   }
 
@@ -2071,6 +2285,8 @@
     const flags = Array.isArray(ens.flags) ? ens.flags : [];
     const spotlightRisks = Array.isArray(ens.spotlightRisks) ? ens.spotlightRisks : [];
     const voiceOverlaps = Array.isArray(ens.voiceOverlaps) ? ens.voiceOverlaps : [];
+    const convergenceRisks = Array.isArray(ens.convergenceRisks) ? ens.convergenceRisks : [];
+    const resolvedByContext = Array.isArray(ens.resolvedByContext) ? ens.resolvedByContext : [];
 
     // Coverage Banner (Honest reporting of diagnostic coverage)
     const covBannerStyle = isPartial
@@ -2137,9 +2353,9 @@
       </details>
     `;
 
-    // Spotlight Competition Risks & Voice Overlaps Summary Cards
+    // Spotlight Competition Risks, Voice Overlaps, Convergence & Resolved-by-Context Cards
     let ensembleSpecialCardsHTML = '';
-    if (spotlightRisks.length > 0 || voiceOverlaps.length > 0) {
+    if (spotlightRisks.length > 0 || voiceOverlaps.length > 0 || convergenceRisks.length > 0 || resolvedByContext.length > 0) {
       ensembleSpecialCardsHTML = `
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:10px;">
           ${spotlightRisks.length > 0 ? `
@@ -2165,6 +2381,35 @@
                   <div style="font-weight:600; color:var(--text-primary);">${escapeHTML((vo.characters || []).join(' ↔ '))}</div>
                   <div style="color:var(--text-secondary); margin-top:2px;"><strong>Shared Hooks:</strong> ${escapeHTML(vo.sharedTraits)}</div>
                   ${vo.suggestion ? `<div style="color:#86efac; margin-top:2px;"><strong>Differentiation:</strong> ${escapeHTML(vo.suggestion)}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>` : ''}
+          ${convergenceRisks.length > 0 ? `
+            <div style="padding:10px 14px; border-radius:6px; border:1px solid rgba(192,132,252,0.4); background:rgba(192,132,252,0.07);">
+              <div style="font-size:0.8rem; font-weight:700; color:#c084fc; margin-bottom:6px;">
+                🌀 Convergence Risks (${convergenceRisks.length})
+              </div>
+              ${convergenceRisks.map(cr => `
+                <div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed rgba(192,132,252,0.2); font-size:0.78rem;">
+                  <div style="font-weight:600; color:var(--text-primary);">${escapeHTML((cr.characters || []).join(' ↔ '))}</div>
+                  ${cr.sharedBehaviour ? `<div style="color:#e9d5ff; margin-top:2px;"><strong>Shared behaviour:</strong> ${escapeHTML(cr.sharedBehaviour)}</div>` : ''}
+                  ${cr.hypothesis ? `<div style="color:var(--text-secondary); margin-top:2px;">${escapeHTML(cr.hypothesis)}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>` : ''}
+          ${resolvedByContext.length > 0 ? `
+            <div style="padding:10px 14px; border-radius:6px; border:1px solid rgba(74,222,128,0.4); background:rgba(74,222,128,0.07);">
+              <div style="font-size:0.8rem; font-weight:700; color:#4ade80; margin-bottom:6px;">
+                ✅ Flags Resolved by Context (${resolvedByContext.length})
+              </div>
+              <div style="font-size:0.74rem; color:var(--text-muted); margin-bottom:6px;">
+                Single-component flags this set's shared context resolves. The originals are untouched — this only annotates what the set explains.
+              </div>
+              ${resolvedByContext.map(r => `
+                <div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed rgba(74,222,128,0.2); font-size:0.78rem;">
+                  <div style="font-weight:600; color:var(--text-primary);">${escapeHTML(r.flagSummary || 'Prior flag')}</div>
+                  ${r.resolvedBy ? `<div style="color:#fde68a; margin-top:2px;"><strong>Resolved by:</strong> <span style="font-style:italic;">"${escapeHTML(r.resolvedBy)}"</span></div>` : ''}
+                  ${r.note ? `<div style="color:var(--text-secondary); margin-top:2px;">${escapeHTML(r.note)}</div>` : ''}
                 </div>
               `).join('')}
             </div>` : ''}
@@ -2243,10 +2488,15 @@
     footer.innerHTML = `
       <button id="btn-delphi-ens-copy" class="btn btn-secondary">📋 Copy Ensemble Report</button>
       ${activeEnsembleRerunFn ? `<button id="btn-delphi-ens-rerun" class="btn btn-secondary">🔁 Re-run Ensemble Audit</button>` : ''}
+      ${pendingEnsembleSplits.length > 0 ? `<button id="btn-delphi-ens-run-half2" class="btn btn-secondary">▶ Run next half (${(pendingEnsembleSplits[0].components || []).length} items)</button>` : ''}
       <button id="btn-delphi-close" class="btn btn-primary">Close</button>
     `;
 
     document.getElementById('btn-delphi-close')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-ens-run-half2')?.addEventListener('click', () => {
+      const second = pendingEnsembleSplits.shift();
+      if (second) openEnsemble(second);
+    });
     body.querySelectorAll('.delphi-ens-lens-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         activeEnsembleLensFilter = e.currentTarget.getAttribute('data-lens') || 'ALL';
@@ -2308,6 +2558,144 @@
     }
   }
 
+  // --- Ensemble Hub picker (Projects + piecemeal, steps 2–4) ---
+
+  function hubEnsemblePickedComps() {
+    const state = hubEnsembleEnsureState();
+    return hubEnsembleAllComps.filter(c => state.pickedIds.has(c.id));
+  }
+
+  function hubEnsembleRecomputeExtras() {
+    const state = hubEnsembleEnsureState();
+    const projectIds = new Set((state.project && Array.isArray(state.project.componentIds)) ? state.project.componentIds : []);
+    state.extraIds = new Set([...state.pickedIds].filter(id => state.projectId && !projectIds.has(id)));
+  }
+
+  function renderEnsembleHubPicker() {
+    const projectsEl = document.getElementById('ens-projects-list');
+    const groupsEl = document.getElementById('ens-picker-groups');
+    if (!projectsEl || !groupsEl) return;
+    const state = hubEnsembleEnsureState();
+
+    // Projects list (step 2) — a Project is a whole set, grabbed as-is.
+    if (hubEnsembleProjects.length === 0) {
+      projectsEl.innerHTML = `<div style="font-size:0.78rem; color:var(--text-muted);">No Projects yet — create one in the Project Assembler, or pick items piecemeal below.</div>`;
+    } else {
+      projectsEl.innerHTML = hubEnsembleProjects.map(p => {
+        const ids = Array.isArray(p.componentIds) ? p.componentIds : [];
+        const members = hubEnsembleAllComps.filter(c => ids.includes(c.id));
+        const byCat = {};
+        members.forEach(c => { byCat[c.category || 'character'] = (byCat[c.category || 'character'] || 0) + 1; });
+        const compLine = Object.entries(byCat).map(([k, v]) => `${v} ${k}${v === 1 ? '' : 's'}`).join(' · ') || 'no members';
+        const selected = state.projectId === p.id;
+        return `<button type="button" class="ens-project-row" data-project-id="${escapeHTML(p.id)}" style="text-align:left; width:100%; padding:8px 10px; border-radius:6px; border:1px solid ${selected ? '#38bdf8' : 'var(--border-color)'}; background:${selected ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.02)'}; color:var(--text-primary); cursor:pointer;">
+          <span style="font-size:0.84rem; font-weight:600;">${selected ? '✓ ' : ''}${escapeHTML(p.name || 'Untitled Project')}</span>
+          <span style="display:block; font-size:0.72rem; color:var(--text-muted); margin-top:2px;">${members.length} item${members.length === 1 ? '' : 's'} — ${escapeHTML(compLine)}</span>
+        </button>`;
+      }).join('');
+      projectsEl.querySelectorAll('.ens-project-row').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pid = btn.dataset.projectId;
+          const st = hubEnsembleEnsureState();
+          if (st.projectId === pid) {
+            // Deselect: keep the picked items as a piecemeal set.
+            st.projectId = null;
+            st.project = null;
+          } else {
+            const project = hubEnsembleProjects.find(p => p.id === pid) || null;
+            st.projectId = pid;
+            st.project = project;
+            st.pickedIds = new Set((project && Array.isArray(project.componentIds)) ? project.componentIds : []);
+          }
+          hubEnsembleRecomputeExtras();
+          renderEnsembleHubPicker();
+          updateEnsembleHubManifest();
+        });
+      });
+    }
+
+    // Piecemeal picker groups (step 3). Bio is listed but unchecked by
+    // default (D1) — the user adds it explicitly by ticking the box.
+    const filter = hubEnsemblePickerFilter;
+    const q = filter.search.trim().toLowerCase();
+    const pickable = hubEnsembleAllComps.filter(c => ['character', 'scenario', 'organization', 'initial_message', 'bio'].includes(c.category || 'character'))
+      .filter(c => !q || String(c.name || '').toLowerCase().includes(q))
+      .filter(c => !filter.universe || (c.tracker?.universe || c.universe || '').trim() === filter.universe)
+      .filter(c => !filter.faction || (c.tracker?.faction || c.faction || '').trim() === filter.faction);
+    const groups = [
+      { key: 'character', label: 'Characters', note: '' },
+      { key: 'scenario', label: 'Scenarios', note: '' },
+      { key: 'organization', label: 'Organizations', note: '' },
+      { key: 'initial_message', label: 'Initial Messages', note: '' },
+      { key: 'bio', label: 'Bios', note: '(default out of Ensemble — add explicitly)' }
+    ];
+    groupsEl.innerHTML = groups.map(g => {
+      const items = pickable.filter(c => (c.category || 'character') === g.key);
+      if (items.length === 0) return '';
+      return `<div style="margin-bottom:8px;">
+        <div style="font-size:0.74rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">${g.label} (${items.length}) ${g.note ? `<span style="font-weight:400; text-transform:none;">${escapeHTML(g.note)}</span>` : ''}</div>
+        ${items.map(c => {
+          const checked = state.pickedIds.has(c.id);
+          const tokens = Math.max(1, Math.ceil(String(c.content || '').length / 4));
+          return `<label style="display:flex; align-items:center; gap:6px; padding:3px 0; font-size:0.82rem; cursor:pointer;">
+            <input type="checkbox" class="ens-picker-check" data-comp-id="${escapeHTML(c.id)}" ${checked ? 'checked' : ''} />
+            <span style="color:var(--text-primary);">${escapeHTML(c.name || 'Untitled')}</span>
+            <span style="font-size:0.72rem; color:var(--text-muted);">~${tokens}t</span>
+          </label>`;
+        }).join('')}
+      </div>`;
+    }).join('') || `<div style="font-size:0.78rem; color:var(--text-muted);">No components match the current filters.</div>`;
+    groupsEl.querySelectorAll('.ens-picker-check').forEach(box => {
+      box.addEventListener('change', () => {
+        const st = hubEnsembleEnsureState();
+        const id = box.dataset.compId;
+        if (box.checked) st.pickedIds.add(id);
+        else st.pickedIds.delete(id);
+        hubEnsembleRecomputeExtras();
+        updateEnsembleHubManifest();
+      });
+    });
+
+    updateEnsembleHubManifest();
+  }
+
+  function updateEnsembleHubManifest() {
+    const manifestEl = document.getElementById('ens-manifest');
+    const tokenEl = document.getElementById('ens-token-est');
+    const modeEl = document.getElementById('ens-mode-label');
+    const runBtn = document.getElementById('btn-delphi-hub-run-ensemble');
+    if (!manifestEl) return;
+    const state = hubEnsembleEnsureState();
+    const picked = hubEnsemblePickedComps();
+    const tokens = hubEnsembleTokenEstimate(picked);
+    const projectIds = new Set((state.project && Array.isArray(state.project.componentIds)) ? state.project.componentIds : []);
+
+    manifestEl.innerHTML = picked.length === 0
+      ? `<div style="color:var(--text-muted);">Nothing selected yet.</div>`
+      : picked.map((c, idx) => {
+          const isExtra = Boolean(state.projectId) && !projectIds.has(c.id);
+          const mapped = state.project && state.project.mappings && state.project.mappings[c.id]
+            ? state.project.mappings[c.id]
+            : ensembleMappingForCategory(c.category);
+          return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed rgba(255,255,255,0.06);">
+            <span><span style="color:var(--text-muted); margin-right:6px;">${idx + 1}.</span><strong style="color:var(--text-primary);">${escapeHTML(c.name || 'Untitled')}</strong>
+            <span style="font-size:0.72rem; color:var(--text-muted); margin-left:6px;">(${escapeHTML(c.category || 'character')} → ${escapeHTML(mapped)})</span>
+            ${isExtra ? `<span style="font-size:0.68rem; padding:1px 6px; border-radius:4px; background:rgba(56,189,248,0.15); color:#38bdf8; margin-left:6px;">EXTRA</span>` : ''}</span>
+          </div>`;
+        }).join('');
+
+    if (tokenEl) {
+      const over = tokens > 16000;
+      tokenEl.innerHTML = `${picked.length} item${picked.length === 1 ? '' : 's'} · ~${tokens.toLocaleString()} tokens${over ? ` <span style="color:#fbbf24; font-weight:600;">— over the 16,000 budget, the coverage gate will ask before running</span>` : ''}`;
+    }
+    if (modeEl) {
+      modeEl.textContent = state.projectId
+        ? (state.extraIds.size > 0 ? `Project + ${state.extraIds.size} extra${state.extraIds.size === 1 ? '' : 's'} (test-only)` : 'Whole Project')
+        : 'Piecemeal set';
+    }
+    if (runBtn) runBtn.disabled = picked.length === 0;
+  }
+
   /**
    * Interactive Batch & Ensemble QA Hub — accessible from anywhere in the app
    */
@@ -2325,6 +2713,15 @@
     );
 
     const allComps = await window.ForgeDB.getAllComponents();
+
+    // Ensemble Hub rebuild data: full component list + Projects for the picker.
+    hubEnsembleAllComps = allComps;
+    try {
+      hubEnsembleProjects = await window.ForgeDB.getAllProjects();
+    } catch (e) {
+      hubEnsembleProjects = [];
+    }
+    hubEnsembleEnsureState();
     const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
     const goldenComps = auditable.filter(c => c.isTemplate === true || c.tracker?.pipeline?.goldenTemplate === true);
     const modifiedComps = auditable.filter(c => {
@@ -2344,7 +2741,6 @@
     // Extract distinct Universes and Factions for Ensemble Audit
     const universes = [...new Set(allComps.map(c => (c.tracker?.universe || c.universe || '').trim()).filter(Boolean))].sort();
     const factions = [...new Set(allComps.map(c => (c.tracker?.faction || c.faction || '').trim()).filter(Boolean))].sort();
-    const lineages = [...new Set(allComps.map(c => (c.lineage || '').trim()).filter(Boolean))].sort();
 
     body.innerHTML = `
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:16px;">
@@ -2380,39 +2776,49 @@
           </div>
         </div>
 
-        <!-- Phase 4: Holistic Ensemble & Project Reporting Card -->
+        <!-- Ensemble Hub rebuild: Projects + piecemeal picker (no preset scopes) -->
         <div style="padding:16px; border:1px solid rgba(56,189,248,0.4); border-radius:8px; background:rgba(56,189,248,0.05); display:flex; flex-direction:column; gap:12px;">
           <div>
-            <h4 style="margin:0 0 4px 0; font-size:0.98rem; color:#38bdf8;">🎭 Holistic Ensemble &amp; Universe Audit</h4>
+            <h4 style="margin:0 0 4px 0; font-size:0.98rem; color:#38bdf8;">🎭 Ensemble QA — the set in front of you</h4>
             <p style="margin:0; font-size:0.78rem; color:var(--text-secondary); line-height:1.45;">
-              Evaluates multiple characters, organizations, and scenarios <strong>together</strong> in a single holistic pass for Voice Overlap, Spotlight Competition Risk, Relationship Distortion, and Canon Coherence—with an explicit Coverage Manifest.
+              Pick the exact set to test <strong>together</strong> — a whole Project, or items piecemeal. Items added on top of a Project are test-only extras, never written back to it. One holistic pass: Voice Overlap, Spotlight Competition Risk, Relationship Distortion, Canon Coherence, Convergence, and flags the set's context resolves — with an explicit Coverage Manifest.
             </p>
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
-            <div>
-              <label style="display:block; font-size:0.76rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Select Ensemble Scope:</label>
-              <select id="delphi-hub-ensemble-scope" class="form-control" style="width:100%; font-size:0.82rem; padding:7px 10px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px;">
-                <option value="filtered">📋 Current Filtered Vault View (${filteredAuditable.length} items)</option>
-                <option value="golden">⭐ All Golden Templates (${goldenComps.length} items)</option>
-                ${factions.map(f => {
-                  const cnt = allComps.filter(c => (c.tracker?.faction || c.faction || '').trim() === f).length;
-                  return `<option value="faction:${escapeHTML(f)}">🛡️ Faction: ${escapeHTML(f)} (${cnt} items)</option>`;
-                }).join('')}
-                ${universes.map(u => {
-                  const cnt = allComps.filter(c => (c.tracker?.universe || c.universe || '').trim() === u).length;
-                  return `<option value="universe:${escapeHTML(u)}">🌌 Universe: ${escapeHTML(u)} (${cnt} items)</option>`;
-                }).join('')}
-                ${lineages.map(l => {
-                  const cnt = allComps.filter(c => (c.lineage || '').trim() === l).length;
-                  return `<option value="lineage:${escapeHTML(l)}">🔗 Lineage: ${escapeHTML(l)} (${cnt} items)</option>`;
-                }).join('')}
+          <div>
+            <label style="display:block; font-size:0.76rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Projects — audit a whole set:</label>
+            <div id="ens-projects-list" style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto;"></div>
+          </div>
+
+          <div>
+            <label style="display:block; font-size:0.76rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Or pick items piecemeal:</label>
+            <div style="display:flex; gap:6px; margin-bottom:6px;">
+              <input id="ens-picker-search" type="text" placeholder="Search components…" style="flex:1; min-width:0; font-size:0.82rem; padding:7px 10px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px;" />
+              <select id="ens-picker-universe" style="font-size:0.82rem; padding:7px 8px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px;">
+                <option value="">All universes</option>
+                ${universes.map(u => `<option value="${escapeHTML(u)}">🌌 ${escapeHTML(u)}</option>`).join('')}
+              </select>
+              <select id="ens-picker-faction" style="font-size:0.82rem; padding:7px 8px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px;">
+                <option value="">All factions</option>
+                ${factions.map(f => `<option value="${escapeHTML(f)}">🛡️ ${escapeHTML(f)}</option>`).join('')}
               </select>
             </div>
-            <button type="button" id="btn-delphi-hub-run-ensemble" class="btn btn-primary" style="justify-content:center; width:100%; padding:10px 14px; background:linear-gradient(135deg, #0284c7, #7c3aed); border:none;">
-              🎭 Run Holistic Ensemble Audit
-            </button>
+            <div id="ens-picker-groups" style="max-height:220px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; background:rgba(0,0,0,0.2);"></div>
           </div>
+
+          <div>
+            <label style="display:block; font-size:0.76rem; color:var(--text-muted); font-weight:600; margin-bottom:4px;">Selected set:</label>
+            <div id="ens-manifest" style="max-height:140px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; background:rgba(0,0,0,0.2); font-size:0.8rem;"></div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; color:var(--text-secondary);">
+            <span id="ens-token-est">0 items · ~0 tokens</span>
+            <span id="ens-mode-label">Piecemeal set</span>
+          </div>
+
+          <button type="button" id="btn-delphi-hub-run-ensemble" class="btn btn-primary" style="justify-content:center; width:100%; padding:10px 14px; background:linear-gradient(135deg, #0284c7, #7c3aed); border:none;" disabled>
+            🎭 Run Ensemble Audit
+          </button>
         </div>
       </div>
     `;
@@ -2422,9 +2828,28 @@
       <button id="btn-delphi-hub-close" class="btn btn-ghost">Close</button>
     `;
 
-    document.getElementById('btn-delphi-hub-close')?.addEventListener('click', closeModal);
+    document.getElementById('btn-delphi-hub-close')?.addEventListener('click', () => {
+      hubEnsembleReset();
+      closeModal();
+    });
     document.getElementById('btn-delphi-hub-back-comp')?.addEventListener('click', () => {
       if (activeComp) open(activeComp.id);
+    });
+
+    // Ensemble Hub picker wiring (steps 2–4). Universe/Faction are pick
+    // filters only — never a preset audit scope.
+    renderEnsembleHubPicker();
+    document.getElementById('ens-picker-search')?.addEventListener('input', (e) => {
+      hubEnsemblePickerFilter.search = e.target.value || '';
+      renderEnsembleHubPicker();
+    });
+    document.getElementById('ens-picker-universe')?.addEventListener('change', (e) => {
+      hubEnsemblePickerFilter.universe = e.target.value || '';
+      renderEnsembleHubPicker();
+    });
+    document.getElementById('ens-picker-faction')?.addEventListener('change', (e) => {
+      hubEnsemblePickerFilter.faction = e.target.value || '';
+      renderEnsembleHubPicker();
     });
 
     body.querySelectorAll('.delphi-hub-batch-btn').forEach(btn => {
@@ -2439,45 +2864,35 @@
     });
 
     document.getElementById('btn-delphi-hub-run-ensemble')?.addEventListener('click', () => {
-      const val = document.getElementById('delphi-hub-ensemble-scope')?.value || 'filtered';
-      let targetComps = [];
-      let title = 'Ensemble Audit';
-      let scopeLabel = 'Ensemble';
-
-      if (val === 'filtered') {
-        targetComps = allComps.filter(c => filteredSet.has(c.id));
-        title = `Filtered Vault Ensemble (${targetComps.length})`;
-        scopeLabel = 'Filtered Vault Ensemble';
-      } else if (val === 'golden') {
-        targetComps = goldenComps;
-        title = `Golden Templates Ensemble (${targetComps.length})`;
-        scopeLabel = 'Golden Templates Ensemble';
-      } else if (val.startsWith('faction:')) {
-        const f = val.slice('faction:'.length);
-        targetComps = allComps.filter(c => (c.tracker?.faction || c.faction || '').trim() === f);
-        title = `Faction Ensemble: ${f}`;
-        scopeLabel = `Faction: ${f}`;
-      } else if (val.startsWith('universe:')) {
-        const u = val.slice('universe:'.length);
-        targetComps = allComps.filter(c => (c.tracker?.universe || c.universe || '').trim() === u);
-        title = `Universe Ensemble: ${u}`;
-        scopeLabel = `Universe: ${u}`;
-      } else if (val.startsWith('lineage:')) {
-        const l = val.slice('lineage:'.length);
-        targetComps = allComps.filter(c => (c.lineage || '').trim() === l);
-        title = `Lineage Ensemble: ${l}`;
-        scopeLabel = `Lineage: ${l}`;
-      }
-
-      if (targetComps.length === 0) {
-        alert('No components found in the selected scope.');
+      const state = hubEnsembleEnsureState();
+      const picked = hubEnsemblePickedComps();
+      if (picked.length === 0) {
+        alert('Pick at least one component for the Ensemble set.');
         return;
       }
-
+      const project = state.project;
+      const extraIds = picked.filter(c => project && !(project.componentIds || []).includes(c.id)).map(c => c.id);
+      const setSource = project ? (extraIds.length > 0 ? 'project+extras' : 'project') : 'piecemeal';
+      const title = project
+        ? `${project.name}${extraIds.length ? ` + ${extraIds.length} extra${extraIds.length === 1 ? '' : 's'}` : ''} Ensemble`
+        : `Ensemble (${picked.length})`;
+      // Step 1 + step 4: the picked set goes to the pre-run with the
+      // Project's real mappings/relationships/contentOverrides (or category
+      // defaults for piecemeal sets) and the real 'assembled' mode. Extras
+      // are test-only — nothing is written back to the Project.
       openEnsemble({
-        componentIds: targetComps.map(c => c.id),
+        components: picked,
+        mappings: ensembleMappingsForComponents(picked, project),
+        relationships: project && Array.isArray(project.relationships) ? project.relationships : [],
+        contentOverrides: project && project.contentOverrides ? project.contentOverrides : {},
+        mode: 'assembled',
         title,
-        scopeLabel
+        ensembleName: title,
+        project,
+        projectId: project ? project.id : null,
+        extraIds,
+        setSource,
+        returnToHub: true
       });
     });
   }
@@ -2496,6 +2911,7 @@
     openBatchPicker,
     openEnsemble,
     runDiagnostic,
-    runComparison
+    runComparison,
+    saveEnsembleRunRecord
   };
 })();

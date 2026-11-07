@@ -10,7 +10,7 @@
 
 (() => {
   const DB_NAME = 'anansi-forge';
-  const DB_VERSION = 11;
+  const DB_VERSION = 12;
 
   let dbInstance = null;
 
@@ -224,6 +224,16 @@
         if (!db.objectStoreNames.contains('auto_backups')) {
           const backupStore = db.createObjectStore('auto_backups', { keyPath: 'id' });
           backupStore.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+
+        // 12. Ensemble Runs Store (D3, Ensemble Hub rebuild)
+        // Lightweight run records for Ensemble QA only. Never written onto
+        // comp.delphi (single-component audit history stays untouched).
+        if (!db.objectStoreNames.contains('ensemble_runs')) {
+          const erStore = db.createObjectStore('ensemble_runs', { keyPath: 'id' });
+          erStore.createIndex('timestamp', 'timestamp', { unique: false });
+          erStore.createIndex('mode', 'mode', { unique: false });
+          erStore.createIndex('baseProjectId', 'baseProjectId', { unique: false });
         }
 
         // 11. Universes & Genres Store
@@ -442,6 +452,83 @@
     const tx = db.transaction('projects', 'readwrite');
     const store = tx.objectStore('projects');
     return promisify(store.delete(id));
+  }
+
+  // --- Ensemble Run Records (D3, Ensemble Hub rebuild) ---
+  // Lightweight, separate from single-component audits: an Ensemble run
+  // record is never written onto comp.delphi, and reading/writing runs
+  // never touches Batch or individual Delphi storage.
+
+  async function saveEnsembleRun(run) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('ensemble_runs', 'readwrite');
+    const store = tx.objectStore('ensemble_runs');
+
+    const now = new Date().toISOString();
+    const flags = Array.isArray(run.flags) ? run.flags : [];
+    const byLens = {};
+    flags.forEach(f => {
+      const lens = String(f.lens || 'ensemble');
+      byLens[lens] = (byLens[lens] || 0) + 1;
+    });
+
+    const record = {
+      id: run.id || generateId(),
+      runId: run.runId || null,
+      ensembleName: run.ensembleName || 'Ensemble',
+      mode: run.mode || 'assembled',
+      setSource: run.setSource || 'piecemeal',
+      baseProjectId: run.baseProjectId || null,
+      storyId: run.storyId || null,
+      componentIds: Array.isArray(run.componentIds) ? run.componentIds : [],
+      extraIds: Array.isArray(run.extraIds) ? run.extraIds : [],
+      timestamp: run.timestamp || now,
+      model: run.model || 'unknown',
+      provider: run.provider || 'unknown',
+      coverage: run.coverage || null,
+      gateChoice: run.gateChoice || null,
+      flagCounts: {
+        total: flags.length,
+        critical: flags.filter(f => f.severity === 'critical').length,
+        warning: flags.filter(f => f.severity !== 'critical').length,
+        byLens
+      },
+      convergenceRiskCount: Array.isArray(run.convergenceRisks) ? run.convergenceRisks.length : 0,
+      resolvedByContextCount: Array.isArray(run.resolvedByContext) ? run.resolvedByContext.length : 0,
+      report: typeof run.report === 'string' ? run.report : ''
+    };
+
+    await promisify(store.put(record));
+    return record;
+  }
+
+  async function getAllEnsembleRuns() {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('ensemble_runs', 'readonly');
+    const store = tx.objectStore('ensemble_runs');
+    const index = store.index('timestamp');
+
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+    });
+  }
+
+  async function getEnsembleRun(id) {
+    const db = dbInstance || await initDB();
+    const tx = db.transaction('ensemble_runs', 'readonly');
+    const store = tx.objectStore('ensemble_runs');
+    return promisify(store.get(id));
   }
 
   // --- Chat History Operations ---
@@ -1471,6 +1558,9 @@
     getProject,
     saveProject,
     deleteProject,
+    saveEnsembleRun,
+    getAllEnsembleRuns,
+    getEnsembleRun,
     getChatHistory,
     saveChatHistory,
     clearChatHistory,

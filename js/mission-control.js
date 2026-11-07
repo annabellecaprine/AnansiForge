@@ -10,6 +10,20 @@
   const getModals = () => window.MissionControlModals;
   const getTabs = () => window.MissionControlTabs;
 
+  // Ensemble Hub rebuild: field mapping for piecemeal sets launched from
+  // Mission Control (mirrors ProjectAssembler.mappingForCategory).
+  function mcEnsembleMappingForCategory(category) {
+    if (window.ProjectAssembler && typeof window.ProjectAssembler.mappingForCategory === 'function') {
+      return window.ProjectAssembler.mappingForCategory(category);
+    }
+    switch (String(category || 'character').toLowerCase()) {
+      case 'scenario': return 'scenario';
+      case 'bio': return 'description';
+      case 'initial_message': return 'first_mes';
+      default: return 'personality';
+    }
+  }
+
   // ─── Data Loaders ─────────────────────────────────────────────────────────────
 
   async function loadAll() {
@@ -248,6 +262,34 @@
         if (storyId && window.ProjectAssembler?.createFromStory) {
           window.ProjectAssembler.createFromStory(storyId);
         }
+        return;
+      }
+
+      // Ensemble: this Story's linked assets (Ensemble Hub rebuild, step 5)
+      const ensembleStoryBtn = t.closest('.mc-ensemble-story');
+      if (ensembleStoryBtn) {
+        const storyId = ensembleStoryBtn.dataset.storyId;
+        const story = state.allTrackerRecords.find(r => r.id === storyId);
+        const linkedIds = story ? (story.linkedVaultIds || []) : [];
+        if (linkedIds.length === 0 || !window.DelphiModal?.openEnsemble) return;
+        const comps = linkedIds.map(id => state.compMap.get(id)).filter(Boolean);
+        if (comps.length === 0) return;
+        const mappings = {};
+        comps.forEach(c => { if (c && c.id) mappings[c.id] = mcEnsembleMappingForCategory(c.category); });
+        // Hide the MC modal so the Delphi modal isn't stacked behind it.
+        document.getElementById('mc-modal-overlay')?.classList.add('hidden');
+        window.DelphiModal.openEnsemble({
+          components: comps,
+          mappings,
+          relationships: [],
+          contentOverrides: {},
+          mode: 'assembled',
+          ensembleName: `Story Ensemble: ${story.name || 'Untitled Story'}`,
+          title: `Story Ensemble: ${story.name || 'Untitled Story'}`,
+          scopeLabel: 'Story Ensemble',
+          setSource: 'story',
+          storyId
+        });
         return;
       }
 
@@ -745,38 +787,32 @@
         const ids = [...state.selectedIds];
         if (ids.length < 2) return;
         const selectedComps = ids.map(id => state.compMap.get(id)).filter(Boolean);
-        if (!selectedComps.length || !window.Delphi?.diagnoseEnsemble) return;
-
-        const btn = t.closest('#mc-bulk-ensemble-delphi');
-        const origLabel = btn.textContent;
-        btn.textContent = '⏳ Auditing Ensemble…';
-        btn.disabled = true;
+        if (!selectedComps.length || !window.DelphiModal?.openEnsemble || !window.Delphi?.diagnoseEnsemble) return;
 
         const uniSet = new Set(selectedComps.map(c => c.tracker?.universe || c.universe).filter(Boolean));
         const uniName = uniSet.size === 1 ? Array.from(uniSet)[0] : (state.filters.universe !== 'all' ? state.filters.universe : '');
         const ensName = uniName ? `${uniName} Ensemble (${selectedComps.length})` : `Selected Ensemble (${selectedComps.length} components)`;
 
-        const runEnsembleFn = () => window.Delphi.diagnoseEnsemble({
-          stagedComponents: selectedComps,
-          mappings: {},
+        // Ensemble rebuild: every path goes through the same correct
+        // pre-run call — the old code ran diagnoseEnsemble directly with
+        // mappings {} and hardcoded mode 'faction', bypassing the coverage
+        // gate and mislabeling Scenario/Bio/Initial Message items. A bulk
+        // vault selection is a piecemeal set, so mode is 'assembled'.
+        const mappings = {};
+        selectedComps.forEach(c => { if (c && c.id) mappings[c.id] = mcEnsembleMappingForCategory(c.category); });
+
+        window.DelphiModal.openEnsemble({
+          components: selectedComps,
+          mappings,
           relationships: [],
           contentOverrides: {},
-          mode: 'faction',
+          mode: 'assembled',
           ensembleName: ensName,
-          universeName: uniName
+          universeName: uniName,
+          title: ensName,
+          scopeLabel: 'Selected Ensemble',
+          setSource: 'mission-control'
         });
-
-        try {
-          const ensResult = await runEnsembleFn();
-          if (window.DelphiModal?.openEnsemble) {
-            window.DelphiModal.openEnsemble(ensResult, runEnsembleFn);
-          }
-        } catch (err) {
-          if (typeof showToast === 'function') showToast(`Ensemble audit failed: ${err.message}`, 'error');
-        } finally {
-          btn.textContent = origLabel;
-          btn.disabled = false;
-        }
         return;
       }
 
