@@ -98,11 +98,23 @@
     });
     document.getElementById('btn-drawer-ensemble-delphi')?.addEventListener('click', () => {
       if (stagedIds.length > 0 && window.DelphiModal?.openEnsemble) {
+        // Ensemble rebuild: the drawer path now threads the same real
+        // mappings / contentOverrides / mode as the health-check path, so
+        // both go through the same correct pre-run instead of the drawer
+        // silently dropping them (old code passed no mappings and the
+        // pre-run hardcoded mode 'faction').
         window.DelphiModal.openEnsemble({
           componentIds: [...stagedIds],
+          mappings: mappings || {},
           relationships: relationships || [],
+          contentOverrides: contentOverrides || {},
+          mode: 'assembled',
+          ensembleName: (projNameInput && projNameInput.value.trim()) || 'Staged Ensemble',
+          universeName: selectedUniverseId || '',
           title: `Staged Ensemble (${stagedIds.length} items)`,
-          scopeLabel: 'Staged Ensemble'
+          scopeLabel: 'Staged Ensemble',
+          projectId: activeProjectId || null,
+          setSource: 'assembler'
         });
       }
     });
@@ -1078,12 +1090,28 @@
         flags: res.flags,
         spotlightRisks: res.spotlightRisks || [],
         voiceOverlaps: res.voiceOverlaps || [],
+        convergenceRisks: res.convergenceRisks || [],
+        resolvedByContext: res.resolvedByContext || [],
         coverage: res.coverage || null,
         perComponent: res.perComponent || [],
         timestamp: res.timestamp,
         model: res.model,
         provider: res.provider
       };
+
+      // D3: record the run in the lightweight Ensemble store (never on
+      // comp.delphi). The p.assembledDelphi save above is unchanged.
+      if (window.DelphiModal && typeof window.DelphiModal.saveEnsembleRunRecord === 'function') {
+        await window.DelphiModal.saveEnsembleRunRecord(res, {
+          setSource: 'assembler',
+          projectId: activeProjectId || null,
+          extraIds: [],
+          componentIds: stagedComponents.map(c => c.id),
+          gateChoice: null,
+          mode: res.mode || 'assembled',
+          title: res.ensembleName || 'Assembled Card'
+        });
+      }
 
       if (activeProjectId) {
         try {

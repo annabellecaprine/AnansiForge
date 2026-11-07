@@ -544,7 +544,9 @@
           <button class="mc-btn mc-btn-accent mc-create-project-from-story" data-story-id="${S.esc(story.id)}">🤖 Create Project</button>
           <button class="mc-btn mc-btn-ghost mc-edit-record" data-record-id="${story.id}">✏️ Edit Metadata</button>
           <button class="mc-btn mc-btn-secondary mc-export-story-brief" data-story-id="${S.esc(story.id)}">📄 Export Brief</button>
+          <button class="mc-btn mc-btn-secondary mc-ensemble-story" data-story-id="${S.esc(story.id)}" ${linkedIds.length === 0 ? 'disabled title="No linked assets yet — link some in Manage Linked Vault Assets first."' : ''}>🎭 Ensemble: this Story (${linkedIds.length})</button>
         </div>
+        ${linkedIds.length === 0 ? `<div style="margin-top:6px; font-size:0.76rem; color:var(--text-muted);">Ensemble is disabled — no linked assets yet. Link some in "Manage Linked Vault Assets" first.</div>` : ''}
       </div>
 
       ${story.notes ? `<div class="mc-hub-notes" style="margin-top:12px; font-size:0.85rem; background:var(--bg-secondary); padding:10px; border-radius:6px; color:var(--text-secondary); white-space:pre-wrap;">${S.esc(story.notes)}</div>` : ''}

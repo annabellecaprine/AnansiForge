@@ -155,6 +155,10 @@ SEVERITY CALIBRATION RULES:
 IMPORTANT EVALUATION PRINCIPLES:
 - Findings are interpretive hypotheses, not deterministic runtime predictions.
 - SHARED CONTEXT RULE: Evaluate individual characters in light of any supplied [ORGANIZATION] or [SCENARIO] components. Do NOT flag a character for omitting world rules, faction hierarchy, or setting assumptions that are already supplied in a shared Organization or Scenario component.
+- TRUSTED-COMPONENT RULE: Components in this set may already be individually trusted (Golden Templates) — they have already been audited on their own and do not need re-auditing here. Do NOT re-judge them in isolation inside this single ensemble call, and do NOT re-flag defects already judged in their single-component audits. Judge only how the components behave TOGETHER and how the new or unique pieces (typically Scenario and Initial Message) interact with them. A trait that is sound on its own is not a defect because it also appears in this set.
+- DELIBERATE-SUBVERSION RULE: If an Organization or Scenario component supplies a rule that justifies a character's break from type, do NOT flag the break as a defect. Note it as intentional, citing the Org/Scenario wording that justifies it. Example: a warm, nurturing Lust demon is not a defect when the shared Organization states that Choirs reflect infernal alignment, not complete personality or moral character.
+- CONVERGENCE CHECK: Do the members of this set tend to converge on a single behaviour, tone, or role, or do they stay distinct? Flag cases where several members share a dominant trait (e.g. snarky sarcasm) such that the whole set would collapse into that tone, with no contrast. Voice overlap (shared cadence/vocabulary) is not the same question — convergence is about behaviour and tone collapse across the set.
+- RESOLVED BY CONTEXT: The [PRIOR SINGLE-COMPONENT FINDINGS] section, when present, lists findings from each component's own earlier audit. For each such finding, either it still stands in this set (say nothing about it) or the set's shared context resolves it — list resolved ones under "resolvedByContext" with the finding's own summary, the resolving component and its exact verbatim quote, and a short note. You are only annotating what this set resolves; never delete, rewrite, or overturn the prior verdict itself.
 - SPOTLIGHT COMPETITION RISK: Do not assume a character with high trait intensity automatically silences a quieter character. Instead, identify specific overlapping behavioral triggers (e.g., multiple characters defined to always speak first, interrupt, dominate dialogue, or seize scene control) that create spotlight competition risk.
 - For every WARNING or CRITICAL finding, provide exact verbatim substring quotes from the relevant component(s) without paraphrasing or eliding with "...".
 - Tag each finding with one or more Failure Mode codes where applicable:
@@ -192,6 +196,20 @@ PART 1 — a \`\`\`json block with the structured ensemble analysis FIRST:
       "sharedTraits": "<shared speech cadences, vocabulary crutches, or attitudes>",
       "suggestion": "<how to differentiate their voices>"
     }
+  ],
+  "convergenceRisks": [
+    {
+      "characters": ["<Char A>", "<Char B>"],
+      "sharedBehaviour": "<the single behaviour, tone, or role they converge on>",
+      "hypothesis": "<how the set would collapse into that behaviour/tone and what contrast is lost>"
+    }
+  ],
+  "resolvedByContext": [
+    {
+      "flagSummary": "<the prior single-component finding, in its own words>",
+      "resolvedBy": "<resolving component name + exact verbatim quote>",
+      "note": "<why the shared context resolves it>"
+    }
   ]
 }
 \`\`\`
@@ -201,6 +219,8 @@ PART 2 — a focused markdown diagnostic evaluating:
 2. VOICE & CHARACTERIZATION OVERLAP — Indistinct cadences, attitudes, or hooks that risk blending characters together.
 3. RELATIONSHIP & CANON CONSISTENCY — Alignment across declared relationships, character definitions, and shared Organization/Scenario lore.
 4. INSTRUCTION & SCENARIO HARMONIZATION — Specific text edits to resolve cross-component friction.
+5. CONVERGENCE — Do the members of this set tend to converge on a single behaviour, tone, or role, or do they stay distinct? Name any shared dominant trait that would make the whole set collapse into one tone, and what contrast is lost.
+6. FLAGS RESOLVED BY CONTEXT — For each prior single-component finding that this set's shared context resolves, state the finding and the Org/Scenario wording that resolves it. Only list findings that are actually resolved; say nothing about findings that still stand.
 
 Keep markdown concise, direct, and grounded in verbatim quoted wording.`;
 
@@ -964,14 +984,14 @@ PART 2 — a concise markdown analysis:
    */
   function parseAssembledVerdict(raw, componentSnapshotsMap = null, stagedComponents = null) {
     if (typeof raw !== 'string') {
-      return { report: '', flags: [], spotlightRisks: [], voiceOverlaps: [], thinking: '' };
+      return { report: '', flags: [], spotlightRisks: [], voiceOverlaps: [], convergenceRisks: [], resolvedByContext: [], thinking: '' };
     }
 
     const { clean: cleanRaw, thinking } = extractThinking(raw);
 
-    const candidate = extractCandidateJson(cleanRaw, ['flags', 'spotlightRisks', 'voiceOverlaps']);
+    const candidate = extractCandidateJson(cleanRaw, ['flags', 'spotlightRisks', 'voiceOverlaps', 'convergenceRisks', 'resolvedByContext']);
     if (!candidate) {
-      return { report: cleanRaw, flags: [], spotlightRisks: [], voiceOverlaps: [], thinking };
+      return { report: cleanRaw, flags: [], spotlightRisks: [], voiceOverlaps: [], convergenceRisks: [], resolvedByContext: [], thinking };
     }
 
     const beforeBlock = cleanRaw.substring(0, candidate.start).trim();
@@ -1047,7 +1067,19 @@ PART 2 — a concise markdown analysis:
         suggestion: String(v.suggestion || '').trim()
       })) : [];
 
-      return { report: reportText, flags, spotlightRisks, voiceOverlaps, thinking };
+      const convergenceRisks = Array.isArray(data.convergenceRisks) ? data.convergenceRisks.map(cr => ({
+        characters: Array.isArray(cr.characters) ? cr.characters.map(String) : [],
+        sharedBehaviour: String(cr.sharedBehaviour || cr.sharedBehavior || '').trim(),
+        hypothesis: String(cr.hypothesis || '').trim()
+      })).filter(cr => cr.characters.length > 0 || cr.sharedBehaviour || cr.hypothesis) : [];
+
+      const resolvedByContext = Array.isArray(data.resolvedByContext) ? data.resolvedByContext.map(r => ({
+        flagSummary: String(r.flagSummary || r.summary || '').trim(),
+        resolvedBy: String(r.resolvedBy || '').trim(),
+        note: String(r.note || '').trim()
+      })).filter(r => r.flagSummary || r.resolvedBy) : [];
+
+      return { report: reportText, flags, spotlightRisks, voiceOverlaps, convergenceRisks, resolvedByContext, thinking };
     } catch (_) {
       // Partial recovery for incomplete JSON array
       const flags = [];
@@ -1064,7 +1096,7 @@ PART 2 — a concise markdown analysis:
           suggestion: fMatch[3].trim()
         });
       }
-      return { report: reportText, flags, spotlightRisks: [], voiceOverlaps: [], thinking };
+      return { report: reportText, flags, spotlightRisks: [], voiceOverlaps: [], convergenceRisks: [], resolvedByContext: [], thinking };
     }
   }
 
@@ -2113,6 +2145,28 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
       userMsg += `\n`;
     }
 
+    // Prior single-component findings, for the D4 resolved-by-context rule.
+    // These are the stored verdicts/flags from each component's own earlier
+    // audit — the judge may annotate which ones this set's shared context
+    // resolves, but never re-judges or overwrites them here.
+    const priorFindingsText = stagedComponents.map(c => {
+      const d = c.delphi || null;
+      const verdict = d ? String(d.verdict || '').trim() : '';
+      const findings = d && Array.isArray(d.findings) ? d.findings : [];
+      if (!verdict && findings.length === 0) return null;
+      const lines = [`- ${c.name} (single-component verdict: ${verdict || 'none'})`];
+      findings.slice(0, 6).forEach(f => {
+        const summary = String(f.hypothesis || f.summary || f.consequence || '').trim();
+        if (!summary) return;
+        const modes = Array.isArray(f.failureModes) && f.failureModes.length > 0 ? ` [${f.failureModes.join(', ')}]` : '';
+        lines.push(`  • ${summary.slice(0, 220)}${modes}`);
+      });
+      return lines.join('\n');
+    }).filter(Boolean).join('\n');
+    if (priorFindingsText) {
+      userMsg += `[PRIOR SINGLE-COMPONENT FINDINGS]\n${priorFindingsText}\n\n`;
+    }
+
     const baseConfig = overrideConfig || (window.ForgeLLM && window.ForgeLLM.getConfig ? window.ForgeLLM.getConfig() : {});
     const assembledMaxTokens = Math.max(Number(baseConfig.maxTokens) || 8192, 8192);
     const execConfig = { ...baseConfig, temperature: 0.3, maxTokens: assembledMaxTokens };
@@ -2162,6 +2216,8 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
       flags: parsed.flags,
       spotlightRisks: parsed.spotlightRisks || [],
       voiceOverlaps: parsed.voiceOverlaps || [],
+      convergenceRisks: parsed.convergenceRisks || [],
+      resolvedByContext: parsed.resolvedByContext || [],
       coverage,
       componentSnapshots,
       perComponent,
