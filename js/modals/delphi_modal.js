@@ -1957,6 +1957,7 @@
   function ensembleMappingForCategory(category) {
     switch (String(category || 'character').toLowerCase()) {
       case 'character':
+      case 'companion':
       case 'organization':
         return 'personality';
       case 'scenario':
@@ -2618,12 +2619,13 @@
     // default (D1) — the user adds it explicitly by ticking the box.
     const filter = hubEnsemblePickerFilter;
     const q = filter.search.trim().toLowerCase();
-    const pickable = hubEnsembleAllComps.filter(c => ['character', 'scenario', 'organization', 'initial_message', 'bio'].includes(c.category || 'character'))
+    const pickable = hubEnsembleAllComps.filter(c => ['character', 'scenario', 'organization', 'initial_message', 'bio', 'companion'].includes(c.category || 'character'))
       .filter(c => !q || String(c.name || '').toLowerCase().includes(q))
       .filter(c => !filter.universe || (c.tracker?.universe || c.universe || '').trim() === filter.universe)
       .filter(c => !filter.faction || (c.tracker?.faction || c.faction || '').trim() === filter.faction);
     const groups = [
       { key: 'character', label: 'Characters', note: '' },
+      { key: 'companion', label: 'Companions', note: '' },
       { key: 'scenario', label: 'Scenarios', note: '' },
       { key: 'organization', label: 'Organizations', note: '' },
       { key: 'initial_message', label: 'Initial Messages', note: '' },

@@ -1962,6 +1962,7 @@ Do not include thinking, reasoning, or markdown. Output ONLY this JSON block:
     const categoryPriority = {
       organization: 1,
       character: 2,
+      companion: 2,
       scenario: 3,
       bio: 4,
       initial_message: 5
