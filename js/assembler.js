@@ -911,13 +911,13 @@
         });
       }
 
-      // A variant (labelled "<Companion> - <Host>") whose Bond Defaults
-      // section is missing or empty: the model will have to invent the
+      // A variant (labelled "<Companion> - <Host>") whose Bond & Host
+      // Relationship section is missing or empty: the model will have to invent the
       // relationship. An agnostic template (no host in its label) is
       // expected to have blank bonding fields, so it is not flagged.
       if (labelHost) {
         const content = contentOverrides[comp.id] !== undefined ? contentOverrides[comp.id] : (comp.content || '');
-        const bondMatch = content.match(/##\s*Bond Defaults\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
+        const bondMatch = content.match(/##\s*(?:Bond & Host Relationship|Bond Defaults)\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
         if (!bondMatch || !bondMatch[1].trim()) {
           checks.push({
             type: 'warning',

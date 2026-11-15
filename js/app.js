@@ -120,6 +120,7 @@
 
   // Companion Profile Fields (Bonded Companion category, spec §3.2)
   const compOverview = document.getElementById('comp-overview');
+  const compPersonality = document.getElementById('comp-personality');
   const compPerception = document.getElementById('comp-perception');
   const compCommunication = document.getElementById('comp-communication');
   const compAgency = document.getElementById('comp-agency');
@@ -543,6 +544,7 @@
     } else if (category === 'companion') {
       const parsed = parseCompanionMarkdown(content);
       compOverview.value = parsed.overview || '';
+      compPersonality.value = parsed.personality || '';
       compPerception.value = parsed.perception || '';
       compCommunication.value = parsed.communication || '';
       compAgency.value = parsed.agency || '';
@@ -602,6 +604,7 @@
       } else if (category === 'companion') {
         const sections = {
           overview: compOverview.value,
+          personality: compPersonality.value,
           perception: compPerception.value,
           communication: compCommunication.value,
           agency: compAgency.value,
@@ -670,7 +673,7 @@
     const formFields = [
       charOverview, charPersonality, charBackground, charAppearance, charAbilities, charStrengths, charWeaknesses, charLikes, charDislikes, charNotes,
       scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone,
-      compOverview, compPerception, compCommunication, compAgency, compManifestation,
+      compOverview, compPersonality, compPerception, compCommunication, compAgency, compManifestation,
       compCapabilities, compInitiative, compCombinedIdentity, compBondDefaults, compNotes
     ];
     formFields.forEach(field => { if (field) field.value = ''; });
@@ -880,6 +883,7 @@
       } else if (compCategorySelect.value === 'companion') {
         const sections = {
           overview: compOverview.value,
+          personality: compPersonality.value,
           perception: compPerception.value,
           communication: compCommunication.value,
           agency: compAgency.value,
@@ -1051,6 +1055,7 @@
       } else if (category === 'companion') {
         const sections = {
           overview: compOverview.value,
+          personality: compPersonality.value,
           perception: compPerception.value,
           communication: compCommunication.value,
           agency: compAgency.value,
@@ -1106,7 +1111,7 @@
           if (grid) grid.scrollTop = grid.scrollHeight;
         }
       } else if (category === 'companion') {
-        // Land on Bond Defaults: the field the author fills in when
+        // Land on Bond & Host Relationship: the field the author fills in when
         // varianting an agnostic template for a specific host.
         if (compBondDefaults) {
           compBondDefaults.focus({ preventScroll: true });
@@ -1825,6 +1830,7 @@
   function parseCompanionMarkdown(markdown) {
     const sections = {
       overview: '',
+      personality: '',
       perception: '',
       communication: '',
       agency: '',
@@ -1844,6 +1850,7 @@
 
     const headerMap = {
       'overview': 'overview',
+      'personality': 'personality',
       'perception': 'perception',
       'communication': 'communication',
       'communication & voice': 'communication',
@@ -1863,13 +1870,14 @@
       'behavior': 'initiative',
       'combined identity': 'combinedIdentity',
       'bond defaults': 'bondDefaults',
+      'bond & host relationship': 'bondDefaults',
       'bond': 'bondDefaults',
       'bonding': 'bondDefaults',
       'default bond': 'bondDefaults',
       'notes': 'notes'
     };
 
-    const sectionWords = ['overview', 'perception', 'communication', 'agency', 'manifestation', 'capabilities', 'initiative', 'combinedIdentity', 'bondDefaults', 'notes'];
+    const sectionWords = ['overview', 'personality', 'perception', 'communication', 'agency', 'manifestation', 'capabilities', 'initiative', 'combinedIdentity', 'bondDefaults', 'notes'];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -1913,6 +1921,7 @@
     const parts = [];
     const fields = [
       { key: 'overview', label: 'Overview' },
+      { key: 'personality', label: 'Personality' },
       { key: 'perception', label: 'Perception' },
       { key: 'communication', label: 'Communication & Voice' },
       { key: 'agency', label: 'Agency & Control' },
@@ -1920,7 +1929,7 @@
       { key: 'capabilities', label: 'Capabilities & Limitations' },
       { key: 'initiative', label: 'Initiative & Restraint' },
       { key: 'combinedIdentity', label: 'Combined Identity' },
-      { key: 'bondDefaults', label: 'Bond Defaults' },
+      { key: 'bondDefaults', label: 'Bond & Host Relationship' },
       { key: 'notes', label: 'Notes' }
     ];
 
