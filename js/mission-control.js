@@ -562,7 +562,7 @@
         // Vault asset tabs share one persistent selection (enables building an
         // ad-hoc project across tabs). Stories/Releases reuse the same Set for
         // record ids, so clear whenever moving to or from a non-vault tab.
-        const VAULT_ASSET_TABS = ['characters', 'scenarios', 'bios', 'messages', 'orgs'];
+        const VAULT_ASSET_TABS = ['characters', 'companions', 'scenarios', 'bios', 'messages', 'orgs'];
         const prevTab = state.activeSubTab;
         const nextTab = subtabBtn.dataset.subtab;
         const keepSelection = VAULT_ASSET_TABS.includes(prevTab) && VAULT_ASSET_TABS.includes(nextTab);
@@ -1644,7 +1644,7 @@
   // ─── Main Render ──────────────────────────────────────────────────────────────
 
   const CAT_FOR_TAB = {
-    characters: 'character', scenarios: 'scenario',
+    characters: 'character', companions: 'companion', scenarios: 'scenario',
     bios: 'bio', messages: 'initial_message', orgs: 'organization'
   };
 

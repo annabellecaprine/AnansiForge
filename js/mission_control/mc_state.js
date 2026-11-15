@@ -10,6 +10,7 @@
         bio: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         initial_message: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         organization: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
+        companion: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         concept_stub: ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'],
         story: ['concept', 'notesReady', 'initialMessage', 'bio', 'otherMessages', 'testing', 'complete', 'published'],
         release: ['staged', 'bio', 'scenario', 'initialMessage', 'personalityLocked', 'thumbnail', 'banner', 'tagsDone', 'initialTest', 'regressionTest', 'finalPolish', 'ready']
@@ -37,7 +38,7 @@
     const PRIORITY_ORDER = { P1: 0, P2: 1, P3: 2, P4: 3, null: 4 };
     const CATEGORY_LABELS = {
         character: 'Characters', scenario: 'Scenarios', bio: 'Bios',
-        initial_message: 'Initial Messages', organization: 'Organizations'
+        initial_message: 'Initial Messages', organization: 'Organizations', companion: 'Companions'
     };
 
     const RELEASE_SOURCES = {
@@ -503,6 +504,7 @@
 
         const catMap = {
             characters: { label: '+ Character', cat: 'character' },
+            companions: { label: '+ Companion', cat: 'companion' },
             orgs: { label: '+ Org', cat: 'organization' },
             scenarios: { label: '+ Scenario', cat: 'scenario' },
             messages: { label: '+ Init Msg', cat: 'initial_message' },
@@ -624,6 +626,7 @@
             { id: 'stories', label: '📖 Stories' },
             { id: 'universes', label: '🌐 Universes' },
             { id: 'characters', label: '👤 Characters' },
+            { id: 'companions', label: '🔗 Companions' },
             { id: 'scenarios', label: '🎭 Scenarios' },
             { id: 'bios', label: '📋 Bios' },
             { id: 'messages', label: '💬 Init Msgs' },
