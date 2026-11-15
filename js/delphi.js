@@ -324,6 +324,8 @@ PART 2 — a concise markdown analysis:
       snap += `[INITIAL MESSAGE]\n${comp.content || ''}\n\n`;
     } else if (comp.category === 'organization') {
       snap += `[ORGANIZATION]\n${comp.content || ''}\n\n`;
+    } else if (comp.category === 'companion') {
+      snap += `[COMPANION]\n${comp.content || ''}\n\n`;
     } else {
       snap += `[CONTENT]\n${comp.content || ''}\n\n`;
     }
@@ -336,7 +338,7 @@ PART 2 — a concise markdown analysis:
   function extractRawContentFromSnapshot(contentSnapshot) {
     if (!contentSnapshot || typeof contentSnapshot !== 'string') return '';
     const s = contentSnapshot.trim();
-    const headerMatch = s.match(/^\[COMPONENT\]\r?\nname:\s*(.*?)\r?\ncategory:\s*(.*?)\r?\n\r?\n\[(PERSONALITY|SCENARIO|BIO|INITIAL MESSAGE|ORGANIZATION|CONTENT)\]\r?\n([\s\S]*)$/);
+    const headerMatch = s.match(/^\[COMPONENT\]\r?\nname:\s*(.*?)\r?\ncategory:\s*(.*?)\r?\n\r?\n\[(PERSONALITY|SCENARIO|BIO|INITIAL MESSAGE|ORGANIZATION|COMPANION|CONTENT)\]\r?\n([\s\S]*)$/);
     if (!headerMatch) return s;
     const cat = (headerMatch[2] || '').trim();
     let body = headerMatch[4] || '';

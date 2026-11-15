@@ -2722,7 +2722,7 @@
       hubEnsembleProjects = [];
     }
     hubEnsembleEnsureState();
-    const auditable = allComps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
+    const auditable = allComps.filter(c => ['character', 'scenario', 'organization', 'companion'].includes(c.category));
     const goldenComps = auditable.filter(c => c.isTemplate === true || c.tracker?.pipeline?.goldenTemplate === true);
     const modifiedComps = auditable.filter(c => {
       if (!c.delphi || !c.delphi.verdict) return false;

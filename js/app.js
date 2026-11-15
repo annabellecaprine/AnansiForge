@@ -312,7 +312,7 @@
           ? `<div class="vault-item-scenarios">${comp.scenarios.map(s => `<span class="scenario-pill">${escapeHTML(s)}</span>`).join('')}</div>`
           : '';
 
-        const isDelphiAuditable = ['character', 'scenario', 'organization'].includes(comp.category);
+        const isDelphiAuditable = ['character', 'scenario', 'organization', 'companion'].includes(comp.category);
         let delphiBtnHTML = '';
         if (isDelphiAuditable) {
           const dVerdict = comp.delphi?.verdict ? String(comp.delphi.verdict).toUpperCase() : '';
@@ -786,7 +786,7 @@
     }
 
     const cat = comp.category || compCategorySelect.value || 'character';
-    const isApplicable = cat === 'character' || cat === 'scenario' || cat === 'organization';
+    const isApplicable = cat === 'character' || cat === 'scenario' || cat === 'organization' || cat === 'companion';
 
     if (btnDelphi) btnDelphi.style.display = isApplicable ? 'inline-flex' : 'none';
     if (delphiCard) delphiCard.style.display = isApplicable ? 'block' : 'none';

@@ -146,7 +146,7 @@
             published: 'published', released: 'published', deleted: 'deleted', record_saved: 'saved', project_compiled: 'compiled'
         };
 
-        const auditableComps = comps.filter(c => ['character', 'scenario', 'organization'].includes(c.category));
+        const auditableComps = comps.filter(c => ['character', 'scenario', 'organization', 'companion'].includes(c.category));
         const goldenCount = auditableComps.filter(c => c.isTemplate === true).length;
         const unrunCount = auditableComps.filter(c => !c.delphi || !c.delphi.verdict).length;
         const readyCount = auditableComps.filter(c => c.delphi?.verdict === 'READY').length;
