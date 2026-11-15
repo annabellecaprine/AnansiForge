@@ -72,6 +72,7 @@
             <option value="bio">Character Bios</option>
             <option value="initial_message">Initial Messages</option>
             <option value="organization">Organizations</option>
+            <option value="companion">Companions</option>
           </select>
         </div>
         <div class="sidebar-filter-field">
@@ -324,6 +325,7 @@
                     <option value="bio">Character Bio</option>
                     <option value="initial_message">Initial Message</option>
                     <option value="organization">Organization</option>
+                    <option value="companion">Companion</option>
                   </select>
                 </div>
               </div>
@@ -501,6 +503,55 @@
                     placeholder="Describe the emotional atmosphere, not genre (e.g. Mystery, Found Family, Hopeful, relaxed)..."></textarea>
                 </div>
               </div>
+
+              <!-- Companion Form Fields Wrapper -->
+              <!-- Generic overlay over blank free text, like the Character form.
+                   Bonding fields are deliberately left blank in an agnostic
+                   template and filled in when the template is variant-branched
+                   for a specific host (see the Bonded Companion spec). -->
+              <div id="companion-form-fields" class="form-grid" style="display:none;">
+                <div class="form-group">
+                  <label for="comp-overview">Overview</label>
+                  <textarea id="comp-overview" placeholder="Who the companion is, in one paragraph. Nature / classification, not just powers..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-perception">Perception</label>
+                  <textarea id="comp-perception" placeholder="What it can perceive, and how its experience differs from a host's. Shared vs independent senses, limits..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-communication">Communication &amp; Voice</label>
+                  <textarea id="comp-communication" placeholder="Private / internal vs public / external channels, voice and speech patterns, who can perceive what. Internal communication is not publicly audible..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-agency">Agency &amp; Control</label>
+                  <textarea id="comp-agency" placeholder="What it may do independently, what needs host permission, control transfer, emergency override, limits, how control is returned. For a {{User}}-bonded companion, the default is: it does not dictate the player's voluntary decisions, dialogue, thoughts, or feelings..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-manifestation">Manifestation &amp; Expression</label>
+                  <textarea id="comp-manifestation" placeholder="Default / resting form, partial manifestations, small-scale interactions, involuntary expressions, limits. It must be able to express an opinion without deploying its most dramatic form..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-capabilities">Capabilities &amp; Limitations</label>
+                  <textarea id="comp-capabilities" placeholder="Primary / passive / support abilities, resource needs, vulnerabilities, conditions. Separate companion abilities from host abilities..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-initiative">Initiative &amp; Restraint</label>
+                  <textarea id="comp-initiative" placeholder="Spontaneous observations, habits, curiosities, protective behaviour — and when it naturally stays quiet. Continuous presence does not require continuous dialogue..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-combined-identity">Combined Identity</label>
+                  <textarea id="comp-combined-identity" placeholder="Optional. Shared name / identity, shared speech, how behaviour changes together. A shared identity does not imply personality fusion. Leave blank if there is no combined identity..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-bond-defaults">Bond Defaults</label>
+                  <textarea id="comp-bond-defaults" placeholder="Host-agnostic. Preferred bond type(s), compatible host kinds, incompatible hosts, hard limits that apply to any pairing, optional default host. Leave the pairing-specific parts blank in a template — fill them in when you variant it for a specific host..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="comp-notes">Notes</label>
+                  <textarea id="comp-notes" placeholder="Anything that doesn't cleanly fit another section, including agency and communication rules that must travel with this companion into other ensembles..."
+                    style="min-height: 120px;"></textarea>
+                </div>
+              </div>
             </div>
           </div>
           <div class="editor-sidebar">
@@ -550,6 +601,7 @@
                 <option value="bio">Character Bio</option>
                 <option value="initial_message">Initial Message</option>
                 <option value="organization">Organization</option>
+                <option value="companion">Companion</option>
               </select>
             </div>
             <div class="form-group">
@@ -645,6 +697,7 @@
                     <option value="bio">Character Bio</option>
                     <option value="initial_message">Initial Message</option>
                     <option value="organization">Organization</option>
+                    <option value="companion">Companion</option>
                   </select>
                 </div>
                 <div class="form-group">
@@ -1114,7 +1167,7 @@
 
   <!-- SCRIPTS -->
   <!-- NOTE: bump the ?v= on a script whenever its file changes. A stale cached script + new HTML breaks the app (2026-11-04: old app.js threw on the removed secondary fields and the settings gear stopped opening). -->
-  <script src="js/db.js?v=19.7"></script>
+  <script src="js/db.js?v=19.8"></script>
   <script src="js/modals/confirm_modal.js?v=17.0"></script>
   <script src="js/png-handler.js?v=19.6"></script>
   <script src="js/breakout.js?v=17.0"></script>
@@ -1127,7 +1180,7 @@
 
   <!-- UI CONTROLLERS -->
   <script src="js/parlor.js?v=17.2"></script>
-  <script src="js/assembler.js?v=19.7"></script>
+  <script src="js/assembler.js?v=19.8"></script>
   <script src="js/sandbox.js?v=17.2"></script>
   <!-- MISSION CONTROL SUB-MODULES -->
   <script src="js/mission_control/mc_state.js?v=19.7"></script>
@@ -1147,7 +1200,7 @@
   <script src="js/modals/delphi_modal.js?v=19.7"></script>
   <script src="js/mission-control.js?v=19.5"></script>
   <script src="js/omni-search.js?v=17.2"></script>
-  <script src="js/app.js?v=19.6"></script>
+  <script src="js/app.js?v=19.7"></script>
   <!-- UNIVERSE MANAGER MODAL -->
   <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
     <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">

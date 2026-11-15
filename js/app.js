@@ -118,6 +118,18 @@
   const scenarioRules = document.getElementById('scenario-rules');
   const scenarioTone = document.getElementById('scenario-tone');
 
+  // Companion Profile Fields (Bonded Companion category, spec §3.2)
+  const compOverview = document.getElementById('comp-overview');
+  const compPerception = document.getElementById('comp-perception');
+  const compCommunication = document.getElementById('comp-communication');
+  const compAgency = document.getElementById('comp-agency');
+  const compManifestation = document.getElementById('comp-manifestation');
+  const compCapabilities = document.getElementById('comp-capabilities');
+  const compInitiative = document.getElementById('comp-initiative');
+  const compCombinedIdentity = document.getElementById('comp-combined-identity');
+  const compBondDefaults = document.getElementById('comp-bond-defaults');
+  const compNotes = document.getElementById('comp-notes');
+
   // Navigation Back Buttons
   const btnEditorBack = document.getElementById('btn-editor-back');
   const btnBreakoutBack = document.getElementById('btn-breakout-back');
@@ -325,7 +337,7 @@
             ${lineageLabel}
             <div style="display:flex; gap:6px;">
               ${delphiBtnHTML}
-              ${comp.category === 'character' ? `<button class="btn btn-ghost btn-icon btn-sm btn-interview" title="Character Voice Rapid Tester" style="padding:2px 6px;">🎙️</button>` : ''}
+              ${['character', 'companion'].includes(comp.category) ? `<button class="btn btn-ghost btn-icon btn-sm btn-interview" title="Character Voice Rapid Tester" style="padding:2px 6px;">🎙️</button>` : ''}
               <button class="btn btn-ghost btn-icon btn-sm btn-pin-toggle" title="${isPinned ? 'Unpin' : 'Pin'}" style="padding:2px 6px;">${isPinned ? '📌' : '☆'}</button>
               <button class="btn btn-ghost btn-icon btn-sm btn-edit" title="Edit Component" style="padding:2px 6px;">📝</button>
               <button class="btn btn-primary btn-icon btn-sm btn-stage" title="Stage for Assembly" style="padding:2px 6px;">＋</button>
@@ -495,15 +507,23 @@
   function toggleFormFields(category) {
     const charFields = document.getElementById('char-form-fields');
     const scenarioFields = document.getElementById('scenario-form-fields');
+    const companionFields = document.getElementById('companion-form-fields');
     if (category === 'character') {
       if (charFields) charFields.style.display = 'grid';
       if (scenarioFields) scenarioFields.style.display = 'none';
+      if (companionFields) companionFields.style.display = 'none';
     } else if (category === 'scenario') {
       if (charFields) charFields.style.display = 'none';
       if (scenarioFields) scenarioFields.style.display = 'grid';
+      if (companionFields) companionFields.style.display = 'none';
+    } else if (category === 'companion') {
+      if (charFields) charFields.style.display = 'none';
+      if (scenarioFields) scenarioFields.style.display = 'none';
+      if (companionFields) companionFields.style.display = 'grid';
     } else {
       if (charFields) charFields.style.display = 'none';
       if (scenarioFields) scenarioFields.style.display = 'none';
+      if (companionFields) companionFields.style.display = 'none';
     }
   }
 
@@ -520,6 +540,18 @@
       charLikes.value = parsed.likes || '';
       charDislikes.value = parsed.dislikes || '';
       charNotes.value = parsed.notes || '';
+    } else if (category === 'companion') {
+      const parsed = parseCompanionMarkdown(content);
+      compOverview.value = parsed.overview || '';
+      compPerception.value = parsed.perception || '';
+      compCommunication.value = parsed.communication || '';
+      compAgency.value = parsed.agency || '';
+      compManifestation.value = parsed.manifestation || '';
+      compCapabilities.value = parsed.capabilities || '';
+      compInitiative.value = parsed.initiative || '';
+      compCombinedIdentity.value = parsed.combinedIdentity || '';
+      compBondDefaults.value = parsed.bondDefaults || '';
+      compNotes.value = parsed.notes || '';
     } else if (category === 'scenario') {
       const parsed = parseScenarioMarkdown(content);
       scenarioSetting.value = parsed.setting || '';
@@ -565,6 +597,24 @@
         const hasFormContent = Object.values(sections).some(v => v.trim());
         if (hasFormContent) {
           compContentInput.value = stitchCharacterMarkdown(sections);
+          updateTokenCount();
+        }
+      } else if (category === 'companion') {
+        const sections = {
+          overview: compOverview.value,
+          perception: compPerception.value,
+          communication: compCommunication.value,
+          agency: compAgency.value,
+          manifestation: compManifestation.value,
+          capabilities: compCapabilities.value,
+          initiative: compInitiative.value,
+          combinedIdentity: compCombinedIdentity.value,
+          bondDefaults: compBondDefaults.value,
+          notes: compNotes.value
+        };
+        const hasFormContent = Object.values(sections).some(v => v.trim());
+        if (hasFormContent) {
+          compContentInput.value = stitchCompanionMarkdown(sections);
           updateTokenCount();
         }
       } else if (category === 'scenario') {
@@ -619,7 +669,9 @@
     // Clear form inputs
     const formFields = [
       charOverview, charPersonality, charBackground, charAppearance, charAbilities, charStrengths, charWeaknesses, charLikes, charDislikes, charNotes,
-      scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone
+      scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone,
+      compOverview, compPerception, compCommunication, compAgency, compManifestation,
+      compCapabilities, compInitiative, compCombinedIdentity, compBondDefaults, compNotes
     ];
     formFields.forEach(field => { if (field) field.value = ''; });
 
@@ -676,7 +728,7 @@
     const btnHistory = document.getElementById('btn-version-history');
     if (btnHistory) btnHistory.style.display = id ? 'inline-flex' : 'none';
 
-    if (compCategorySelect.value === 'character' || compCategorySelect.value === 'scenario') {
+    if (['character', 'scenario', 'companion'].includes(compCategorySelect.value)) {
       editorTabsContainer.style.display = 'flex';
       switchEditorTab('form');
     }
@@ -822,6 +874,23 @@
           notes: charNotes.value
         };
         const stitched = stitchCharacterMarkdown(sections);
+        if (stitched.trim()) {
+          compContentInput.value = stitched;
+        }
+      } else if (compCategorySelect.value === 'companion') {
+        const sections = {
+          overview: compOverview.value,
+          perception: compPerception.value,
+          communication: compCommunication.value,
+          agency: compAgency.value,
+          manifestation: compManifestation.value,
+          capabilities: compCapabilities.value,
+          initiative: compInitiative.value,
+          combinedIdentity: compCombinedIdentity.value,
+          bondDefaults: compBondDefaults.value,
+          notes: compNotes.value
+        };
+        const stitched = stitchCompanionMarkdown(sections);
         if (stitched.trim()) {
           compContentInput.value = stitched;
         }
@@ -979,6 +1048,20 @@
           notes: charNotes.value
         };
         compContentInput.value = stitchCharacterMarkdown(sections);
+      } else if (category === 'companion') {
+        const sections = {
+          overview: compOverview.value,
+          perception: compPerception.value,
+          communication: compCommunication.value,
+          agency: compAgency.value,
+          manifestation: compManifestation.value,
+          capabilities: compCapabilities.value,
+          initiative: compInitiative.value,
+          combinedIdentity: compCombinedIdentity.value,
+          bondDefaults: compBondDefaults.value,
+          notes: compNotes.value
+        };
+        compContentInput.value = stitchCompanionMarkdown(sections);
       } else if (category === 'scenario') {
         const sections = {
           setting: scenarioSetting.value,
@@ -1020,6 +1103,14 @@
         if (charNotes) {
           charNotes.focus({ preventScroll: true });
           const grid = charNotes.closest('.form-grid');
+          if (grid) grid.scrollTop = grid.scrollHeight;
+        }
+      } else if (category === 'companion') {
+        // Land on Bond Defaults: the field the author fills in when
+        // varianting an agnostic template for a specific host.
+        if (compBondDefaults) {
+          compBondDefaults.focus({ preventScroll: true });
+          const grid = compBondDefaults.closest('.form-grid');
           if (grid) grid.scrollTop = grid.scrollHeight;
         }
       } else if (category === 'scenario') {
@@ -1725,6 +1816,124 @@
     return parts.join('\n\n');
   }
 
+  // --- Companion Parse / Stitch Helpers (Bonded Companion category, spec §3.2) ---
+  // Mirror parseCharacterMarkdown / stitchCharacterMarkdown exactly:
+  // the form is a generic overlay over the same free-text `content` field.
+  // Unknown headings are swallowed into their parent section on round-trip,
+  // exactly as the character parser does. Blank sections are omitted on stitch.
+
+  function parseCompanionMarkdown(markdown) {
+    const sections = {
+      overview: '',
+      perception: '',
+      communication: '',
+      agency: '',
+      manifestation: '',
+      capabilities: '',
+      initiative: '',
+      combinedIdentity: '',
+      bondDefaults: '',
+      notes: ''
+    };
+
+    if (!markdown) return sections;
+
+    const lines = markdown.split('\n');
+    let currentKey = 'overview';
+    let buffer = [];
+
+    const headerMap = {
+      'overview': 'overview',
+      'perception': 'perception',
+      'communication': 'communication',
+      'communication & voice': 'communication',
+      'voice': 'communication',
+      'agency': 'agency',
+      'agency & control': 'agency',
+      'control': 'agency',
+      'manifestation': 'manifestation',
+      'manifestation & expression': 'manifestation',
+      'expression': 'manifestation',
+      'capabilities': 'capabilities',
+      'capabilities & limitations': 'capabilities',
+      'limitations': 'capabilities',
+      'initiative': 'initiative',
+      'initiative & restraint': 'initiative',
+      'behaviour': 'initiative',
+      'behavior': 'initiative',
+      'combined identity': 'combinedIdentity',
+      'bond defaults': 'bondDefaults',
+      'bond': 'bondDefaults',
+      'bonding': 'bondDefaults',
+      'default bond': 'bondDefaults',
+      'notes': 'notes'
+    };
+
+    const sectionWords = ['overview', 'perception', 'communication', 'agency', 'manifestation', 'capabilities', 'initiative', 'combinedIdentity', 'bondDefaults', 'notes'];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      const headerMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+      const boldMatch = trimmed.match(/^\*\*([^*:]+):?\*\*$/);
+      const isPlainHeader = sectionWords.includes(trimmed.toLowerCase());
+
+      let foundKey = null;
+
+      if (headerMatch) {
+        const title = headerMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (boldMatch) {
+        const title = boldMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (isPlainHeader) {
+        foundKey = trimmed.toLowerCase();
+      }
+
+      if (foundKey) {
+        if (buffer.length > 0) {
+          sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+          buffer = [];
+        }
+        currentKey = headerMap[foundKey] || foundKey;
+      } else {
+        buffer.push(line);
+      }
+    }
+
+    if (buffer.length > 0) {
+      sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+    }
+
+    return sections;
+  }
+
+  function stitchCompanionMarkdown(sections) {
+    const parts = [];
+    const fields = [
+      { key: 'overview', label: 'Overview' },
+      { key: 'perception', label: 'Perception' },
+      { key: 'communication', label: 'Communication & Voice' },
+      { key: 'agency', label: 'Agency & Control' },
+      { key: 'manifestation', label: 'Manifestation & Expression' },
+      { key: 'capabilities', label: 'Capabilities & Limitations' },
+      { key: 'initiative', label: 'Initiative & Restraint' },
+      { key: 'combinedIdentity', label: 'Combined Identity' },
+      { key: 'bondDefaults', label: 'Bond Defaults' },
+      { key: 'notes', label: 'Notes' }
+    ];
+
+    fields.forEach(f => {
+      const val = sections[f.key]?.trim();
+      if (val) {
+        parts.push(`## ${f.label}\n\n${val}`);
+      }
+    });
+
+    return parts.join('\n\n');
+  }
+
   function escapeHTML(str) {
     if (!str) return '';
     return str
@@ -1773,7 +1982,7 @@
     compCategorySelect.addEventListener('change', () => {
       editorIsDirty = true;
       const cat = compCategorySelect.value;
-      if (cat === 'character' || cat === 'scenario') {
+      if (cat === 'character' || cat === 'scenario' || cat === 'companion') {
         editorTabsContainer.style.display = 'flex';
         switchEditorTab('form');
       } else {

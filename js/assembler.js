@@ -297,6 +297,7 @@
     window.ForgeDB.getComponent(id).then(comp => {
       if (comp) {
         if (comp.category === 'character') mappings[id] = 'personality';
+        else if (comp.category === 'companion') mappings[id] = 'personality';
         else if (comp.category === 'organization') mappings[id] = 'personality';
         else if (comp.category === 'scenario') mappings[id] = 'scenario';
         else if (comp.category === 'bio') mappings[id] = 'description';
@@ -713,7 +714,7 @@
 
       stagedIds.forEach(id => {
         window.ForgeDB.getComponent(id).then(comp => {
-          if (comp && ['character', 'organization'].includes(comp.category)) {
+          if (comp && ['character', 'organization', 'companion'].includes(comp.category)) {
             const cleanName = comp.name.split(' - ')[0];
             const isSrcSelected = rel.sourceId === id;
             const isTgtSelected = rel.targetId === id;
@@ -781,6 +782,7 @@
 
   function getCategoryIcon(cat) {
     if (cat === 'character') return '🎭';
+    if (cat === 'companion') return '🔗';
     if (cat === 'bio') return '📝';
     if (cat === 'initial_message') return '💬';
     if (cat === 'organization') return '🤝';
@@ -875,6 +877,68 @@
         text: `${brokenRelsCount} relationship links refer to components that are no longer staged in this project.`
       });
     }
+
+    // 5b. Companion checks (Bonded Companion category, spec §3.5) — warnings only.
+    // A companion is a Vault component with category 'companion', compiled to
+    // Personality like a character. These checks only flag setups the author
+    // may not have intended; a deliberately odd setup is never blocked.
+    const stagedCompanions = stagedIds
+      .map(id => allComponents.find(c => c.id === id))
+      .filter(c => c && c.category === 'companion');
+    const hostsByCompanion = {};
+    stagedCompanions.forEach(comp => {
+      // Host indicated by the variant label: "Khaji-Var - Sally" -> host "Sally".
+      // A relationship row with this companion as source also indicates a host.
+      const labelHost = comp.name.includes(' - ') ? comp.name.split(' - ').slice(1).join(' - ').trim() : '';
+      const rel = relationships.find(r => r.sourceId === comp.id);
+      const host = labelHost || (rel ? (rel.targetId === '{{User}}' ? '{{User}}' : (allComponents.find(c => c.id === rel.targetId)?.name?.split(' - ')[0] || rel.targetId)) : '');
+      hostsByCompanion[comp.id] = host;
+
+      if (!host) {
+        checks.push({
+          type: 'warning',
+          icon: '🔗',
+          text: `Companion "${comp.name}" is staged with no host indicated. It will compile as a standalone character.`
+        });
+      }
+
+      const mapValComp = mappings[comp.id];
+      if (mapValComp && mapValComp !== 'personality' && mapValComp !== 'ignore') {
+        checks.push({
+          type: 'warning',
+          icon: '🔗',
+          text: `Companion "${comp.name}" is mapped to ${mapValComp}. Companions normally compile to Personality.`
+        });
+      }
+
+      // A variant (labelled "<Companion> - <Host>") whose Bond Defaults
+      // section is missing or empty: the model will have to invent the
+      // relationship. An agnostic template (no host in its label) is
+      // expected to have blank bonding fields, so it is not flagged.
+      if (labelHost) {
+        const content = contentOverrides[comp.id] !== undefined ? contentOverrides[comp.id] : (comp.content || '');
+        const bondMatch = content.match(/##\s*Bond Defaults\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
+        if (!bondMatch || !bondMatch[1].trim()) {
+          checks.push({
+            type: 'warning',
+            icon: '🔗',
+            text: `Companion "${comp.name}" has blank bonding fields. The model will have to invent the relationship.`
+          });
+        }
+      }
+    });
+    // Multiple companions on the same host — informational only.
+    const hostCounts = {};
+    Object.values(hostsByCompanion).forEach(h => { if (h) hostCounts[h] = (hostCounts[h] || 0) + 1; });
+    Object.entries(hostCounts).forEach(([host, n]) => {
+      if (n > 1) {
+        checks.push({
+          type: 'info',
+          icon: '🔗',
+          text: `Host "${host}" has ${n} bonded companions.`
+        });
+      }
+    });
 
     // 6. Warning Check: Crossover Conflict (staged components belong to multiple universes)
     const stagedComps = stagedIds.map(id => allComponents.find(c => c.id === id)).filter(Boolean);
@@ -1557,7 +1621,7 @@
       if (!comp) continue;
 
       const catLower = (comp.category || '').toLowerCase();
-      if (catLower !== 'character' && catLower !== 'organization') continue;
+      if (catLower !== 'character' && catLower !== 'companion' && catLower !== 'organization') continue;
 
       const nameClean = comp.name.split(' - ')[0].trim();
       const rawContent = contentOverrides[id] !== undefined ? contentOverrides[id] : (comp.content || '');
@@ -1641,7 +1705,7 @@
   // Shared category → character-card field mapping used when auto-staging
   // components (story builds and ad-hoc selection builds).
   function mappingForCategory(category) {
-    if (category === 'character' || category === 'organization') return 'personality';
+    if (category === 'character' || category === 'companion' || category === 'organization') return 'personality';
     if (category === 'scenario') return 'scenario';
     if (category === 'bio') return 'description';
     if (category === 'initial_message') return 'first_mes';
