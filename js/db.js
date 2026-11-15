@@ -53,6 +53,12 @@
     if (category === 'release') {
       return { staged: false, bio: false, scenario: false, initialMessage: false, personalityLocked: false, thumbnail: false, banner: false, tagsDone: false, initialTest: false, regressionTest: false, finalPolish: false, ready: false, released: false, hotfixNeeded: false };
     }
+    // companion: same pipeline as character — a companion is a Vault
+    // component with category 'companion', not a new record type.
+    if (category === 'companion') {
+      return { generated: false, goldenTemplate: false, test1: false, trimmed: false, test2: false, complete: false, published: false };
+    }
+
     // character, scenario, bio, initial_message, organization, concept_stub
     return { generated: false, goldenTemplate: false, test1: false, trimmed: false, test2: false, complete: false, published: false };
   }
