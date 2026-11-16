@@ -1326,10 +1326,18 @@
     if (selectedUniverseId && window.ForgeDB?.getUniverse) {
       const uni = await window.ForgeDB.getUniverse(selectedUniverseId);
       if (uni && uni.content && uni.content.trim()) {
-        const uniRules = uni.content.trim();
-        finalScenarioText = scenarioText
-          ? `${uniRules}\n\n${scenarioText}`
-          : uniRules;
+        let uniRules = uni.content.trim();
+        // #3: drop a leftover template placeholder line ("Universe Name: ...")
+        // from briefs written before the template fix, so it never reaches
+        // a live card. Only the first line is stripped.
+        const uniLines = uniRules.split('\n');
+        if (/^Universe Name:/i.test((uniLines[0] || '').trim())) uniLines.shift();
+        uniRules = uniLines.join('\n').trim();
+        if (uniRules) {
+          finalScenarioText = scenarioText
+            ? `${uniRules}\n\n${scenarioText}`
+            : uniRules;
+        }
       }
     }
 
@@ -1611,6 +1619,37 @@
       .replace(/'/g, '&#39;');
   }
 
+  // #6: default lorebook keys — name + aliases/lineage only, NEVER tags.
+  // Tags are a search/organization axis, not trigger words: a tag like
+  // "hero" would fire the entry on any mention of the word. Slash-separated
+  // name parts ("Carol Danvers / Captain Marvel") and lineage parts are
+  // aliases and do belong as keys. A per-component `lorebookKeys` override
+  // (editable in the Vault editor) wins over the default when set.
+  function defaultLorebookKeys(comp) {
+    const keys = [];
+    const add = (v) => {
+      const t = (v || '').trim();
+      if (t && !keys.some(k => k.toLowerCase() === t.toLowerCase())) keys.push(t);
+    };
+    const nameClean = (comp.name || '').split(' - ')[0].trim();
+    add(nameClean);
+    nameClean.split('/').forEach(p => add(p));
+    const lineage = (comp.lineage || '').trim();
+    if (lineage && lineage.toLowerCase() !== nameClean.toLowerCase()) {
+      add(lineage);
+      lineage.split('/').forEach(p => add(p));
+    }
+    return keys;
+  }
+
+  function resolveLorebookKeys(comp) {
+    if (Array.isArray(comp.lorebookKeys)) {
+      const custom = comp.lorebookKeys.map(k => (k || '').trim()).filter(Boolean);
+      if (custom.length > 0) return custom;
+    }
+    return defaultLorebookKeys(comp);
+  }
+
   async function compileLoreBookData() {
     const projName = projNameInput.value.trim() || 'Compiled Lorebook';
     const entries = [];
@@ -1623,23 +1662,11 @@
       const catLower = (comp.category || '').toLowerCase();
       if (catLower !== 'character' && catLower !== 'companion' && catLower !== 'organization') continue;
 
-      const nameClean = comp.name.split(' - ')[0].trim();
       const rawContent = contentOverrides[id] !== undefined ? contentOverrides[id] : (comp.content || '');
       const contentText = rawContent.trim();
       if (!contentText) continue;
 
-      const keyWords = [nameClean];
-      if (comp.lineage && comp.lineage.trim() && comp.lineage.trim().toLowerCase() !== nameClean.toLowerCase()) {
-        keyWords.push(comp.lineage.trim());
-      }
-      if (Array.isArray(comp.tags)) {
-        comp.tags.forEach(t => {
-          const tClean = t.trim().replace(/^#/g, '');
-          if (tClean && !keyWords.map(k => k.toLowerCase()).includes(tClean.toLowerCase()) && !/^[-\s]+$/.test(tClean)) {
-            keyWords.push(tClean);
-          }
-        });
-      }
+      const keyWords = resolveLorebookKeys(comp);
 
       entries.push({
         id: uidCounter,
@@ -1852,6 +1879,8 @@
     clear: clearDrawer,
     compile: compileCardData,
     exportLorebook: exportAsLorebook,
+    defaultLorebookKeys: defaultLorebookKeys,
+    resolveLorebookKeys: resolveLorebookKeys,
     open: openAssemblerScreen,
     createFromStory: createFromStory,
     createFromSelection: createFromSelection,

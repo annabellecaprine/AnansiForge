@@ -38,11 +38,13 @@
   const filterLineage = document.getElementById('vault-lineage-filter');
   const filterScenario = document.getElementById('vault-scenario-filter');
   const btnTemplatesOnly = document.getElementById('btn-templates-only');
+  const btnNotUpdatedOnly = document.getElementById('btn-not-updated-only');
   const filterSort = document.getElementById('vault-sort-select');
   const sidebarFiltersRow = document.querySelector('.sidebar-filters-grid');
   const sidebarActionsRow = document.querySelector('.sidebar-actions');
 
   let showTemplatesOnly = false;
+  let showNotUpdatedOnly = false;
 
   // Sidebar Tab Buttons
   const tabVault = document.getElementById('tab-sidebar-vault');
@@ -85,6 +87,9 @@
   const compIsTemplateCheck = document.getElementById('comp-is-template');
   const btnCreateVariant = document.getElementById('btn-create-variant');
   const compTagsInput = document.getElementById('comp-tags');
+  const compLorebookKeysInput = document.getElementById('comp-lorebook-keys');
+  const compPriorityInput = document.getElementById('comp-priority');
+  const compPipelineContainer = document.getElementById('comp-pipeline-steps');
   const editorTokenCount = document.getElementById('editor-token-count');
   const btnSaveComponent = document.getElementById('btn-save-component');
   const btnDeleteComponent = document.getElementById('btn-delete-component');
@@ -96,16 +101,19 @@
   const editorRawPane = document.getElementById('editor-raw-pane');
   const editorFormPane = document.getElementById('editor-form-pane');
 
-  // Character Profile Fields
-  const charOverview = document.getElementById('char-overview');
-  const charPersonality = document.getElementById('char-personality');
-  const charBackground = document.getElementById('char-background');
-  const charAppearance = document.getElementById('char-appearance');
+  // Character Profile Fields (Template V2 — Bradley's 12-field version)
+  const charIdentity = document.getElementById('char-identity');
+  const charVersion = document.getElementById('char-version');
+  const charCorePsychology = document.getElementById('char-core-psychology');
+  const charInterpretiveLens = document.getElementById('char-interpretive-lens');
+  const charBehavior = document.getElementById('char-behavior');
+  const charVoice = document.getElementById('char-voice');
+  const charStrengthsFlaws = document.getElementById('char-strengths-flaws');
+  const charRelationships = document.getElementById('char-relationships');
   const charAbilities = document.getElementById('char-abilities');
-  const charStrengths = document.getElementById('char-strengths');
-  const charWeaknesses = document.getElementById('char-weaknesses');
-  const charLikes = document.getElementById('char-likes');
-  const charDislikes = document.getElementById('char-dislikes');
+  const charHabits = document.getElementById('char-habits');
+  const charAppearance = document.getElementById('char-appearance');
+  const charGuardrails = document.getElementById('char-guardrails');
   const charNotes = document.getElementById('char-notes');
 
   // Scenario Profile Fields
@@ -130,6 +138,18 @@
   const compCombinedIdentity = document.getElementById('comp-combined-identity');
   const compBondDefaults = document.getElementById('comp-bond-defaults');
   const compNotes = document.getElementById('comp-notes');
+
+  // Organization / Location Profile Fields (Org Template V2)
+  const orgIdentity = document.getElementById('org-identity');
+  const orgRule = document.getElementById('org-rule');
+  const orgTone = document.getElementById('org-tone');
+  const orgWhatMatters = document.getElementById('org-what-matters');
+  const orgRules = document.getElementById('org-rules');
+  const orgGuardrail = document.getElementById('org-guardrail');
+  const orgEntry = document.getElementById('org-entry');
+  const orgPeople = document.getElementById('org-people');
+  const orgCanon = document.getElementById('org-canon');
+  const orgNotes = document.getElementById('org-notes');
 
   // Navigation Back Buttons
   const btnEditorBack = document.getElementById('btn-editor-back');
@@ -245,8 +265,12 @@
         const matchesLineage = lineageVal === 'all' || comp.lineage === lineageVal;
         const matchesScenario = scenarioVal === 'all' || (comp.scenarios || []).includes(scenarioVal);
         const matchesTemplate = !showTemplatesOnly || comp.isTemplate === true;
+        // 1.8: "not yet updated" filter — records with no individual save
+        // since the overhaul went live. Dormant (no go-live set) = all audited.
+        const matchesNotUpdated = !showNotUpdatedOnly ||
+          (window.ForgeDB?.isOverhaulAudited && !window.ForgeDB.isOverhaulAudited(comp));
 
-        return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate;
+        return matchesSearch && matchesCat && matchesLineage && matchesScenario && matchesTemplate && matchesNotUpdated;
       });
 
       // Apply Sorting (Pinned components first)
@@ -271,7 +295,7 @@
       // Update Stats Banner
       const statsBanner = document.getElementById('sidebar-stats-banner');
       if (statsBanner) {
-        if (search || cat !== 'all' || lineageVal !== 'all' || scenarioVal !== 'all' || showTemplatesOnly) {
+        if (search || cat !== 'all' || lineageVal !== 'all' || scenarioVal !== 'all' || showTemplatesOnly || showNotUpdatedOnly) {
           statsBanner.textContent = `Vault: ${filtered.length} of ${components.length} matched`;
         } else {
           statsBanner.textContent = `Vault: ${components.length} items`;
@@ -304,6 +328,14 @@
 
         const pinIcon = isPinned ? `<span class="pin-badge" title="Pinned">📌</span>` : '';
 
+        // 1.8: migration-audit marker — shows until the record has been
+        // individually saved since the overhaul went live. Dormant (no
+        // go-live set) shows nothing.
+        const needsMigrationIcon = window.ForgeDB?.isOverhaulAudited && !window.ForgeDB.isOverhaulAudited(comp);
+        const migrationBadge = needsMigrationIcon
+          ? `<span class="migration-badge" title="Not yet updated since the overhaul — open and save to mark it audited">🕐</span>`
+          : '';
+
         const lineageLabel = comp.lineage
           ? `<span class="vault-item-lineage">🔗 ${escapeHTML(comp.lineage)}</span>`
           : '<span></span>';
@@ -327,7 +359,7 @@
 
         item.innerHTML = `
           <div class="vault-item-header">
-            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${pinIcon}${escapeHTML(comp.name)}</span>
+            <span class="vault-item-name" title="${escapeHTML(comp.name)}">${pinIcon}${migrationBadge}${escapeHTML(comp.name)}</span>
             <div style="display:flex; gap:4px; align-items:center;">
               ${templateBadge}
               <span class="vault-item-category ${comp.category}">${comp.category}</span>
@@ -509,37 +541,50 @@
     const charFields = document.getElementById('char-form-fields');
     const scenarioFields = document.getElementById('scenario-form-fields');
     const companionFields = document.getElementById('companion-form-fields');
+    const orgFields = document.getElementById('org-form-fields');
     if (category === 'character') {
       if (charFields) charFields.style.display = 'grid';
       if (scenarioFields) scenarioFields.style.display = 'none';
       if (companionFields) companionFields.style.display = 'none';
+      if (orgFields) orgFields.style.display = 'none';
     } else if (category === 'scenario') {
       if (charFields) charFields.style.display = 'none';
       if (scenarioFields) scenarioFields.style.display = 'grid';
       if (companionFields) companionFields.style.display = 'none';
+      if (orgFields) orgFields.style.display = 'none';
     } else if (category === 'companion') {
       if (charFields) charFields.style.display = 'none';
       if (scenarioFields) scenarioFields.style.display = 'none';
       if (companionFields) companionFields.style.display = 'grid';
+      if (orgFields) orgFields.style.display = 'none';
+    } else if (category === 'organization') {
+      if (charFields) charFields.style.display = 'none';
+      if (scenarioFields) scenarioFields.style.display = 'none';
+      if (companionFields) companionFields.style.display = 'none';
+      if (orgFields) orgFields.style.display = 'grid';
     } else {
       if (charFields) charFields.style.display = 'none';
       if (scenarioFields) scenarioFields.style.display = 'none';
       if (companionFields) companionFields.style.display = 'none';
+      if (orgFields) orgFields.style.display = 'none';
     }
   }
 
   function populateStructuredFormFromRaw(category, content) {
     if (category === 'character') {
       const parsed = parseCharacterMarkdown(content);
-      charOverview.value = parsed.overview || '';
-      charPersonality.value = parsed.personality || '';
-      charBackground.value = parsed.background || '';
-      charAppearance.value = parsed.appearance || '';
+      charIdentity.value = parsed.identity || '';
+      charVersion.value = parsed.version || '';
+      charCorePsychology.value = parsed.corePsychology || '';
+      charInterpretiveLens.value = parsed.interpretiveLens || '';
+      charBehavior.value = parsed.behavior || '';
+      charVoice.value = parsed.voice || '';
+      charStrengthsFlaws.value = parsed.strengthsFlaws || '';
+      charRelationships.value = parsed.relationships || '';
       charAbilities.value = parsed.abilities || '';
-      charStrengths.value = parsed.strengths || '';
-      charWeaknesses.value = parsed.weaknesses || '';
-      charLikes.value = parsed.likes || '';
-      charDislikes.value = parsed.dislikes || '';
+      charHabits.value = parsed.habits || '';
+      charAppearance.value = parsed.appearance || '';
+      charGuardrails.value = parsed.guardrails || '';
       charNotes.value = parsed.notes || '';
     } else if (category === 'companion') {
       const parsed = parseCompanionMarkdown(content);
@@ -564,6 +609,18 @@
       scenarioRelationships.value = parsed.relationships || '';
       scenarioRules.value = parsed.rules || '';
       scenarioTone.value = parsed.tone || '';
+    } else if (category === 'organization') {
+      const parsed = parseOrganizationMarkdown(content);
+      orgIdentity.value = parsed.identity || '';
+      orgRule.value = parsed.rule || '';
+      orgTone.value = parsed.tone || '';
+      orgWhatMatters.value = parsed.whatMatters || '';
+      orgRules.value = parsed.rules || '';
+      orgGuardrail.value = parsed.guardrail || '';
+      orgEntry.value = parsed.entry || '';
+      orgPeople.value = parsed.people || '';
+      orgCanon.value = parsed.canon || '';
+      orgNotes.value = parsed.notes || '';
     }
   }
 
@@ -585,15 +642,18 @@
       // Sync structured fields -> raw content textarea
       if (category === 'character') {
         const sections = {
-          overview: charOverview.value,
-          personality: charPersonality.value,
-          background: charBackground.value,
-          appearance: charAppearance.value,
+          identity: charIdentity.value,
+          version: charVersion.value,
+          corePsychology: charCorePsychology.value,
+          interpretiveLens: charInterpretiveLens.value,
+          behavior: charBehavior.value,
+          voice: charVoice.value,
+          strengthsFlaws: charStrengthsFlaws.value,
+          relationships: charRelationships.value,
           abilities: charAbilities.value,
-          strengths: charStrengths.value,
-          weaknesses: charWeaknesses.value,
-          likes: charLikes.value,
-          dislikes: charDislikes.value,
+          habits: charHabits.value,
+          appearance: charAppearance.value,
+          guardrails: charGuardrails.value,
           notes: charNotes.value
         };
         const hasFormContent = Object.values(sections).some(v => v.trim());
@@ -636,6 +696,24 @@
           compContentInput.value = stitchScenarioMarkdown(sections);
           updateTokenCount();
         }
+      } else if (category === 'organization') {
+        const sections = {
+          identity: orgIdentity.value,
+          rule: orgRule.value,
+          tone: orgTone.value,
+          whatMatters: orgWhatMatters.value,
+          rules: orgRules.value,
+          guardrail: orgGuardrail.value,
+          entry: orgEntry.value,
+          people: orgPeople.value,
+          canon: orgCanon.value,
+          notes: orgNotes.value
+        };
+        const hasFormContent = Object.values(sections).some(v => v.trim());
+        if (hasFormContent) {
+          compContentInput.value = stitchOrganizationMarkdown(sections);
+          updateTokenCount();
+        }
       }
 
       tabEditorForm.classList.remove('active');
@@ -644,6 +722,45 @@
       editorRawPane.style.display = 'block';
       activeEditorTab = 'raw';
     }
+  }
+
+  // 1.6: priority and pipeline are settable from the item, writing to the
+  // same tracker fields Mission Control reads (comp.tracker.priority /
+  // comp.tracker.pipeline). The pipeline steps come from Mission Control's
+  // registry so the editor and MC never disagree about the step list.
+  const FALLBACK_PIPELINE_STEPS = ['generated', 'goldenTemplate', 'test1', 'trimmed', 'test2', 'complete', 'published'];
+  const FALLBACK_STEP_LABELS = { generated: 'Generated', goldenTemplate: '⭐ Template', test1: 'Test 1', trimmed: 'Trimmed', test2: 'Test 2', complete: 'Complete', published: 'Published' };
+
+  function getEditorPipelineSteps(category) {
+    const S = window.MissionControlState;
+    return (S?.PIPELINE_STEPS?.[category]) || FALLBACK_PIPELINE_STEPS;
+  }
+
+  function getEditorStepLabel(step) {
+    const S = window.MissionControlState;
+    return (S?.STEP_LABELS?.[step]) || FALLBACK_STEP_LABELS[step] || step;
+  }
+
+  function readEditorPipeline() {
+    const out = {};
+    if (!compPipelineContainer) return out;
+    compPipelineContainer.querySelectorAll('input[type="checkbox"][data-step]').forEach(cb => {
+      out[cb.dataset.step] = cb.checked === true;
+    });
+    return out;
+  }
+
+  function renderEditorPipeline(category, pipeline) {
+    if (!compPipelineContainer) return;
+    const steps = getEditorPipelineSteps(category);
+    const current = pipeline || readEditorPipeline();
+    compPipelineContainer.innerHTML = steps.map(step => {
+      const checked = current[step] === true;
+      return `<label class="checkbox-label" style="font-size:0.8rem; white-space:nowrap;">
+      <input type="checkbox" data-step="${escapeHTML(step)}" ${checked ? 'checked' : ''}>
+      <span>${escapeHTML(getEditorStepLabel(step))}</span>
+    </label>`;
+    }).join('');
   }
 
   async function openComponentEditor(id = null) {
@@ -657,6 +774,9 @@
     compIsTemplateCheck.checked = false;
     btnCreateVariant.style.display = 'none';
     compTagsInput.value = '';
+    compLorebookKeysInput.value = '';
+    if (compPriorityInput) compPriorityInput.value = '';
+    renderEditorPipeline('character', {});
     editorTokenCount.textContent = '0';
     btnDeleteComponent.style.display = id ? 'inline-flex' : 'none';
     document.getElementById('editor-title').textContent = id ? 'Edit Vault Component' : 'Create Vault Component';
@@ -671,10 +791,11 @@
 
     // Clear form inputs
     const formFields = [
-      charOverview, charPersonality, charBackground, charAppearance, charAbilities, charStrengths, charWeaknesses, charLikes, charDislikes, charNotes,
+      charIdentity, charVersion, charCorePsychology, charInterpretiveLens, charBehavior, charVoice, charStrengthsFlaws, charRelationships, charAbilities, charHabits, charAppearance, charGuardrails, charNotes,
       scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone,
       compOverview, compPersonality, compPerception, compCommunication, compAgency, compManifestation,
-      compCapabilities, compInitiative, compCombinedIdentity, compBondDefaults, compNotes
+      compCapabilities, compInitiative, compCombinedIdentity, compBondDefaults, compNotes,
+      orgIdentity, orgRule, orgTone, orgWhatMatters, orgRules, orgGuardrail, orgEntry, orgPeople, orgCanon, orgNotes
     ];
     formFields.forEach(field => { if (field) field.value = ''; });
 
@@ -689,11 +810,15 @@
         compIsTemplateCheck.checked = comp.isTemplate === true;
         btnCreateVariant.style.display = comp.isTemplate ? 'inline-flex' : 'none';
         compTagsInput.value = (comp.tags || []).join(', ');
+        compLorebookKeysInput.value = (comp.lorebookKeys || []).join(', ');
 
         const roleEl = document.getElementById('comp-role');
         if (roleEl) roleEl.value = comp.tracker?.role || '';
         const factionEl = document.getElementById('comp-faction');
         if (factionEl) factionEl.value = comp.tracker?.faction || '';
+        // 1.6: priority + pipeline load from the same tracker MC reads.
+        if (compPriorityInput) compPriorityInput.value = comp.tracker?.priority || '';
+        renderEditorPipeline(comp.category, comp.tracker?.pipeline || {});
 
         updateTokenCount();
 
@@ -731,7 +856,7 @@
     const btnHistory = document.getElementById('btn-version-history');
     if (btnHistory) btnHistory.style.display = id ? 'inline-flex' : 'none';
 
-    if (['character', 'scenario', 'companion'].includes(compCategorySelect.value)) {
+    if (['character', 'scenario', 'companion', 'organization'].includes(compCategorySelect.value)) {
       editorTabsContainer.style.display = 'flex';
       switchEditorTab('form');
     }
@@ -865,15 +990,18 @@
     if (activeEditorTab === 'form') {
       if (compCategorySelect.value === 'character') {
         const sections = {
-          overview: charOverview.value,
-          personality: charPersonality.value,
-          background: charBackground.value,
-          appearance: charAppearance.value,
+          identity: charIdentity.value,
+          version: charVersion.value,
+          corePsychology: charCorePsychology.value,
+          interpretiveLens: charInterpretiveLens.value,
+          behavior: charBehavior.value,
+          voice: charVoice.value,
+          strengthsFlaws: charStrengthsFlaws.value,
+          relationships: charRelationships.value,
           abilities: charAbilities.value,
-          strengths: charStrengths.value,
-          weaknesses: charWeaknesses.value,
-          likes: charLikes.value,
-          dislikes: charDislikes.value,
+          habits: charHabits.value,
+          appearance: charAppearance.value,
+          guardrails: charGuardrails.value,
           notes: charNotes.value
         };
         const stitched = stitchCharacterMarkdown(sections);
@@ -913,6 +1041,23 @@
         if (stitched.trim()) {
           compContentInput.value = stitched;
         }
+      } else if (compCategorySelect.value === 'organization') {
+        const sections = {
+          identity: orgIdentity.value,
+          rule: orgRule.value,
+          tone: orgTone.value,
+          whatMatters: orgWhatMatters.value,
+          rules: orgRules.value,
+          guardrail: orgGuardrail.value,
+          entry: orgEntry.value,
+          people: orgPeople.value,
+          canon: orgCanon.value,
+          notes: orgNotes.value
+        };
+        const stitched = stitchOrganizationMarkdown(sections);
+        if (stitched.trim()) {
+          compContentInput.value = stitched;
+        }
       }
     }
 
@@ -947,12 +1092,29 @@
       .map(t => t.trim())
       .filter(Boolean);
 
+    // #6: editable lorebook keys override the name+aliases default at export.
+    // Blank means "use the default" (resolveLorebookKeys falls back).
+    const lorebookKeys = compLorebookKeysInput.value.split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
+
     const scenarios = compScenariosInput.value.split(',')
       .map(s => s.trim())
       .filter(Boolean);
 
     const roleVal = document.getElementById('comp-role')?.value || '';
     const factionVal = document.getElementById('comp-faction')?.value || '';
+    // 1.6: priority + pipeline save to the same tracker fields MC reads.
+    // Pipeline is only included when the editor rendered steps for it; an
+    // empty read means the container never rendered, and omitting it lets
+    // the save merge preserve the existing pipeline instead of wiping it.
+    const trackerPatch = {
+      role: roleVal,
+      faction: factionVal,
+      priority: compPriorityInput?.value || null
+    };
+    const pipelineFromForm = readEditorPipeline();
+    if (Object.keys(pipelineFromForm).length > 0) trackerPatch.pipeline = pipelineFromForm;
 
     const record = {
       id: editingComponentId,
@@ -963,10 +1125,8 @@
       scenarios,
       isTemplate: compIsTemplateCheck.checked,
       tags,
-      tracker: {
-        role: roleVal,
-        faction: factionVal
-      }
+      lorebookKeys,
+      tracker: trackerPatch
     };
 
     try {
@@ -993,15 +1153,19 @@
     const originalName = compNameInput.value.trim();
     let originalLineage = compLineageInput.value.trim();
 
+    // #7: the variant inherits the source's tracker — a variant is the same
+    // character in another season / universe, not a blank record.
+    const sourceComp = await window.ForgeDB.getComponent(editingComponentId);
+    const sourceTracker = sourceComp?.tracker || {};
+
     // Auto-fallback lineage to template name if blank
     if (!originalLineage) {
       originalLineage = originalName;
       compLineageInput.value = originalLineage;
       // Auto-save the template's lineage change silently
-      const templateComp = await window.ForgeDB.getComponent(editingComponentId);
-      if (templateComp) {
-        templateComp.lineage = originalLineage;
-        await window.ForgeDB.saveComponent(templateComp);
+      if (sourceComp) {
+        sourceComp.lineage = originalLineage;
+        await window.ForgeDB.saveComponent(sourceComp);
       }
     }
 
@@ -1027,7 +1191,7 @@
         title: '🎬 Variant Scenarios',
         message: 'Enter Scenarios (comma-separated):',
         defaultValue: defaultScenarios,
-        okText: 'Create Variant',
+        okText: 'Next',
         cancelText: 'Cancel'
       });
     } else {
@@ -1035,20 +1199,42 @@
     }
     if (variantScenariosStr === null) return; // User cancelled
 
+    // #7: ask which universe at creation — the alternate-universe use case
+    // is the point of a variant. Defaults to the source's universe.
+    let variantUniverse = sourceTracker.universe || '';
+    if (typeof showPromptModal === 'function') {
+      const universeAnswer = await showPromptModal({
+        title: '🌐 Variant Universe',
+        message: 'Which universe does this variant belong to? (Leave blank to keep the source universe.)',
+        defaultValue: variantUniverse,
+        okText: 'Create Variant',
+        cancelText: 'Cancel'
+      });
+      if (universeAnswer === null) return; // User cancelled
+      variantUniverse = (universeAnswer || '').trim();
+    } else {
+      const universeAnswer = prompt('Variant Universe (blank keeps the source universe):', variantUniverse);
+      if (universeAnswer === null) return; // User cancelled
+      variantUniverse = (universeAnswer || '').trim();
+    }
+
     // Sync form content first
     const category = compCategorySelect.value;
     if (activeEditorTab === 'form') {
       if (category === 'character') {
         const sections = {
-          overview: charOverview.value,
-          personality: charPersonality.value,
-          background: charBackground.value,
-          appearance: charAppearance.value,
+          identity: charIdentity.value,
+          version: charVersion.value,
+          corePsychology: charCorePsychology.value,
+          interpretiveLens: charInterpretiveLens.value,
+          behavior: charBehavior.value,
+          voice: charVoice.value,
+          strengthsFlaws: charStrengthsFlaws.value,
+          relationships: charRelationships.value,
           abilities: charAbilities.value,
-          strengths: charStrengths.value,
-          weaknesses: charWeaknesses.value,
-          likes: charLikes.value,
-          dislikes: charDislikes.value,
+          habits: charHabits.value,
+          appearance: charAppearance.value,
+          guardrails: charGuardrails.value,
           notes: charNotes.value
         };
         compContentInput.value = stitchCharacterMarkdown(sections);
@@ -1079,6 +1265,20 @@
           tone: scenarioTone.value
         };
         compContentInput.value = stitchScenarioMarkdown(sections);
+      } else if (category === 'organization') {
+        const sections = {
+          identity: orgIdentity.value,
+          rule: orgRule.value,
+          tone: orgTone.value,
+          whatMatters: orgWhatMatters.value,
+          rules: orgRules.value,
+          guardrail: orgGuardrail.value,
+          entry: orgEntry.value,
+          people: orgPeople.value,
+          canon: orgCanon.value,
+          notes: orgNotes.value
+        };
+        compContentInput.value = stitchOrganizationMarkdown(sections);
       }
     }
 
@@ -1093,7 +1293,16 @@
       lineage: originalLineage,
       scenarios,
       isTemplate: false,
-      tags
+      tags,
+      // #7: inherit the source tracker (role / faction / universe / priority).
+      // Pipeline is deliberately NOT copied — a new variant has not been
+      // through the pipeline yet, so it starts fresh.
+      tracker: {
+        role: sourceTracker.role || '',
+        faction: sourceTracker.faction || '',
+        universe: variantUniverse,
+        priority: sourceTracker.priority ?? null
+      }
     };
 
     try {
@@ -1122,6 +1331,12 @@
         if (scenarioTone) {
           scenarioTone.focus({ preventScroll: true });
           const grid = scenarioTone.closest('.form-grid');
+          if (grid) grid.scrollTop = grid.scrollHeight;
+        }
+      } else if (category === 'organization') {
+        if (orgNotes) {
+          orgNotes.focus({ preventScroll: true });
+          const grid = orgNotes.closest('.form-grid');
           if (grid) grid.scrollTop = grid.scrollHeight;
         }
       }
@@ -1597,52 +1812,100 @@
 
   // --- Character Profile Parse / Stitch Helpers ---
 
+  // Character Template V2 (Bradley's 12-field version, 2026-11-16).
+  // The parser is a behavior spec, not a biography form: old headings are
+  // kept as aliases during transition, so old-format profiles still parse.
+  // #8: 'relationships' maps to its own section now — the structured matrix
+  // is the home for relationships, and Notes stops swallowing them.
   function parseCharacterMarkdown(markdown) {
     const sections = {
-      overview: '',
-      personality: '',
-      background: '',
-      appearance: '',
+      identity: '',
+      corePsychology: '',
+      interpretiveLens: '',
+      behavior: '',
+      voice: '',
+      strengthsFlaws: '',
+      relationships: '',
       abilities: '',
-      strengths: '',
-      weaknesses: '',
-      likes: '',
-      dislikes: '',
-      notes: ''
+      habits: '',
+      appearance: '',
+      guardrails: '',
+      notes: '',
+      version: ''
     };
 
     if (!markdown) return sections;
 
     const lines = markdown.split('\n');
-    let currentKey = 'overview';
+    let currentKey = 'identity';
     let buffer = [];
 
     const headerMap = {
-      'overview': 'overview',
-      'personality': 'personality',
-      'core personality': 'personality',
-      'interaction style': 'personality',
-      'emotional core': 'personality',
-      'normal behavior': 'personality',
-      'background': 'background',
-      'biography': 'background',
-      'history': 'background',
-      'appearance': 'appearance',
+      // V2 headings
+      'identity': 'identity',
+      'identity & background': 'identity',
+      'identity and background': 'identity',
+      'core psychology': 'corePsychology',
+      'interpretive lens': 'interpretiveLens',
+      'interpretation': 'interpretiveLens',
+      'behavior': 'behavior',
+      'behavior & decision-making': 'behavior',
+      'behavior and decision-making': 'behavior',
+      'behavior & decision making': 'behavior',
+      'decision-making': 'behavior',
+      'decision making': 'behavior',
+      'voice': 'voice',
+      'voice & expression': 'voice',
+      'voice and expression': 'voice',
+      'expression': 'voice',
+      'strengths, flaws & friction': 'strengthsFlaws',
+      'strengths, flaws and friction': 'strengthsFlaws',
+      'strengths flaws & friction': 'strengthsFlaws',
+      'strengths': 'strengthsFlaws',
+      'weaknesses': 'strengthsFlaws',
+      'flaws': 'strengthsFlaws',
+      'friction': 'strengthsFlaws',
+      'relationships': 'relationships',
+      'abilities & limitations': 'abilities',
+      'abilities and limitations': 'abilities',
       'abilities': 'abilities',
+      'limitations': 'abilities',
+      'habits, interests & preferences': 'habits',
+      'habits, interests and preferences': 'habits',
+      'habits & preferences': 'habits',
+      'habits': 'habits',
+      'interests': 'habits',
+      'preferences': 'habits',
+      'appearance': 'appearance',
+      'portrayal guardrails': 'guardrails',
+      'guardrails': 'guardrails',
+      'notes': 'notes',
+      // Old-template aliases (transition)
+      'overview': 'identity',
+      'overview / introduction': 'identity',
+      'introduction': 'identity',
+      'background': 'identity',
+      'background / history': 'identity',
+      'biography': 'identity',
+      'history': 'identity',
+      'personality': 'corePsychology',
+      'personality & behavior': 'corePsychology',
+      'personality and behavior': 'corePsychology',
+      'core personality': 'corePsychology',
+      'interaction style': 'corePsychology',
+      'emotional core': 'corePsychology',
+      'normal behavior': 'corePsychology',
       'abilities / equipment': 'abilities',
+      'abilities & equipment': 'abilities',
       'equipment': 'abilities',
       'fighting style': 'abilities',
-      'strengths': 'strengths',
-      'weaknesses': 'weaknesses',
-      'likes': 'likes',
-      'dislikes': 'dislikes',
-      'notes': 'notes',
+      'likes': 'habits',
+      'dislikes': 'habits',
       'notes / system instructions': 'notes',
-      'scenario notes': 'notes',
-      'relationships': 'notes'
+      'scenario notes': 'notes'
     };
 
-    const sectionWords = ['overview', 'personality', 'background', 'appearance', 'abilities', 'strengths', 'weaknesses', 'likes', 'dislikes', 'notes'];
+    const sectionWords = ['identity', 'overview', 'background', 'personality', 'core psychology', 'interpretive lens', 'behavior', 'voice', 'strengths', 'weaknesses', 'relationships', 'abilities', 'habits', 'appearance', 'guardrails', 'notes', 'likes', 'dislikes'];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -1669,7 +1932,147 @@
           sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
           buffer = [];
         }
-        currentKey = headerMap[foundKey];
+        // foundKey may already be a section key (exact hit returns the
+        // mapped value) or a heading title (fuzzy/plain hit returns the
+        // map key) — resolve either way.
+        currentKey = headerMap[foundKey] || foundKey;
+      } else {
+        buffer.push(line);
+      }
+    }
+
+    if (buffer.length > 0) {
+      sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+    }
+
+    // Version tag gets its own slot under Identity (#1): a leading
+    // "Version: <tag>" line in the Identity section round-trips into
+    // sections.version instead of staying in the prose.
+    if (sections.identity) {
+      const versionLine = sections.identity.match(/^Version:.*$/m);
+      if (versionLine) {
+        sections.version = versionLine[0].replace(/^Version:[ \t]*/, '').trim();
+        sections.identity = sections.identity.replace(versionLine[0], '').replace(/^\n+/, '').trim();
+      }
+    }
+
+    return sections;
+  }
+
+  function stitchCharacterMarkdown(sections) {
+    const parts = [];
+
+    // Version tag gets its own slot under Identity (#1): stitched as the
+    // first line of the Identity section, parsed back out on load.
+    const identityText = [
+      sections.version?.trim() ? `Version: ${sections.version.trim()}` : '',
+      sections.identity?.trim() || ''
+    ].filter(Boolean).join('\n\n');
+
+    const fields = [
+      { key: '__identity__', label: 'Identity & Background', value: identityText },
+      { key: 'corePsychology', label: 'Core Psychology' },
+      { key: 'interpretiveLens', label: 'Interpretive Lens' },
+      { key: 'behavior', label: 'Behavior & Decision-Making' },
+      { key: 'voice', label: 'Voice & Expression' },
+      { key: 'strengthsFlaws', label: 'Strengths, Flaws & Friction' },
+      { key: 'relationships', label: 'Relationships' },
+      { key: 'abilities', label: 'Abilities & Limitations' },
+      { key: 'habits', label: 'Habits, Interests & Preferences' },
+      { key: 'appearance', label: 'Appearance' },
+      { key: 'guardrails', label: 'Portrayal Guardrails' },
+      { key: 'notes', label: 'Notes' }
+    ];
+
+    fields.forEach(f => {
+      const val = (f.value !== undefined ? f.value : sections[f.key])?.trim();
+      if (val) {
+        parts.push(`## ${f.label}\n\n${val}`);
+      }
+    });
+
+    return parts.join('\n\n');
+  }
+
+  // Org / Location Template V2 (approved 2026-11-16). Same spine for groups
+  // and featured locations: Rule/Tone/Guardrail, plus the location fields.
+  // Old org headings are kept as aliases during transition; sections with
+  // no v2 home (Strengths/Weaknesses) fall through into the current section
+  // as prose, so nothing is silently dropped.
+  function parseOrganizationMarkdown(markdown) {
+    const sections = {
+      identity: '',
+      rule: '',
+      tone: '',
+      whatMatters: '',
+      rules: '',
+      guardrail: '',
+      entry: '',
+      people: '',
+      canon: '',
+      notes: ''
+    };
+
+    if (!markdown) return sections;
+
+    const lines = markdown.split('\n');
+    let currentKey = 'identity';
+    let buffer = [];
+
+    const headerMap = {
+      'identity': 'identity',
+      'the rule': 'rule',
+      'rule': 'rule',
+      'tone': 'tone',
+      'what matters here': 'whatMatters',
+      'rules of the place': 'rules',
+      'rules': 'rules',
+      'guardrail': 'guardrail',
+      'entry': 'entry',
+      'entry / consequences': 'entry',
+      'entry/consequences': 'entry',
+      'consequences': 'entry',
+      'people here': 'people',
+      'people': 'people',
+      'canon facts': 'canon',
+      'canon': 'canon',
+      'notes': 'notes',
+      // Old-template aliases (transition)
+      'overview': 'identity',
+      'mission': 'rule',
+      'structure': 'people',
+      'environment': 'whatMatters',
+      'relationships': 'people'
+    };
+
+    const sectionWords = ['identity', 'the rule', 'tone', 'what matters here', 'rules of the place', 'guardrail', 'entry', 'people here', 'canon facts', 'notes', 'overview', 'mission', 'structure', 'environment', 'relationships'];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      const headerMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+      const boldMatch = trimmed.match(/^\*\*([^*:]+):?\*\*$/);
+      const isPlainHeader = sectionWords.includes(trimmed.toLowerCase());
+
+      let foundKey = null;
+
+      if (headerMatch) {
+        const title = headerMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (boldMatch) {
+        const title = boldMatch[1].toLowerCase().trim();
+        foundKey = headerMap[title] || Object.keys(headerMap).find(k => title.includes(k) && headerMap[k]);
+      } else if (isPlainHeader) {
+        foundKey = trimmed.toLowerCase();
+      }
+
+      if (foundKey) {
+        if (buffer.length > 0) {
+          sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
+          buffer = [];
+        }
+        currentKey = headerMap[foundKey] || foundKey;
       } else {
         buffer.push(line);
       }
@@ -1682,34 +2085,23 @@
     return sections;
   }
 
-  function stitchCharacterMarkdown(sections) {
+  function stitchOrganizationMarkdown(sections) {
     const parts = [];
 
-    if (sections.overview?.trim()) {
-      parts.push(`## Overview\n\n${sections.overview.trim()}`);
-    }
-    if (sections.personality?.trim()) {
-      parts.push(`## Personality\n\n${sections.personality.trim()}`);
-    }
-    if (sections.background?.trim()) {
-      parts.push(`## Background\n\n${sections.background.trim()}`);
-    }
-    if (sections.appearance?.trim()) {
-      parts.push(`## Appearance\n\n${sections.appearance.trim()}`);
-    }
-    if (sections.abilities?.trim()) {
-      parts.push(`## Abilities\n\n${sections.abilities.trim()}`);
-    }
-
-    const listFields = [
-      { key: 'strengths', label: 'Strengths' },
-      { key: 'weaknesses', label: 'Weaknesses' },
-      { key: 'likes', label: 'Likes' },
-      { key: 'dislikes', label: 'Dislikes' },
+    const fields = [
+      { key: 'identity', label: 'Identity' },
+      { key: 'rule', label: 'The Rule' },
+      { key: 'tone', label: 'Tone' },
+      { key: 'whatMatters', label: 'What Matters Here' },
+      { key: 'rules', label: 'Rules of the Place' },
+      { key: 'guardrail', label: 'Guardrail' },
+      { key: 'entry', label: 'Entry / Consequences' },
+      { key: 'people', label: 'People Here' },
+      { key: 'canon', label: 'Canon Facts' },
       { key: 'notes', label: 'Notes' }
     ];
 
-    listFields.forEach(f => {
+    fields.forEach(f => {
       const val = sections[f.key]?.trim();
       if (val) {
         parts.push(`## ${f.label}\n\n${val}`);
@@ -1904,6 +2296,9 @@
           sections[currentKey] = (sections[currentKey] ? sections[currentKey] + '\n' : '') + buffer.join('\n').trim();
           buffer = [];
         }
+        // Same resolve-either-way fix as the character parser: an exact hit
+        // returns a section key ('combinedIdentity'), a fuzzy/plain hit
+        // returns a heading title — both must resolve to a section.
         currentKey = headerMap[foundKey] || foundKey;
       } else {
         buffer.push(line);
@@ -1991,7 +2386,10 @@
     compCategorySelect.addEventListener('change', () => {
       editorIsDirty = true;
       const cat = compCategorySelect.value;
-      if (cat === 'character' || cat === 'scenario' || cat === 'companion') {
+      // Re-render the pipeline steps for the new category, preserving
+      // whatever is already ticked where the steps overlap.
+      renderEditorPipeline(cat, readEditorPipeline());
+      if (cat === 'character' || cat === 'scenario' || cat === 'companion' || cat === 'organization') {
         editorTabsContainer.style.display = 'flex';
         switchEditorTab('form');
       } else {
@@ -2010,10 +2408,10 @@
 
     // Mark editor dirty on any field change
     const editorInputs = [
-      compNameInput, compContentInput, compCategorySelect, compLineageInput, compScenariosInput, compIsTemplateCheck, compTagsInput,
-      charOverview, charPersonality, charBackground, charAppearance, charAbilities,
-      charStrengths, charWeaknesses, charLikes, charDislikes, charNotes,
-      scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone
+      compNameInput, compContentInput, compCategorySelect, compLineageInput, compScenariosInput, compIsTemplateCheck, compTagsInput, compLorebookKeysInput, compPriorityInput,
+      charIdentity, charVersion, charCorePsychology, charInterpretiveLens, charBehavior, charVoice, charStrengthsFlaws, charRelationships, charAbilities, charHabits, charAppearance, charGuardrails, charNotes,
+      scenarioSetting, scenarioUserRole, scenarioSituation, scenarioDynamics, scenarioExpectations, scenarioRelationships, scenarioRules, scenarioTone,
+      orgIdentity, orgRule, orgTone, orgWhatMatters, orgRules, orgGuardrail, orgEntry, orgPeople, orgCanon, orgNotes
     ];
     editorInputs.forEach(el => {
       if (el) {
@@ -2021,6 +2419,12 @@
         el.addEventListener('change', () => { editorIsDirty = true; });
       }
     });
+
+    // Pipeline checkboxes are re-rendered per category — delegate from the
+    // container so the dirty flag survives re-renders.
+    if (compPipelineContainer) {
+      compPipelineContainer.addEventListener('change', () => { editorIsDirty = true; });
+    }
 
     // Sidebar tabs triggers
     tabVault.addEventListener('click', () => switchSidebarTab('vault'));
@@ -2040,6 +2444,16 @@
       btnTemplatesOnly.classList.toggle('active', showTemplatesOnly);
       refreshVaultList();
     });
+    // 1.8: "not yet updated" filter toggle. Hidden while the overhaul
+    // go-live is unset (dormant) — there is nothing to filter on yet.
+    if (btnNotUpdatedOnly) {
+      if (!window.ForgeDB?.getOverhaulGoLive?.()) btnNotUpdatedOnly.style.display = 'none';
+      btnNotUpdatedOnly.addEventListener('click', () => {
+        showNotUpdatedOnly = !showNotUpdatedOnly;
+        btnNotUpdatedOnly.classList.toggle('active', showNotUpdatedOnly);
+        refreshVaultList();
+      });
+    }
 
     // API Config events
     btnApiConfig.addEventListener('click', openApiModal);
@@ -2395,15 +2809,35 @@
         openComponentEditor(null);
         if (prefill) {
           setTimeout(() => {
+            // #1: the old prefill applied only name/category/tags and dropped
+            // the draft itself. Apply everything Parlor passes; the editor
+            // has no universe field by design (universe is assigned at the
+            // Project level), so prefill.universe has nowhere to go here.
             if (prefill.name) { const el = document.getElementById('comp-name'); if (el) el.value = prefill.name; }
+            if (prefill.lineage) { const el = document.getElementById('comp-lineage'); if (el) el.value = prefill.lineage; }
+            if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if (el) el.value = prefill.tags.join(', '); }
+            if (prefill.role) {
+              const el = document.getElementById('comp-role');
+              if (el && [...el.options].some(o => o.value === prefill.role)) el.value = prefill.role;
+            }
+            if (prefill.content) { compContentInput.value = prefill.content; updateTokenCount(); }
             if (prefill.category) {
               const el = document.getElementById('comp-category');
               if (el) {
                 el.value = prefill.category;
-                toggleFormFields(prefill.category);
+                // Sync the form/raw panes to the prefilled category and
+                // parse the draft content into the structured fields.
+                if (['character', 'scenario', 'companion', 'organization'].includes(prefill.category)) {
+                  editorTabsContainer.style.display = 'flex';
+                  switchEditorTab('form');
+                } else {
+                  editorTabsContainer.style.display = 'none';
+                  switchEditorTab('raw');
+                }
               }
             }
-            if (prefill.tags?.length) { const el = document.getElementById('comp-tags'); if (el) el.value = prefill.tags.join(', '); }
+            // The draft is unsaved content — guard it like any other edit.
+            editorIsDirty = true;
           }, 100);
         }
       }

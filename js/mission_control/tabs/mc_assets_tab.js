@@ -49,6 +49,7 @@
         <button class="mc-name-link" data-vault-id="${comp.id}" title="Edit in Vault">${esc(comp.name)}</button>
         ${comp.isTemplate ? '<span class="mc-template-star" title="Golden Template">⭐</span>' : ''}
         ${isPinned ? '<span class="mc-pin-icon" title="Pinned">📌</span>' : ''}
+        ${window.ForgeDB?.isOverhaulAudited && !window.ForgeDB.isOverhaulAudited(comp) ? '<span class="mc-migration-badge" title="Not yet updated since the overhaul — open and save to mark it audited">🕐</span>' : ''}
         ${depCount > 0 ? `<span class="mc-dep-badge" title="Used in ${depCount} project${depCount > 1 ? 's' : ''}">📦 ${depCount}</span>` : ''}
         ${(() => {
           const isAuditable = comp.category === 'character' || comp.category === 'scenario' || comp.category === 'organization';

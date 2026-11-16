@@ -7,42 +7,48 @@
   const CATEGORY_GUIDANCE = {
     character: `When developing characters, move beyond lists of adjectives or physical descriptions.
 Discover their core motivations, fears, emotional wounds, defense mechanisms, contradictions, growth potential, and behavioral patterns.
-Encourage the creator to think about: Why does this character behave this way? What emotional need drives them? What makes them interesting in scenes?
+Encourage the creator to think about: Why does this character behave this way? What emotional need drives them? What makes them interesting in scenes? Two characters can witness the same event and understand it completely differently — capture what makes THIS character's lens distinct.
 
 FORMAT REQUIREMENT:
-You MUST compile the "draft.content" string using the following exact markdown headers (empty sections can be omitted):
-## Overview
-(A summary or introductory paragraph)
+You MUST compile the "draft.content" string using the following exact markdown headers (empty sections can be omitted — fields can be brief or left out when they add nothing; never invent filler):
+## Identity & Background
+(Name, aliases, age, occupation, role, and essential personal history. Only background facts relevant to portraying this particular interpretation. First line may be "Version: <tag>" for the continuity tag, e.g. CW, YJ, DCAU.)
 
-## Personality
-(Details of core motivations, traits, behavior)
+## Core Psychology
+(What motivates them, what matters to them personally, what they fear, what they want, and the contradictions that make them human.)
 
-## Background
-(Backstory and history)
+## Interpretive Lens
+(What the character notices, how they interpret other people's actions, what assumptions they make, and what emotional significance they assign to events.)
+
+## Behavior & Decision-Making
+(How they typically approach problems, conflict, uncertainty, success, failure, and everyday interactions. Tendencies and judgment, not rigid sequences or mandatory reactions.)
+
+## Voice & Expression
+(Speech patterns, vocabulary, cadence, humor, emotional expression, body language, and distinctive conversational habits. Enough for a recognizable voice without scripted dialogue.)
+
+## Strengths, Flaws & Friction
+(What they do well, where those strengths become liabilities, their blind spots, and how their shortcomings create believable complications. Flaws stay genuine; growth is not a requirement to overcome them.)
+
+## Relationships
+(Important individual relationships and their actual dynamics: familiarity, affection, rivalry, obligations, tensions, and unresolved issues. Avoid generic declarations of loyalty or friendship.)
+
+## Abilities & Limitations
+(Powers, skills, training, equipment, competencies, and meaningful restrictions or costs. Distinguish what the character *can* do from what they *typically choose* to do.)
+
+## Habits, Interests & Preferences
+(Hobbies, routines, personal tastes, irritations, quirks, and mundane behaviors that make the character feel like an individual. Specific and observable, not generic likes/dislikes lists.)
 
 ## Appearance
-(Physical description)
+(Distinctive physical characteristics, typical presentation, clothing preferences, and recognizable visual details. Prioritize information useful to descriptions and interactions.)
 
-## Abilities
-(Powers, equipment, and special skills)
-
-## Strengths
-(Bullet list of strengths)
-
-## Weaknesses
-(Bullet list of weaknesses)
-
-## Likes
-(Bullet list of likes)
-
-## Dislikes
-(Bullet list of dislikes)
+## Portrayal Guardrails
+(Optional, use sparingly. Concise, character-specific instructions needed to prevent known misinterpretations, adaptation confusion, or recurring model failures. Do not restate the other fields.)
 
 ## Notes
-(Any relationships, special rules, or scenario instructions)`,
+(Catchall — anything that does not fit another section.)`,
     
-    bio: `Focus on the character's physical appearance, history, and background details. 
-Keep details narrative-focused and sensory. Help structure their past events so they explain their current state without becoming an exhaustive encyclopedia.`,
+    bio: `A bio is the character's lived detail, not a résumé or an encyclopedia.
+Write specific, observable facts: what they do, what they notice, how they react, what they want, what they fear — the material that lets an LLM portray them distinctly, not generic virtues. Past events only where they explain present behavior. Avoid lists of adjectives and generic trait claims; prefer concrete habits, choices, and contradictions.`,
     
     initial_message: `Help design the greeting / initial message. 
 It should establish immediate scene hook, sensory context, character voice, and invite user interaction. Avoid long narrative setups that give the user nothing to reply to.`,
@@ -50,8 +56,40 @@ It should establish immediate scene hook, sensory context, character voice, and 
     setting: `Focus on assumptions, atmosphere, and constraints rather than encyclopedic details.
 Identify: What makes the setting unique? What does everyone in the world already know? What rules shape everyday life? What themes emerge? What conflicts drive stories?`,
     
-    organization: `Focus on organizations as living entities.
-Explore: Purpose, leadership, culture, internal conflicts, public reputation, resources, and relationships with other factions. Ensure they actively influence stories.`,
+    organization: `An organization earns a record only when it is FEATURED in the story AND carries a rule or a tone. If you cannot state the rule or the tone, do not create the org; if the story does not live there, do not create it either. Do not write description bulk — no Mission / Structure / Environment / Strengths / Weaknesses sections.
+
+FORMAT REQUIREMENT:
+You MUST compile the "draft.content" string using the following exact markdown headers (omit a section only if it truly adds nothing — never invent filler):
+## The Rule
+(The code or doctrine, stated as must / must-not.)
+
+## Tone
+(How scenes feel inside it, distinct from outside it.)
+
+## Guardrail
+(What it must never be flattened into.)
+
+## Entry / Consequences
+(Who gets in, and what happens when the rules break.)
+
+## Canon Facts
+(Only version-specific facts, and only what is not already in the universe brief. Omit if there is nothing to add.)
+
+For a featured LOCATION (a headquarters, a ship, a home base), use the location shape instead:
+## Identity
+(One line: what it is and whose it is.)
+## Tone
+(As above.)
+## What Matters Here
+(What kind of stories and details matter in this location, because it is featured.)
+## Rules of the Place
+(Must / must-not for how people behave here.)
+## Guardrail
+(As above.)
+## People Here
+(Only the dynamics that matter, not an org chart.)
+## Canon Facts
+(As above.)`,
     
     rules: `Scenario Rules define the framework of tone, genre, AI expectations, narrative constraints, and canon flexibility.
 Avoid describing individual characters or setting histories here. Focus purely on prompts, rules, formatting directives, or system instructions.`,

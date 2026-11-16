@@ -6,25 +6,27 @@
 (() => {
   'use strict';
 
-  const UNIVERSE_TEMPLATE = `Universe Name: [Name]
-
-Setting:
+  // #3: headings use `##` so the Universes tab parser (`## Setting` etc.)
+  // recognizes them as structured sections. No "Universe Name:" first line —
+  // the modal has its own name field, and that line used to leak verbatim
+  // into the scenario prompt when the assembler prepended uni.content.
+  const UNIVERSE_TEMPLATE = `## Setting
 [Describe the physical world, locations, foundational environment, and reality assumptions.]
 - 
 
-Culture:
+## Culture
 [Describe societal norms, factions, customs, history, and social dynamics.]
 - 
 
-Technology:
+## Technology
 [Describe tech level, powers, magic systems, physics, or specialized equipment constraints.]
 - 
 
-Tone:
+## Tone
 [Describe the emotional texture, story logic, writing style, vocabulary, and pacing guidance.]
 - 
 
-Other Rules:
+## Other Rules
 [List any additional canon constraints, taboo assumptions ("Do Not Assume"), or exceptions.]
 - 
 `;

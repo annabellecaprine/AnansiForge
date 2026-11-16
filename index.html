@@ -95,6 +95,10 @@
           title="Show only Golden Templates">
           ⭐ Templates Only
         </button>
+        <button id="btn-not-updated-only" class="btn btn-ghost btn-sm template-toggle-btn" style="flex:1;"
+          title="Show only records not yet updated since the overhaul went live">
+          🕐 Not Yet Updated
+        </button>
         <select id="vault-sort-select"
           style="flex:1; border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.03); color: var(--text-secondary); cursor: pointer; text-align: left; padding: 6px 10px; outline: none; font-size: 0.8rem; font-family: var(--font-sans); height: 32px; border-radius: var(--radius-sm); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
           <option value="modified-desc" style="background: var(--bg-secondary); color: var(--text-primary);">Recently
@@ -407,55 +411,76 @@
 
             <!-- TAB 2: STRUCTURED FORM -->
             <div id="editor-form-pane" class="editor-pane" style="display:none;">
-              <!-- Character Form Fields Wrapper -->
+              <!-- Character Form Fields Wrapper — Template V2 (Bradley's 12-field version).
+                   All fields are optional: brief or omitted when they add nothing.
+                   Raw Markdown / W++ tab remains available at all times. -->
               <div id="char-form-fields" class="form-grid" style="display:none;">
                 <div class="form-group">
-                  <label for="char-overview">Overview / Introduction</label>
-                  <textarea id="char-overview" placeholder="Summary, role, core introduction..."></textarea>
+                  <label for="char-identity">Identity &amp; Background</label>
+                  <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+                    <label for="char-version"
+                      style="font-size:0.78rem; color:var(--text-muted); white-space:nowrap;">Version tag</label>
+                    <input type="text" id="char-version" placeholder="e.g., CW, YJ, DCAU" autocomplete="off"
+                      data-1p-ignore="true" data-lpignore="true" data-bwignore="true"
+                      style="flex:1; max-width:220px;"
+                      title="Continuity/version tag for this interpretation. Stored as the first line of the Identity section.">
+                  </div>
+                  <textarea id="char-identity"
+                    placeholder="Name, aliases, age, occupation, role, essential personal history — only facts relevant to portraying this particular interpretation..."></textarea>
                 </div>
                 <div class="form-group">
-                  <label for="char-personality">Personality & Behavior</label>
-                  <textarea id="char-personality" placeholder="Core traits, interaction style, behavior..."></textarea>
+                  <label for="char-core-psychology">Core Psychology</label>
+                  <textarea id="char-core-psychology"
+                    placeholder="What motivates them, what matters to them, what they fear, what they want, the contradictions that make them human..."></textarea>
                 </div>
                 <div class="form-group">
-                  <label for="char-background">Background / History</label>
-                  <textarea id="char-background" placeholder="Backstory, origin..."></textarea>
+                  <label for="char-interpretive-lens">Interpretive Lens</label>
+                  <textarea id="char-interpretive-lens"
+                    placeholder="What they notice, how they interpret other people's actions, what assumptions they make, what emotional significance they assign to events..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-behavior">Behavior &amp; Decision-Making</label>
+                  <textarea id="char-behavior"
+                    placeholder="How they typically approach problems, conflict, uncertainty, success, failure, everyday interactions. Tendencies and judgment, not rigid sequences..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-voice">Voice &amp; Expression</label>
+                  <textarea id="char-voice"
+                    placeholder="Speech patterns, vocabulary, cadence, humor, emotional expression, body language, distinctive conversational habits..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-strengths-flaws">Strengths, Flaws &amp; Friction</label>
+                  <textarea id="char-strengths-flaws"
+                    placeholder="What they do well, where those strengths become liabilities, blind spots, how shortcomings create believable complications. Flaws stay genuine..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-relationships">Relationships</label>
+                  <textarea id="char-relationships"
+                    placeholder="Important individual relationships and their actual dynamics — familiarity, affection, rivalry, obligations, tensions, unresolved issues..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-abilities">Abilities &amp; Limitations</label>
+                  <textarea id="char-abilities"
+                    placeholder="Powers, skills, training, equipment, competencies, meaningful restrictions or costs. What they can do vs. what they typically choose to do..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="char-habits">Habits, Interests &amp; Preferences</label>
+                  <textarea id="char-habits"
+                    placeholder="Hobbies, routines, personal tastes, irritations, quirks, mundane behaviors — specific and observable..."></textarea>
                 </div>
                 <div class="form-group">
                   <label for="char-appearance">Appearance</label>
                   <textarea id="char-appearance" placeholder="Height, build, clothing, features..."></textarea>
                 </div>
                 <div class="form-group">
-                  <label for="char-abilities">Abilities & Equipment</label>
-                  <textarea id="char-abilities" placeholder="Powers, skills, combat training, weapons..."></textarea>
-                </div>
-                <div class="form-grid-row">
-                  <div class="form-group">
-                    <label for="char-strengths">Strengths</label>
-                    <textarea id="char-strengths" placeholder="List strengths (one per line)..."
-                      style="min-height: 120px;"></textarea>
-                  </div>
-                  <div class="form-group">
-                    <label for="char-weaknesses">Weaknesses</label>
-                    <textarea id="char-weaknesses" placeholder="List weaknesses (one per line)..."
-                      style="min-height: 120px;"></textarea>
-                  </div>
-                </div>
-                <div class="form-grid-row">
-                  <div class="form-group">
-                    <label for="char-likes">Likes</label>
-                    <textarea id="char-likes" placeholder="List likes (one per line)..."
-                      style="min-height: 120px;"></textarea>
-                  </div>
-                  <div class="form-group">
-                    <label for="char-dislikes">Dislikes</label>
-                    <textarea id="char-dislikes" placeholder="List dislikes (one per line)..."
-                      style="min-height: 120px;"></textarea>
-                  </div>
+                  <label for="char-guardrails">Portrayal Guardrails (Optional)</label>
+                  <textarea id="char-guardrails"
+                    placeholder="Concise, character-specific instructions to prevent known misinterpretations or recurring model failures. Use sparingly; do not restate the other fields..."
+                    style="min-height: 120px;"></textarea>
                 </div>
                 <div class="form-group">
-                  <label for="char-notes">Notes / Special Instructions</label>
-                  <textarea id="char-notes" placeholder="Scenario notes, relationships, telepathy notes, trivia..."
+                  <label for="char-notes">Notes</label>
+                  <textarea id="char-notes" placeholder="Catchall — anything that does not fit another section..."
                     style="min-height: 120px;"></textarea>
                 </div>
               </div>
@@ -556,6 +581,66 @@
                     style="min-height: 120px;"></textarea>
                 </div>
               </div>
+
+              <!-- Organization / Location Form Fields Wrapper — Org Template V2.
+                   Group or location: fill the fields that apply, leave the rest blank.
+                   An org earns a record when it is featured AND carries a rule or a tone.
+                   All fields are optional; raw Markdown remains available at all times. -->
+              <div id="org-form-fields" class="form-grid" style="display:none;">
+                <div class="form-group" style="grid-column: 1 / -1;">
+                  <p style="margin:0; font-size:0.8rem; color:var(--text-muted);">Group or location — fill the fields
+                    that apply, leave the rest blank. A record earns its place by being featured in the story and
+                    carrying a rule or a tone.</p>
+                </div>
+                <div class="form-group">
+                  <label for="org-identity">Identity</label>
+                  <textarea id="org-identity"
+                    placeholder="One line: what it is and whose it is. (Locations — e.g. the Batcave, Serenity.)"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-rule">The Rule</label>
+                  <textarea id="org-rule"
+                    placeholder="The code or doctrine, stated as must / must-not. (Groups — e.g. Bratva, Court of Owls.)"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-tone">Tone</label>
+                  <textarea id="org-tone" placeholder="How scenes feel here, distinct from outside it..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-what-matters">What Matters Here</label>
+                  <textarea id="org-what-matters"
+                    placeholder="What kind of stories and details matter in this location, because it is featured..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-rules">Rules of the Place</label>
+                  <textarea id="org-rules"
+                    placeholder="Must / must-not for how people behave here — command, access, what breaks the place's logic..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-guardrail">Guardrail</label>
+                  <textarea id="org-guardrail" placeholder="What it must never be flattened into..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-entry">Entry / Consequences</label>
+                  <textarea id="org-entry"
+                    placeholder="Who gets in, and what happens when the rules break..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-people">People Here</label>
+                  <textarea id="org-people"
+                    placeholder="Only the dynamics that matter, not an org chart..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-canon">Canon Facts</label>
+                  <textarea id="org-canon"
+                    placeholder="Only version-specific facts, and only what is not already in the universe brief..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="org-notes">Notes</label>
+                  <textarea id="org-notes" placeholder="Catchall — anything that does not fit another section..."
+                    style="min-height: 120px;"></textarea>
+                </div>
+              </div>
             </div>
           </div>
           <div class="editor-sidebar">
@@ -625,6 +710,22 @@
                 data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
             <div class="form-group">
+              <label for="comp-priority">Priority</label>
+              <select id="comp-priority">
+                <option value="">— No Priority —</option>
+                <option value="P1">P1</option>
+                <option value="P2">P2</option>
+                <option value="P3">P3</option>
+                <option value="P4">P4</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Pipeline</label>
+              <div id="comp-pipeline-steps" style="display:flex; flex-wrap:wrap; gap:4px 12px;">
+                <!-- Checkboxes rendered by app.js per category -->
+              </div>
+            </div>
+            <div class="form-group">
               <label for="comp-lineage">Lineage (Character Identity Group)</label>
               <input type="text" id="comp-lineage" placeholder="e.g., Dick Grayson, Bruce Wayne"
                 list="lineage-suggestions" autocomplete="off" data-1p-ignore="true" data-lpignore="true"
@@ -640,6 +741,13 @@
               <label for="comp-tags">Tags (comma separated)</label>
               <input type="text" id="comp-tags" placeholder="e.g., hero, dark, sci-fi" autocomplete="off"
                 data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+            </div>
+            <div class="form-group">
+              <label for="comp-lorebook-keys">Lorebook Keywords (comma separated)</label>
+              <input type="text" id="comp-lorebook-keys"
+                placeholder="Leave blank for default (name + aliases)"
+                title="Trigger words for this entry in a SillyTavern lorebook export. Blank = default: the full name, its slash-separated aliases, and lineage. Tags are never used as keys."
+                autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             </div>
             <div class="form-group is-template-group">
               <label class="checkbox-label">
@@ -1171,7 +1279,7 @@
 
   <!-- SCRIPTS -->
   <!-- NOTE: bump the ?v= on a script whenever its file changes. A stale cached script + new HTML breaks the app (2026-11-04: old app.js threw on the removed secondary fields and the settings gear stopped opening). -->
-  <script src="js/db.js?v=19.8"></script>
+  <script src="js/db.js?v=19.9"></script>
   <script src="js/modals/confirm_modal.js?v=17.0"></script>
   <script src="js/png-handler.js?v=19.6"></script>
   <script src="js/breakout.js?v=17.0"></script>
@@ -1183,15 +1291,15 @@
   <script src="js/delphi.js?v=19.10"></script>
 
   <!-- UI CONTROLLERS -->
-  <script src="js/parlor.js?v=17.2"></script>
-  <script src="js/assembler.js?v=19.9"></script>
+  <script src="js/parlor.js?v=17.3"></script>
+  <script src="js/assembler.js?v=19.10"></script>
   <script src="js/sandbox.js?v=17.2"></script>
   <!-- MISSION CONTROL SUB-MODULES -->
   <script src="js/mission_control/mc_state.js?v=19.8"></script>
   <script src="js/mission_control/mc_charts.js?v=19.6"></script>
-  <script src="js/mission_control/mc_modals.js?v=19.7"></script>
+  <script src="js/mission_control/mc_modals.js?v=19.8"></script>
   <script src="js/mission_control/tabs/mc_overview_tab.js?v=19.5"></script>
-  <script src="js/mission_control/tabs/mc_assets_tab.js?v=19.4"></script>
+  <script src="js/mission_control/tabs/mc_assets_tab.js?v=19.5"></script>
   <script src="js/mission_control/tabs/mc_launchpad_tab.js?v=17.5"></script>
   <script src="js/mission_control/tabs/mc_stories_tab.js?v=17.5"></script>
   <script src="js/mission_control/tabs/mc_universes_tab.js?v=17.5"></script>
@@ -1199,12 +1307,12 @@
   <script src="js/mission_control/tabs/mc_import_tab.js?v=17.5"></script>
 
   <script src="js/modals/interview_modal.js?v=17.5"></script>
-  <script src="js/modals/universe_genre_modal.js?v=19.6"></script>
+  <script src="js/modals/universe_genre_modal.js?v=19.7"></script>
   <script src="js/modals/new_project_modal.js?v=17.5"></script>
   <script src="js/modals/delphi_modal.js?v=19.9"></script>
   <script src="js/mission-control.js?v=19.6"></script>
   <script src="js/omni-search.js?v=17.2"></script>
-  <script src="js/app.js?v=19.9"></script>
+  <script src="js/app.js?v=19.10"></script>
   <!-- UNIVERSE MANAGER MODAL -->
   <div id="mc-universe-manager-modal" class="mc-modal-overlay hidden">
     <div class="mc-modal" style="max-width:900px; height:80vh; display:flex; flex-direction:column;">

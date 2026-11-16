@@ -12,6 +12,26 @@
   const DB_NAME = 'anansi-forge';
   const DB_VERSION = 12;
 
+  // --- Overhaul go-live baseline (1.8) ---
+  // Bradley sets OVERHAUL_GO_LIVE_ISO to the ISO timestamp of the moment
+  // the overhaul branch goes live in his Vault. Until it is set (null),
+  // the migration-audit marker is dormant: no icon, no filter.
+  // A record shows the "not yet updated" icon until it has been
+  // individually saved AFTER this timestamp. Nothing batch-stamps it:
+  // only an individual save (saveComponent) moves modifiedAt. Tracker-only
+  // updates (pin, pipeline ticks, priority/role/universe assignment) do
+  // NOT move modifiedAt — see updateVaultTracker's default below.
+  const OVERHAUL_GO_LIVE_ISO = '2026-11-16T15:13:02Z';
+
+  // True when this record has been individually saved since the overhaul
+  // went live. Dormant (no cutoff set) counts as audited: nothing shows.
+  function isOverhaulAudited(comp) {
+    if (!OVERHAUL_GO_LIVE_ISO) return true;
+    const m = comp?.modifiedAt ? new Date(comp.modifiedAt).getTime() : NaN;
+    const cut = new Date(OVERHAUL_GO_LIVE_ISO).getTime();
+    return !isNaN(m) && !isNaN(cut) && m >= cut;
+  }
+
   let dbInstance = null;
 
   // UUID generator
@@ -363,6 +383,7 @@
             content: existing.content,
             category: existing.category,
             tags: existing.tags,
+            lorebookKeys: existing.lorebookKeys || [],
             tracker: existing.tracker,
             timestamp: existing.modifiedAt || existing.createdAt || new Date(Date.now() - 1000).toISOString()
           });
@@ -377,6 +398,7 @@
           content: record.content,
           category: record.category,
           tags: record.tags,
+            lorebookKeys: record.lorebookKeys || [],
           tracker: record.tracker,
           timestamp: now
         });
@@ -731,6 +753,14 @@
           const newC = rec.metrics.uniqueChats || 0;
           const newF = rec.metrics.favorites || 0;
           if (oldM !== newM || oldC !== newC || oldF !== newF) {
+            // #24: record real history, not just one rolling step — push the
+            // outgoing snapshot onto metricsHistory before overwriting.
+            metricsHistory.push({
+              messages: oldM,
+              uniqueChats: oldC,
+              favorites: oldF,
+              updatedAt: existing.updatedAt || now
+            });
             previousMetrics = {
               messages: oldM,
               uniqueChats: oldC,
@@ -828,7 +858,13 @@
     return promisify(store.delete(id));
   }
 
-  async function updateVaultTracker(id, trackerPatch, updateModifiedAt = true) {
+  // NOTE: updateModifiedAt defaults to FALSE. This function only ever
+  // patches tracker metadata (pin, pipeline, priority, role, universe) —
+  // never content — so it must not move modifiedAt. modifiedAt is the
+  // content-save date, and the migration-audit icon (1.8) reads it: a
+  // tracker-only update clearing the "not yet updated" icon would defeat
+  // the whole point. Only saveComponent (an individual save) moves it.
+  async function updateVaultTracker(id, trackerPatch, updateModifiedAt = false) {
     const db = dbInstance || await initDB();
     const comp = await getComponent(id);
     if (!comp) throw new Error('Component not found: ' + id);
@@ -1590,6 +1626,8 @@
     deleteUniverse,
     getUniverseColorMap,
     DEFAULT_UNIVERSES,
+    getOverhaulGoLive: () => OVERHAUL_GO_LIVE_ISO,
+    isOverhaulAudited,
     updateVaultTracker,
     defaultTrackerPipeline,
     exportVault,

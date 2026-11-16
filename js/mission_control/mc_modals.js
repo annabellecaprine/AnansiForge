@@ -7,6 +7,18 @@
   const getS = () => window.MissionControlState;
   const getC = () => window.MissionControlCharts;
 
+  // #30: Link Vault modal filter state. Lives at module scope so the
+  // search / sort / filters survive the full modal rebuild that the
+  // Link/Unlink handlers trigger (they save, reload, and re-open the
+  // modal — which used to wipe the search on every click).
+  const linkVaultModalState = {
+    search: '',
+    sort: 'name-asc',
+    category: 'all',
+    universe: 'all',
+    role: 'all'
+  };
+
   async function openBotAnalyticsModal(recordId) {
     const S = getS();
     const C = getC();
@@ -656,6 +668,7 @@
 
     const linkedIds = new Set(story.linkedVaultIds || []);
     const comps = S.state.allComponents || [];
+    const st = linkVaultModalState;
 
     const categoryGroups = {
       character: { label: '👤 Characters', items: [] },
@@ -673,23 +686,61 @@
       categoryGroups[cat].items.push(c);
     });
 
+    // #30: sort within each group (by name at minimum).
+    const sortItems = (items) => {
+      const sorted = [...items];
+      if (st.sort === 'name-desc') sorted.sort((a, b) => b.name.localeCompare(a.name));
+      else if (st.sort === 'modified-desc') sorted.sort((a, b) => new Date(b.modifiedAt || 0) - new Date(a.modifiedAt || 0));
+      else sorted.sort((a, b) => a.name.localeCompare(b.name));
+      return sorted;
+    };
+
+    const roleOptions = ['', 'Hero', 'Villain', 'AntiHero', 'Support', 'Other'];
+
     body.innerHTML = `
-      <div style="margin-bottom:12px;">
-        <input type="search" id="mc-link-vault-search" name="link-vault-search" class="mc-search" placeholder="Search Vault components to link..." style="width:100%;" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
+      <div style="margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
+        <input type="search" id="mc-link-vault-search" name="link-vault-search" class="mc-search" placeholder="Search Vault components to link..." style="width:100%;" autocomplete="off" data-1p-ignore="true" data-lpignore="true" data-bwignore="true" value="${S.esc(st.search)}">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <select id="mc-link-vault-sort" class="mc-filter-select" title="Sort">
+            <option value="name-asc" ${st.sort === 'name-asc' ? 'selected' : ''}>Name (A – Z)</option>
+            <option value="name-desc" ${st.sort === 'name-desc' ? 'selected' : ''}>Name (Z – A)</option>
+            <option value="modified-desc" ${st.sort === 'modified-desc' ? 'selected' : ''}>Recently Modified</option>
+          </select>
+          <select id="mc-link-vault-category" class="mc-filter-select" title="Filter by category">
+            <option value="all">All Categories</option>
+            ${Object.keys(categoryGroups).map(k => `<option value="${S.esc(k)}" ${st.category === k ? 'selected' : ''}>${S.esc(categoryGroups[k].label)}</option>`).join('')}
+          </select>
+          <select id="mc-link-vault-universe" class="mc-filter-select" title="Filter by universe">
+            ${S.universeFilterOptionsHTML(st.universe)}
+          </select>
+          <select id="mc-link-vault-role" class="mc-filter-select" title="Filter by role">
+            <option value="all">All Roles</option>
+            ${roleOptions.filter(Boolean).map(r => `<option value="${r}" ${st.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div id="mc-link-vault-list" style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
         ${Object.keys(categoryGroups).map(catKey => {
       const group = categoryGroups[catKey];
       if (!group.items.length) return '';
+      const items = sortItems(group.items);
       return `
-            <div class="mc-vault-link-group">
-              <h4 style="margin:0 0 8px 0; font-size:0.9rem; color:var(--accent);">${group.label} (${group.items.length})</h4>
+            <div class="mc-vault-link-group" data-category="${S.esc(catKey)}">
+              <h4 class="mc-vault-link-group-header" data-label="${S.esc(group.label)}" data-total="${group.items.length}" style="margin:0 0 8px 0; font-size:0.9rem; color:var(--accent);">${group.label} (${group.items.length})</h4>
               <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px;">
-                ${group.items.map(c => {
+                ${items.map(c => {
         const isLinked = linkedIds.has(c.id);
+        const uni = c.tracker?.universe || c.universe || '';
+        const role = c.tracker?.role || '';
         return `
-                    <div class="mc-vault-link-card" data-name="${S.esc(c.name).toLowerCase()}" style="padding:8px 12px; background:var(--bg-secondary); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
-                      <span style="font-size:0.85rem; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:140px;" title="${S.esc(c.name)}">${S.esc(c.name)}</span>
+                    <div class="mc-vault-link-card" data-name="${S.esc(c.name).toLowerCase()}" data-universe="${S.esc(String(uni)).toLowerCase()}" data-role="${S.esc(String(role)).toLowerCase()}" data-category="${S.esc(catKey)}" style="padding:8px 12px; background:var(--bg-secondary); border:1px solid ${isLinked ? 'var(--accent)' : 'var(--border-color)'}; border-radius:6px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                      <span style="font-size:0.85rem; font-weight:500; min-width:0;">
+                        <span style="display:block; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${S.esc(c.name)}">${S.esc(c.name)}</span>
+                        <span style="display:flex; gap:4px; margin-top:3px; flex-wrap:wrap;">
+                          ${uni ? S.universeBadge(uni) : ''}
+                          ${role ? S.roleBadge(role) : ''}
+                        </span>
+                      </span>
                       <button class="mc-btn mc-btn-sm ${isLinked ? 'mc-btn-danger mc-unlink-vault-item' : 'mc-btn-primary mc-link-vault-item'}" data-story-id="${S.esc(story.id)}" data-comp-id="${S.esc(c.id)}">
                         ${isLinked ? '✓ Unlink' : '+ Link'}
                       </button>
@@ -711,18 +762,69 @@
     // "Return to Story Hub" — wired by id so the story id never goes through
     // an inline onclick JS string (entity-escaping can't protect that context).
     document.getElementById('mc-btn-return-hub-link')?.addEventListener('click', () => openStoryHubModal(story.id));
+    // #30: one filter pass over search + category + universe + role.
+    // Re-applied on every input/change and once after render, so the
+    // restored state (search included) actually takes effect — and so
+    // groups with no visible cards hide instead of showing an empty
+    // "Characters (62)" header.
+    const applyLinkVaultFilters = () => {
+      const q = (st.search || '').toLowerCase();
+      const cards = document.querySelectorAll('.mc-vault-link-card');
+      cards.forEach(card => {
+        const haystack = `${card.dataset.name || ''} ${card.dataset.universe || ''} ${card.dataset.role || ''}`;
+        const matchesSearch = !q || haystack.includes(q);
+        const matchesCategory = st.category === 'all' || card.dataset.category === st.category;
+        const matchesUniverse = st.universe === 'all' || S.isMatchingUniverse(card.dataset.universe, st.universe);
+        const matchesRole = st.role === 'all' || (card.dataset.role || '') === st.role.toLowerCase();
+        card.style.display = (matchesSearch && matchesCategory && matchesUniverse && matchesRole) ? 'flex' : 'none';
+      });
+      document.querySelectorAll('.mc-vault-link-group').forEach(group => {
+        const visible = [...group.querySelectorAll('.mc-vault-link-card')].filter(c => c.style.display !== 'none').length;
+        const header = group.querySelector('.mc-vault-link-group-header');
+        const total = header ? Number(header.dataset.total || 0) : 0;
+        group.style.display = visible === 0 ? 'none' : '';
+        if (header) header.textContent = `${header.dataset.label} (${visible}${visible === total ? '' : ` of ${total}`})`;
+      });
+    };
 
     const searchInput = document.getElementById('mc-link-vault-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase();
-        const cards = document.querySelectorAll('.mc-vault-link-card');
-        cards.forEach(card => {
-          const name = card.dataset.name || '';
-          card.style.display = name.includes(q) ? 'flex' : 'none';
-        });
+        st.search = e.target.value;
+        applyLinkVaultFilters();
       });
     }
+    const sortSelect = document.getElementById('mc-link-vault-sort');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        st.sort = e.target.value;
+        // Sort needs a re-render (group order), state survives it.
+        openLinkVaultModal(storyId);
+      });
+    }
+    const categorySelect = document.getElementById('mc-link-vault-category');
+    if (categorySelect) {
+      categorySelect.addEventListener('change', (e) => {
+        st.category = e.target.value;
+        applyLinkVaultFilters();
+      });
+    }
+    const universeSelect = document.getElementById('mc-link-vault-universe');
+    if (universeSelect) {
+      universeSelect.addEventListener('change', (e) => {
+        st.universe = e.target.value;
+        applyLinkVaultFilters();
+      });
+    }
+    const roleSelect = document.getElementById('mc-link-vault-role');
+    if (roleSelect) {
+      roleSelect.addEventListener('change', (e) => {
+        st.role = e.target.value;
+        applyLinkVaultFilters();
+      });
+    }
+
+    applyLinkVaultFilters();
   }
 
   function openRecordModal(rec, assetType) {
